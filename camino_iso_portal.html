@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -285,7 +285,7 @@ tr:hover td{background:#faf9f6}
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>💱 USD =</span>
             <input id="transp-tc" type="number" value="1400" min="1" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" onchange="if(_transpVista==='kpis')loadTransporte('kpis')">
-            <span>ARS</span>
+            <span>UYU</span>
           </div>
         </div>
         <div id="transp-indicadores" style="margin-bottom:16px"></div>
@@ -1059,7 +1059,7 @@ function renderIngresoIndicadores(data){
   document.getElementById('reg-indicadores').innerHTML =
     '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr)">'+
     '<div class="reg-kpi"><div class="reg-kpi-label">Total animales ingresados</div><div class="reg-kpi-val">'+totalAnimales+'</div><div class="reg-kpi-sub">'+data.length+' lote'+(data.length===1?'':'s')+' registrado'+(data.length===1?'':'s')+'</div></div>'+
-    '<div class="reg-kpi"><div class="reg-kpi-label">Peso total del lote</div><div class="reg-kpi-val">'+totalPeso.toLocaleString('es-AR')+'</div><div class="reg-kpi-sub">kg · Promedio '+pesoPromedio+' kg/animal</div></div>'+
+    '<div class="reg-kpi"><div class="reg-kpi-label">Peso total del lote</div><div class="reg-kpi-val">'+totalPeso.toLocaleString('es-UY')+'</div><div class="reg-kpi-sub">kg · Promedio '+pesoPromedio+' kg/animal</div></div>'+
     '<div class="reg-kpi"><div class="reg-kpi-label">Lotes activos</div><div class="reg-kpi-val">'+Object.keys(lotes).length+'</div><div class="reg-kpi-sub">'+Object.keys(razas).join(', ')+'</div></div>'+
     '<div class="reg-kpi"><div class="reg-kpi-label">Categorías</div><div class="reg-kpi-val">'+Object.keys(categorias).length+'</div><div class="reg-kpi-sub">'+Object.keys(categorias).join(', ')+'</div></div>'+
     '</div>'+
@@ -1287,7 +1287,7 @@ var _transpVista = 'kpis';
 
 function getTc(){ return parseFloat(document.getElementById('transp-tc').value) || 1400; }
 
-function toARS(n, moneda) {
+function toUYU(n, moneda) {
   var v = parseFloat(n) || 0;
   return (moneda && moneda.toString().toUpperCase() === 'USD') ? v * getTc() : v;
 }
@@ -1295,14 +1295,14 @@ function toARS(n, moneda) {
 function fmtMon(n, moneda) {
   var v = parseFloat(n) || 0;
   if (moneda && moneda.toString().toUpperCase() === 'USD')
-    return 'U$S ' + v.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
-  return '$' + v.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
+    return 'U$S ' + v.toLocaleString('es-UY', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return '$U ' + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
 }
 
 function badgeMon(moneda) {
   if (moneda && moneda.toString().toUpperCase() === 'USD')
     return '<span style="background:#1a56db;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">USD</span>';
-  return '<span style="background:#0f6e56;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">ARS</span>';
+  return '<span style="background:#0f6e56;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">UYU</span>';
 }
 
 function loadTransporte(vista, btn) {
@@ -1346,8 +1346,8 @@ function callTranspAPI(params, cb) {
   document.body.appendChild(s);
 }
 
-function fmt$(n){ return '$' + (parseFloat(n)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0}); }
-function fmtN(n){ return (parseFloat(n)||0).toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0}); }
+function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
+function fmtN(n){ return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 
 function renderTranspKPIs(data) {
   var r = data.resumen || {};
@@ -1363,10 +1363,10 @@ function renderTranspKPIs(data) {
 
   // KPI grid — mismo estilo que Ganadería
   var kpiHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">'
-    + kpi('Ingresos totales', fmt$(ing), 'en ARS equivalente', '#0f6e56')
+    + kpi('Ingresos totales', fmt$(ing), 'en UYU equivalente', '#0f6e56')
     + kpi(semM + ' Margen total', fmt$(margen) + ' (' + pct + '%)', 'Objetivo: ≥ 20%', colM)
     + kpi('Costo total', fmt$(r.costo_total||0), 'Combustible + mantenimiento', '#a32d2d')
-    + kpi('Costo / km', '$' + (r.costo_por_km||0), 'promedio flota', '#378add')
+    + kpi('Costo / km', '$U ' + (r.costo_por_km||0), 'promedio flota', '#378add')
     + kpi('Km recorridos', fmtN(r.total_km) + ' km', 'total acumulado', '#639922')
     + kpi('Viajes realizados', fmtN(r.total_viajes), 'registrados', '#185fa5')
     + kpi('Toneladas transportadas', fmtN(r.total_toneladas) + ' t', 'total acumulado', '#854f0b')
@@ -1381,7 +1381,7 @@ function renderTranspKPIs(data) {
     html += '<div class="chart-wrap" style="margin-bottom:16px"><h4>📊 Resultados por camión</h4>'
       + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
       + '<thead><tr style="background:var(--gray)">'
-      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos ARS','r') + th('Costo total','r') + th('Costo/km','r') + th('Margen','r') + th('Margen %','r')
+      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos UYU','r') + th('Costo total','r') + th('Costo/km','r') + th('Margen','r') + th('Margen %','r')
       + '</tr></thead><tbody>';
     camiones.forEach(function(c){
       var mc = parseFloat(c.margen_pct);
@@ -1393,7 +1393,7 @@ function renderTranspKPIs(data) {
         + td(fmtN(c.km), 'r')
         + td(fmt$(c.ingresos), 'r')
         + td(fmt$(c.costo_total), 'r')
-        + td('$' + (c.costo_por_km||0), 'r')
+        + td('$U ' + (c.costo_por_km||0), 'r')
         + td(fmt$(c.margen), 'r')
         + '<td style="padding:8px;text-align:right;font-weight:700;color:' + col + '">' + mc + '%</td>'
         + '</tr>';
@@ -1464,20 +1464,20 @@ function renderTranspTabla(data, tipo) {
       rows.forEach(function(r){
         totKm  += parseFloat(r['km recorridos'])||0;
         totTon += parseFloat(r['toneladas'])||0;
-        totIng += toARS(r['ingreso'], r['moneda']);
+        totIng += toUYU(r['ingreso'], r['moneda']);
       });
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
         + kpi('Registros', rows.length, 'viajes', '#185fa5')
         + kpi('Km totales', fmtN(totKm) + ' km', 'acumulado', '#639922')
         + kpi('Toneladas', fmtN(totTon) + ' t', 'transportadas', '#854f0b')
-        + kpi('Ingresos ARS', fmt$(totIng), 'tipo de cambio: $' + fmtN(tc), '#0f6e56')
+        + kpi('Ingresos UYU', fmt$(totIng), 'tipo de cambio: $' + fmtN(tc), '#0f6e56')
         + '</div>';
     } else if (tipo === 'mantenimientos') {
       var totCosto = 0;
-      rows.forEach(function(r){ totCosto += toARS(r['costo'], r['moneda']); });
+      rows.forEach(function(r){ totCosto += toUYU(r['costo'], r['moneda']); });
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
-        + kpi('Costo total ARS', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
+        + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
         + kpi('Costo promedio', fmt$(rows.length ? totCosto/rows.length : 0), 'por intervención', '#378add')
         + '</div>';
     } else if (tipo === 'combustible') {
@@ -1520,7 +1520,7 @@ function renderTranspTabla(data, tipo) {
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
     html = '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
-    if (showARS) html += th('ARS equiv.', 'r');
+    if (showARS) html += th('UYU equiv.', 'r');
     html += '</tr></thead><tbody>';
     rows.forEach(function(r){
       html += '<tr style="border-bottom:1px solid var(--border)">';
@@ -1536,7 +1536,7 @@ function renderTranspTabla(data, tipo) {
         html += '<td style="padding:6px 8px">' + v + '</td>';
       });
       if (showARS) {
-        var arsVal = tipo === 'viajes' ? toARS(r['ingreso'], r['moneda']) : toARS(r['costo'], r['moneda']);
+        var arsVal = tipo === 'viajes' ? toUYU(r['ingreso'], r['moneda']) : toUYU(r['costo'], r['moneda']);
         html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
       }
       html += '</tr>';
@@ -1552,3 +1552,6 @@ loadConfig();
 </script>
 </body>
 </html>
+
+
+
