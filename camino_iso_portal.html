@@ -1274,7 +1274,7 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
 // ═══════════════════════════════════════════════════════
-var TRANSP_API = 'https://script.google.com/macros/s/AKfycbxJkd0hD1nGV84yB5Yq_sf5eUr624TGQcfWo93PrGDjraeqCFtTiaHYMOgmldJHfkRD/exec';
+var TRANSP_API = 'https://script.google.com/macros/s/AKfycbwboVlEh7aJ8Yui5mQHjySwxPU1lFAS-7J2YoKxKGwJERIUUwRF3hT1HRnXnutAwnWs/exec';
 var _transpVista = 'kpis';
 
 function loadTransporte(vista, btn) {
@@ -1432,14 +1432,25 @@ function renderTranspTabla(data, tipo) {
   var el = document.getElementById('transp-contenido');
 
   var colMap = {
-    viajes: ['fecha viaje','matrícula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes ($)','viáticos ($)','tarifa ($/km)','ingreso ($)','costo total ($)','margen ($)','margen (%)'],
-    combustible: ['fecha factura','proveedor','matrícula','litros','precio por litro ($)','total ($)','n° factura'],
-    mantenimientos: ['fecha','matrícula','¿incluye acoplado?','área','detalle del trabajo','km del equipo','proveedor / taller','costo ($)'],
-    flota: ['matrícula','modelo','año','tipo','chofer habitual','seguro ($/mes)','vtv ($/año)','salario chofer ($/mes)','amortización ($/mes)','km promedio/mes','estado']
+    viajes: ['fecha viaje','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso'],
+    combustible: ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
+    mantenimientos: ['fecha','matricula','acoplado','area','detalle','km equipo','taller','costo'],
+    flota: ['matricula','modelo','año','tipo','chofer habitual','seguro ($/mes)','vtv ($/año)','salario chofer ($/mes)','amortización ($/mes)','km promedio/mes','estado']
   };
 
   var cols = colMap[tipo] || Object.keys(rows[0] || {}).filter(function(k){ return k !== 'timestamp'; });
-  var labelMap = {'fecha viaje':'Fecha','matrícula':'Matrícula','fecha factura':'Fecha','¿incluye acoplado?':'Acoplado','km del equipo':'Km equipo','proveedor / taller':'Taller','precio por litro ($)':'$/litro','total ($)':'Total','n° factura':'N° Fact.','vtv ($/año)':'VTV/año','salario chofer ($/mes)':'Salario','amortización ($/mes)':'Amortiz.','km promedio/mes':'Km/mes','tipo de carga':'Carga','km recorridos':'Km','peajes ($)':'Peajes','viáticos ($)':'Viáticos','tarifa ($/km)':'Tarifa/km','ingreso ($)':'Ingreso','costo total ($)':'Costo total','margen ($)':'Margen','margen (%)':'Margen %','seguro ($/mes)':'Seguro','costo ($)':'Costo','detalle del trabajo':'Detalle','chofer habitual':'Chofer hab.'};
+  var labelMap = {
+    'fecha viaje':'Fecha','matricula':'Matrícula','fecha factura':'Fecha',
+    'acoplado':'Acoplado','km equipo':'Km equipo','taller':'Taller',
+    'precio litro':'$/litro','total':'Total','factura':'N° Fact.',
+    'vtv ($/año)':'VTV/año','salario chofer ($/mes)':'Salario',
+    'amortización ($/mes)':'Amortiz.','km promedio/mes':'Km/mes',
+    'tipo de carga':'Carga','km recorridos':'Km',
+    'peajes':'Peajes','viaticos':'Viáticos','tarifa':'Tarifa/km',
+    'ingreso':'Ingreso','costo':'Costo','detalle':'Detalle',
+    'area':'Área','litros':'Litros','proveedor':'Proveedor',
+    'seguro ($/mes)':'Seguro','chofer habitual':'Chofer hab.'
+  };
 
   var html = '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto">';
   if (rows.length === 0) {
@@ -1452,8 +1463,10 @@ function renderTranspTabla(data, tipo) {
       html += '<tr style="border-bottom:1px solid #f1f5f9">';
       cols.forEach(function(c){
         var v = r[c];
+        var moneda = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
         if (v === null || v === undefined || v === '') v = '—';
-        else if (typeof v === 'number' && (c.indexOf('$') >= 0 || c === 'margen (%)')) v = c === 'margen (%)' ? v.toFixed(1) + '%' : fmt$(v);
+        else if (typeof v === 'number' && moneda.indexOf(c) >= 0) v = fmt$(v);
+        else if (typeof v === 'number' && c.indexOf('$') >= 0) v = fmt$(v);
         html += '<td style="padding:8px">' + v + '</td>';
       });
       html += '</tr>';
