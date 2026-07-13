@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1314,13 +1314,20 @@ function loadTransporte(vista, btn) {
   document.getElementById('transp-contenido').innerHTML = '<div class="loading" style="padding:40px;text-align:center">Cargando...</div>';
   document.getElementById('transp-indicadores').innerHTML = '';
 
-  callTranspAPI({action: vista === 'kpis' ? 'kpis' : vista}, function(data) {
-    if (vista === 'kpis')                renderTranspKPIs(data);
-    else if (vista === 'viajes')         renderTranspTabla(data, 'viajes');
-    else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
-    else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
-    else if (vista === 'flota')          renderTranspTabla(data, 'flota');
-  });
+  if (vista === 'kpis') {
+    // Carga KPIs + viajes en paralelo para gráficos mensuales
+    var kpisData = null, viajesData = null, done = 0;
+    function tryRender() { if (++done === 2) renderTranspKPIs(kpisData, viajesData); }
+    callTranspAPI({action:'kpis'},   function(d){ kpisData  = d; tryRender(); });
+    callTranspAPI({action:'viajes'}, function(d){ viajesData = Array.isArray(d) ? d : []; tryRender(); });
+  } else {
+    callTranspAPI({action: vista}, function(data) {
+      if (vista === 'viajes')         renderTranspTabla(data, 'viajes');
+      else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
+      else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
+      else if (vista === 'flota')          renderTranspTabla(data, 'flota');
+    });
+  }
 }
 
 function callTranspAPI(params, cb) {
@@ -1349,95 +1356,211 @@ function callTranspAPI(params, cb) {
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 function fmtN(n){ return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 
-function renderTranspKPIs(data) {
+function renderTranspKPIs(data, viajes) {
   var r = data.resumen || {};
   var camiones = data.por_camion || [];
   var areas = data.por_area_mantenimiento || [];
   var destinos = data.por_destino || [];
+  viajes = viajes || [];
+  var tc = getTc();
 
-  var ing = parseFloat(r.total_ingresos)||0;
+  var ing    = parseFloat(r.total_ingresos)||0;
+  var costo  = parseFloat(r.costo_total)||0;
   var margen = parseFloat(r.margen_total)||0;
-  var pct = parseFloat(r.margen_pct)||0;
-  var semM = pct >= 20 ? '🟢' : pct >= 10 ? '🟡' : '🔴';
-  var colM = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
+  var pct    = parseFloat(r.margen_pct)||0;
+  var colM   = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
+  var totalKm = parseFloat(r.total_km)||0;
+  var totalTon = parseFloat(r.total_toneladas)||0;
+  var kmObj = Math.max(totalKm * 1.25, 1000); // objetivo = 25% más de lo actual
 
-  // KPI grid — mismo estilo que Ganadería
-  var kpiHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">'
-    + kpi('Ingresos totales', fmt$(ing), 'en UYU equivalente', '#0f6e56')
-    + kpi(semM + ' Margen total', fmt$(margen) + ' (' + pct + '%)', 'Objetivo: ≥ 20%', colM)
-    + kpi('Costo total', fmt$(r.costo_total||0), 'Combustible + mantenimiento', '#a32d2d')
-    + kpi('Costo / km', '$U ' + (r.costo_por_km||0), 'promedio flota', '#378add')
-    + kpi('Km recorridos', fmtN(r.total_km) + ' km', 'total acumulado', '#639922')
-    + kpi('Viajes realizados', fmtN(r.total_viajes), 'registrados', '#185fa5')
-    + kpi('Toneladas transportadas', fmtN(r.total_toneladas) + ' t', 'total acumulado', '#854f0b')
+  // ── FILA 1: 4 KPI grandes estilo Power BI ──────────────────────
+  var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
+    + kpiBig('Ingresos Totales', fmtMillones(ing), '#0f6e56', '#e8f5e9')
+    + kpiBig('Costo total', fmtMillones(costo), '#c0392b', '#fdecea')
+    + kpiBig('Margen', fmtMillones(margen), '#0f6e56', '#e8f5e9')
+    + kpiBig('% Margen', pct.toFixed(2) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea')
     + '</div>';
-
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
-  var html = '';
+  // ── Agrupar viajes por mes ─────────────────────────────────────
+  var meses = {};
+  var MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  viajes.forEach(function(v) {
+    var f = v['fecha viaje'] || v['timestamp'] || '';
+    if (!f) return;
+    var parts = String(f).split('-');
+    if (parts.length < 2) return;
+    var key = parts[0] + '-' + parts[1];
+    var label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
+    if (!meses[key]) meses[key] = {label:label, ing:0, ton:0, viajes:0};
+    meses[key].ing    += toUYU(v['ingreso'], v['moneda']);
+    meses[key].ton    += parseFloat(v['toneladas'])||0;
+    meses[key].viajes++;
+  });
+  var mesesArr = Object.keys(meses).sort().map(function(k){ return meses[k]; });
 
-  // Tabla por camión
+  // ── Agrupar toneladas por tipo de carga ───────────────────────
+  var porTipo = {};
+  viajes.forEach(function(v) {
+    var t = v['tipo de carga'] || 'Otro';
+    if (!porTipo[t]) porTipo[t] = 0;
+    porTipo[t] += parseFloat(v['toneladas'])||0;
+  });
+  var tipoArr = Object.keys(porTipo).map(function(k){ return {tipo:k, ton:porTipo[k]}; })
+                  .sort(function(a,b){ return b.ton-a.ton; });
+
+  // ── FILA 2: Torta tipo de carga + Barras ingresos + Barras toneladas ──
+  var html = '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
+
+  html += '<div class="chart-wrap" style="margin:0"><h4>Por Tipo de Carga</h4>' + svgDonutTipo(tipoArr) + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Viajes por Mes</h4>' + svgBarras(mesesArr,'viajes','#4472c4') + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Toneladas por Mes</h4>' + svgBarras(mesesArr,'ton','#1E6B2E') + '</div>';
+
+  html += '</div>';
+
+  // ── FILA 3: Unidades + Gauge km + Toneladas totales ────────────
+  html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:12px;margin-bottom:12px">';
+
+  html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px">'
+    + '<div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Unidades</div>'
+    + '<div style="font-size:56px;font-weight:800;color:#1E6B2E">' + camiones.length + '</div>'
+    + '</div>';
+
+  html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center"><h4>Km recorridos</h4>' + svgGauge(totalKm, kmObj) + '</div>';
+
+  html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;background:#3d1f05">'
+    + '<div style="font-size:12px;font-weight:600;color:#e8c99a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Toneladas Totales</div>'
+    + '<div style="font-size:40px;font-weight:800;color:#fff">' + fmtMillones(totalTon) + '</div>'
+    + '</div>';
+
+  html += '</div>';
+
+  // ── FILA 4: Tabla por camión ───────────────────────────────────
   if (camiones.length > 0) {
-    html += '<div class="chart-wrap" style="margin-bottom:16px"><h4>📊 Resultados por camión</h4>'
-      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
-      + '<thead><tr style="background:var(--gray)">'
-      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos UYU','r') + th('Costo total','r') + th('Costo/km','r') + th('Margen','r') + th('Margen %','r')
+    html += '<div class="chart-wrap"><h4>📊 Resultados por camión</h4><div style="overflow-x:auto">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
+      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos','r') + th('Costo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r')
       + '</tr></thead><tbody>';
     camiones.forEach(function(c){
       var mc = parseFloat(c.margen_pct);
       var col = mc >= 20 ? '#0f6e56' : mc >= 10 ? '#b97c0a' : '#a32d2d';
       html += '<tr style="border-bottom:1px solid var(--border)">'
-        + td('<strong>' + c.matricula + '</strong>')
-        + td(c.modelo || '—', '', '#64748b')
-        + td(fmtN(c.viajes), 'r')
-        + td(fmtN(c.km), 'r')
-        + td(fmt$(c.ingresos), 'r')
-        + td(fmt$(c.costo_total), 'r')
-        + td('$U ' + (c.costo_por_km||0), 'r')
-        + td(fmt$(c.margen), 'r')
-        + '<td style="padding:8px;text-align:right;font-weight:700;color:' + col + '">' + mc + '%</td>'
-        + '</tr>';
+        + td('<strong>' + c.matricula + '</strong>') + td(c.modelo||'—','','#64748b')
+        + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r')
+        + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_total),'r')
+        + td('$U '+(c.costo_por_km||0),'r') + td(fmt$(c.margen),'r')
+        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + mc + '%</td></tr>';
     });
     html += '</tbody></table></div></div>';
   }
 
-  // Barras por área de mantenimiento
-  if (areas.length > 0) {
-    var totalMant = areas.reduce(function(s,a){ return s+(parseFloat(a.costo)||0); },0);
-    var maxMant = Math.max.apply(null, areas.map(function(a){ return parseFloat(a.costo)||0; })) || 1;
-    html += '<div class="chart-wrap" style="margin-bottom:16px"><h4>🔧 Costos de mantenimiento por área</h4>';
-    areas.sort(function(a,b){ return (parseFloat(b.costo)||0)-(parseFloat(a.costo)||0); }).forEach(function(a){
-      var v = parseFloat(a.costo)||0;
-      var p = Math.round((v/maxMant)*100);
-      var pPct = totalMant > 0 ? Math.round((v/totalMant)*100) : 0;
-      html += '<div class="bar-row"><span class="bar-row-label">' + a.area + '</span>'
-        + '<div class="bar-row-track"><div class="bar-row-fill" style="width:' + p + '%;background:#378add"></div></div>'
-        + '<span class="bar-row-val">' + fmt$(v) + ' (' + pPct + '%)</span></div>';
-    });
-    html += '</div>';
-  }
-
-  // Barras de destinos
+  // ── Destinos ───────────────────────────────────────────────────
   if (destinos.length > 0) {
     var maxV = Math.max.apply(null, destinos.map(function(d){ return d.viajes||0; })) || 1;
     html += '<div class="chart-wrap"><h4>📍 Destinos más frecuentes</h4>';
-    destinos.sort(function(a,b){ return b.viajes - a.viajes; }).forEach(function(d){
+    destinos.sort(function(a,b){ return b.viajes-a.viajes; }).forEach(function(d){
       var p = Math.round((d.viajes/maxV)*100);
       html += '<div class="bar-row"><span class="bar-row-label">' + d.destino + '</span>'
-        + '<div class="bar-row-track"><div class="bar-row-fill" style="width:' + p + '%;background:#1E6B2E"></div></div>'
+        + '<div class="bar-row-track"><div class="bar-row-fill" style="width:'+p+'%;background:#1E6B2E"></div></div>'
         + '<span class="bar-row-val">' + d.viajes + ' viajes · ' + fmtN(d.toneladas) + ' t</span></div>';
     });
     html += '</div>';
   }
 
   if (!html) {
-    html = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">'
-      + '<i class="ti ti-truck" style="font-size:48px;display:block;margin-bottom:12px"></i>'
-      + '<p style="font-weight:600">Sin datos todavía</p>'
-      + '<p style="font-size:13px;margin-top:6px">Completá los formularios de Viajes para ver los KPIs.</p></div>';
+    html = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)"><i class="ti ti-truck" style="font-size:48px;display:block;margin-bottom:12px"></i><p style="font-weight:600">Sin datos todavía</p></div>';
   }
 
   document.getElementById('transp-contenido').innerHTML = html;
+}
+
+function fmtMillones(n) {
+  var v = parseFloat(n)||0;
+  if (Math.abs(v) >= 1000000) return '$U ' + (v/1000000).toFixed(2) + ' mill.';
+  if (Math.abs(v) >= 1000)    return '$U ' + (v/1000).toFixed(1) + ' mil';
+  return '$U ' + v.toLocaleString('es-UY',{maximumFractionDigits:0});
+}
+
+function kpiBig(label, val, valColor, bg) {
+  return '<div style="background:'+bg+';border:1px solid var(--border);border-radius:10px;padding:20px 16px">'
+    + '<div style="font-size:13px;font-weight:700;color:#333;margin-bottom:10px">' + label + '</div>'
+    + '<div style="font-size:28px;font-weight:800;color:'+valColor+'">' + val + '</div>'
+    + '</div>';
+}
+
+function svgDonut(areas) {
+  if (!areas || areas.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de mantenimiento</div>';
+  return svgDonutGen(areas.map(function(a){ return {label:a.area||'?', val:parseFloat(a.costo)||0}; }));
+}
+
+function svgDonutTipo(tipoArr) {
+  if (!tipoArr || tipoArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de viajes</div>';
+  return svgDonutGen(tipoArr.map(function(t){ return {label:t.tipo, val:t.ton}; }));
+}
+
+function svgDonutGen(items) {
+  var COLORS = ['#4472c4','#ed7d31','#a9d18e','#ffc000','#5b9bd5','#70ad47','#c00000','#7030a0','#00b0f0'];
+  var total = items.reduce(function(s,a){ return s+a.val; },0) || 1;
+  var cx=75, cy=75, r=55, rI=32;
+  var angle = -Math.PI/2, svgPaths = '', legend = '';
+  items.forEach(function(a,i){
+    var v = a.val;
+    if (v <= 0) return;
+    var slice = (v/total)*2*Math.PI;
+    var x1=cx+r*Math.cos(angle), y1=cy+r*Math.sin(angle);
+    var x2=cx+r*Math.cos(angle+slice), y2=cy+r*Math.sin(angle+slice);
+    var xi1=cx+rI*Math.cos(angle), yi1=cy+rI*Math.sin(angle);
+    var xi2=cx+rI*Math.cos(angle+slice), yi2=cy+rI*Math.sin(angle+slice);
+    var lg = slice > Math.PI ? 1 : 0;
+    var col = COLORS[i % COLORS.length];
+    var pct = Math.round((v/total)*100);
+    svgPaths += '<path d="M '+xi1+' '+yi1+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+lg+' 1 '+x2+' '+y2+' L '+xi2+' '+yi2+' A '+rI+' '+rI+' 0 '+lg+' 0 '+xi1+' '+yi1+' Z" fill="'+col+'"><title>'+a.label+': '+pct+'%</title></path>';
+    legend += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:4px"><div style="width:9px;height:9px;border-radius:2px;background:'+col+';flex-shrink:0"></div><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.label+'</span><strong style="margin-left:auto;flex-shrink:0">'+pct+'%</strong></div>';
+    angle += slice;
+  });
+  return '<div style="display:flex;align-items:center;gap:10px">'
+    + '<svg viewBox="0 0 150 150" width="110" height="110" style="flex-shrink:0"><g>' + svgPaths + '</g></svg>'
+    + '<div style="flex:1;min-width:0">' + legend + '</div></div>';
+}
+
+function svgBarras(mesesArr, campo, color) {
+  if (!mesesArr || mesesArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos por mes</div>';
+  var W=280, H=130, PAD=30, BAR_W=Math.max(10, Math.min(30, (W-PAD*2)/mesesArr.length - 6));
+  var maxV = Math.max.apply(null, mesesArr.map(function(m){ return m[campo]||0; })) || 1;
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:140px">';
+  var spacing = (W-PAD*2) / mesesArr.length;
+  mesesArr.forEach(function(m,i){
+    var v = m[campo]||0;
+    var bH = Math.max(2, Math.round(((H-PAD*1.5)*v/maxV)));
+    var x = PAD + i*spacing + spacing/2 - BAR_W/2;
+    var y = H-PAD-bH;
+    var label = campo==='ing' ? fmtMillones(v) : fmtN(v);
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+BAR_W+'" height="'+bH+'" fill="'+color+'" rx="2"><title>'+m.label+': '+label+'</title></rect>';
+    svg += '<text x="'+(x+BAR_W/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
+    if (bH > 18) svg += '<text x="'+(x+BAR_W/2)+'" y="'+(y-3)+'" text-anchor="middle" font-size="8" fill="#555">'+label+'</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+function svgGauge(val, max) {
+  var pct = Math.min(val/max, 1);
+  var r=60, cx=80, cy=80;
+  var startA = Math.PI*0.75, endA = Math.PI*2.25;
+  var angle = startA + pct*(endA-startA);
+  function pt(a){ return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+  var s=pt(startA), e=pt(angle), eMax=pt(endA);
+  var lg1=angle-startA>Math.PI?1:0, lg2=endA-angle>Math.PI?1:0;
+  var trackPath='M '+s[0]+' '+s[1]+' A '+r+' '+r+' 0 '+(endA-startA>Math.PI?1:0)+' 1 '+eMax[0]+' '+eMax[1];
+  var fillPath='M '+s[0]+' '+s[1]+' A '+r+' '+r+' 0 '+lg1+' 1 '+e[0]+' '+e[1];
+  return '<svg viewBox="0 0 160 120" width="160" height="110">'
+    + '<path d="'+trackPath+'" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/>'
+    + '<path d="'+fillPath+'" fill="none" stroke="#378add" stroke-width="14" stroke-linecap="round"/>'
+    + '<text x="80" y="82" text-anchor="middle" font-size="20" font-weight="800" fill="#185fa5">'+fmtN(val)+'</text>'
+    + '<text x="80" y="97" text-anchor="middle" font-size="10" fill="#888">km de '+fmtN(max)+' objetivo</text>'
+    + '<text x="28" y="115" text-anchor="middle" font-size="9" fill="#aaa">0</text>'
+    + '<text x="132" y="115" text-anchor="middle" font-size="9" fill="#aaa">'+fmtN(max)+'</text>'
+    + '</svg>';
 }
 
 function kpi(label, val, sub, color) {
