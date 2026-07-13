@@ -274,13 +274,21 @@ tr:hover td{background:#faf9f6}
 
       <div class="page" id="page-transporte">
         <div class="page-header"><h2>Gestión de Transporte</h2></div>
-        <div id="transp-filtros" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
-          <button class="fb active" onclick="loadTransporte('kpis',this)">📊 Dashboard</button>
-          <button class="fb" onclick="loadTransporte('viajes',this)">🚛 Viajes</button>
-          <button class="fb" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
-          <button class="fb" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
-          <button class="fb" onclick="loadTransporte('flota',this)">🚚 Flota</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div id="transp-filtros" style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="fb active" onclick="loadTransporte('kpis',this)">📊 Dashboard</button>
+            <button class="fb" onclick="loadTransporte('viajes',this)">🚛 Viajes</button>
+            <button class="fb" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
+            <button class="fb" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
+            <button class="fb" onclick="loadTransporte('flota',this)">🚚 Flota</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span>💱 USD =</span>
+            <input id="transp-tc" type="number" value="1400" min="1" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" onchange="if(_transpVista==='kpis')loadTransporte('kpis')">
+            <span>ARS</span>
+          </div>
         </div>
+        <div id="transp-indicadores" style="margin-bottom:16px"></div>
         <div id="transp-contenido"></div>
       </div>
 
@@ -1277,22 +1285,41 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 var TRANSP_API = 'https://script.google.com/macros/s/AKfycbwboVlEh7aJ8Yui5mQHjySwxPU1lFAS-7J2YoKxKGwJERIUUwRF3hT1HRnXnutAwnWs/exec';
 var _transpVista = 'kpis';
 
+function getTc(){ return parseFloat(document.getElementById('transp-tc').value) || 1400; }
+
+function toARS(n, moneda) {
+  var v = parseFloat(n) || 0;
+  return (moneda && moneda.toString().toUpperCase() === 'USD') ? v * getTc() : v;
+}
+
+function fmtMon(n, moneda) {
+  var v = parseFloat(n) || 0;
+  if (moneda && moneda.toString().toUpperCase() === 'USD')
+    return 'U$S ' + v.toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return '$' + v.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+
+function badgeMon(moneda) {
+  if (moneda && moneda.toString().toUpperCase() === 'USD')
+    return '<span style="background:#1a56db;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">USD</span>';
+  return '<span style="background:#0f6e56;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">ARS</span>';
+}
+
 function loadTransporte(vista, btn) {
   _transpVista = vista || 'kpis';
   if (btn) {
     document.querySelectorAll('#transp-filtros .fb').forEach(function(b){ b.classList.remove('active'); });
     btn.classList.add('active');
   }
-  var el = document.getElementById('transp-contenido');
-  el.innerHTML = '<div class="loading" style="padding:40px;text-align:center">Cargando...</div>';
+  document.getElementById('transp-contenido').innerHTML = '<div class="loading" style="padding:40px;text-align:center">Cargando...</div>';
+  document.getElementById('transp-indicadores').innerHTML = '';
 
-  var action = vista === 'kpis' ? 'kpis' : vista;
-  callTranspAPI({action: action}, function(data) {
-    if (vista === 'kpis')           renderTranspKPIs(data);
-    else if (vista === 'viajes')    renderTranspTabla(data, 'viajes');
-    else if (vista === 'combustible') renderTranspTabla(data, 'combustible');
+  callTranspAPI({action: vista === 'kpis' ? 'kpis' : vista}, function(data) {
+    if (vista === 'kpis')                renderTranspKPIs(data);
+    else if (vista === 'viajes')         renderTranspTabla(data, 'viajes');
+    else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
     else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
-    else if (vista === 'flota')     renderTranspTabla(data, 'flota');
+    else if (vista === 'flota')          renderTranspTabla(data, 'flota');
   });
 }
 
@@ -1301,7 +1328,7 @@ function callTranspAPI(params, cb) {
   var url = TRANSP_API + '?callback=' + cbName;
   Object.keys(params).forEach(function(k){ url += '&' + k + '=' + encodeURIComponent(params[k]); });
   var timeout = setTimeout(function(){
-    document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado. Verificá la conexión.</div>';
+    document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado.</div>';
     if(window[cbName]) delete window[cbName];
   }, 12000);
   window[cbName] = function(data) {
@@ -1315,7 +1342,7 @@ function callTranspAPI(params, cb) {
   };
   var s = document.createElement('script');
   s.src = url;
-  s.onerror = function(){ clearTimeout(timeout); document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API de Transporte.</div>'; };
+  s.onerror = function(){ clearTimeout(timeout); document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API.</div>'; };
   document.body.appendChild(s);
 }
 
@@ -1328,153 +1355,195 @@ function renderTranspKPIs(data) {
   var areas = data.por_area_mantenimiento || [];
   var destinos = data.por_destino || [];
 
-  var margenColor = parseFloat(r.margen_pct) >= 20 ? '#0f6e56' : parseFloat(r.margen_pct) >= 10 ? '#b97c0a' : '#a32d2d';
-  var margenSem   = parseFloat(r.margen_pct) >= 20 ? '🟢' : parseFloat(r.margen_pct) >= 10 ? '🟡' : '🔴';
+  var ing = parseFloat(r.total_ingresos)||0;
+  var margen = parseFloat(r.margen_total)||0;
+  var pct = parseFloat(r.margen_pct)||0;
+  var semM = pct >= 20 ? '🟢' : pct >= 10 ? '🟡' : '🔴';
+  var colM = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
 
-  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px">';
+  // KPI grid — mismo estilo que Ganadería
+  var kpiHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">'
+    + kpi('Ingresos totales', fmt$(ing), 'en ARS equivalente', '#0f6e56')
+    + kpi(semM + ' Margen total', fmt$(margen) + ' (' + pct + '%)', 'Objetivo: ≥ 20%', colM)
+    + kpi('Costo total', fmt$(r.costo_total||0), 'Combustible + mantenimiento', '#a32d2d')
+    + kpi('Costo / km', '$' + (r.costo_por_km||0), 'promedio flota', '#378add')
+    + kpi('Km recorridos', fmtN(r.total_km) + ' km', 'total acumulado', '#639922')
+    + kpi('Viajes realizados', fmtN(r.total_viajes), 'registrados', '#185fa5')
+    + kpi('Toneladas transportadas', fmtN(r.total_toneladas) + ' t', 'total acumulado', '#854f0b')
+    + '</div>';
 
-  var kpis = [
-    {label:'Ingresos totales', val: fmt$(r.total_ingresos), icon:'ti-coin', color:'#0f6e56'},
-    {label:'Margen total',     val: fmt$(r.margen_total) + ' <span style="font-size:12px">(' + (r.margen_pct||0) + '%)</span>', icon:'ti-chart-line', color: margenColor, sem: margenSem},
-    {label:'Costo total',      val: fmt$(r.costo_total), icon:'ti-receipt', color:'#a32d2d'},
-    {label:'Costo / km',       val: '$' + (r.costo_por_km||0), icon:'ti-road', color:'#378add'},
-    {label:'Km recorridos',    val: fmtN(r.total_km) + ' km', icon:'ti-map-pin', color:'#639922'},
-    {label:'Viajes realizados',val: fmtN(r.total_viajes), icon:'ti-truck', color:'#185fa5'},
-    {label:'Toneladas',        val: fmtN(r.total_toneladas) + ' t', icon:'ti-weight', color:'#854f0b'},
-  ];
-  kpis.forEach(function(k){
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;border-left:4px solid ' + k.color + '">'
-      + '<div style="font-size:11px;color:#64748b;margin-bottom:6px"><i class="ti ' + k.icon + '"></i> ' + k.label + '</div>'
-      + '<div style="font-size:20px;font-weight:700;color:' + k.color + '">' + (k.sem ? k.sem + ' ' : '') + k.val + '</div>'
-      + '</div>';
-  });
-  html += '</div>';
+  document.getElementById('transp-indicadores').innerHTML = kpiHtml;
+
+  var html = '';
 
   // Tabla por camión
   if (camiones.length > 0) {
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:16px">'
-      + '<h3 style="font-size:14px;font-weight:600;margin-bottom:12px">📊 Resultados por camión</h3>'
+    html += '<div class="chart-wrap" style="margin-bottom:16px"><h4>📊 Resultados por camión</h4>'
       + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
-      + '<thead><tr style="background:#f8fafc">'
-      + '<th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0">Matrícula</th>'
-      + '<th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0">Modelo</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Viajes</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Km</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Ingresos</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Costo total</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Costo/km</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Margen</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Margen %</th>'
+      + '<thead><tr style="background:var(--gray)">'
+      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos ARS','r') + th('Costo total','r') + th('Costo/km','r') + th('Margen','r') + th('Margen %','r')
       + '</tr></thead><tbody>';
     camiones.forEach(function(c){
       var mc = parseFloat(c.margen_pct);
       var col = mc >= 20 ? '#0f6e56' : mc >= 10 ? '#b97c0a' : '#a32d2d';
-      html += '<tr style="border-bottom:1px solid #f1f5f9">'
-        + '<td style="padding:8px;font-weight:600">' + c.matricula + '</td>'
-        + '<td style="padding:8px;color:#64748b">' + (c.modelo||'—') + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmtN(c.viajes) + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmtN(c.km) + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmt$(c.ingresos) + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmt$(c.costo_total) + '</td>'
-        + '<td style="padding:8px;text-align:right">$' + (c.costo_por_km||0) + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmt$(c.margen) + '</td>'
+      html += '<tr style="border-bottom:1px solid var(--border)">'
+        + td('<strong>' + c.matricula + '</strong>')
+        + td(c.modelo || '—', '', '#64748b')
+        + td(fmtN(c.viajes), 'r')
+        + td(fmtN(c.km), 'r')
+        + td(fmt$(c.ingresos), 'r')
+        + td(fmt$(c.costo_total), 'r')
+        + td('$' + (c.costo_por_km||0), 'r')
+        + td(fmt$(c.margen), 'r')
         + '<td style="padding:8px;text-align:right;font-weight:700;color:' + col + '">' + mc + '%</td>'
         + '</tr>';
     });
     html += '</tbody></table></div></div>';
   }
 
-  // Costos por área de mantenimiento
+  // Barras por área de mantenimiento
   if (areas.length > 0) {
-    var totalMant = areas.reduce(function(s,a){ return s + (parseFloat(a.costo)||0); }, 0);
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:16px">'
-      + '<h3 style="font-size:14px;font-weight:600;margin-bottom:12px">🔧 Costos de mantenimiento por área</h3>';
-    areas.sort(function(a,b){ return (parseFloat(b.costo)||0) - (parseFloat(a.costo)||0); }).forEach(function(a){
-      var pct = totalMant > 0 ? ((parseFloat(a.costo)||0) / totalMant * 100).toFixed(0) : 0;
-      html += '<div style="margin-bottom:8px">'
-        + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>' + a.area + '</span><span>' + fmt$(a.costo) + ' (' + pct + '%)</span></div>'
-        + '<div style="background:#f1f5f9;border-radius:4px;height:8px"><div style="background:#378add;height:8px;border-radius:4px;width:' + pct + '%"></div></div>'
-        + '</div>';
+    var totalMant = areas.reduce(function(s,a){ return s+(parseFloat(a.costo)||0); },0);
+    var maxMant = Math.max.apply(null, areas.map(function(a){ return parseFloat(a.costo)||0; })) || 1;
+    html += '<div class="chart-wrap" style="margin-bottom:16px"><h4>🔧 Costos de mantenimiento por área</h4>';
+    areas.sort(function(a,b){ return (parseFloat(b.costo)||0)-(parseFloat(a.costo)||0); }).forEach(function(a){
+      var v = parseFloat(a.costo)||0;
+      var p = Math.round((v/maxMant)*100);
+      var pPct = totalMant > 0 ? Math.round((v/totalMant)*100) : 0;
+      html += '<div class="bar-row"><span class="bar-row-label">' + a.area + '</span>'
+        + '<div class="bar-row-track"><div class="bar-row-fill" style="width:' + p + '%;background:#378add"></div></div>'
+        + '<span class="bar-row-val">' + fmt$(v) + ' (' + pPct + '%)</span></div>';
     });
     html += '</div>';
   }
 
-  // Top destinos
+  // Barras de destinos
   if (destinos.length > 0) {
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">'
-      + '<h3 style="font-size:14px;font-weight:600;margin-bottom:12px">📍 Destinos más frecuentes</h3>'
-      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
-      + '<thead><tr style="background:#f8fafc"><th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0">Destino</th><th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Viajes</th><th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Km totales</th><th style="padding:8px;text-align:right;border-bottom:1px solid #e2e8f0">Toneladas</th></tr></thead><tbody>';
+    var maxV = Math.max.apply(null, destinos.map(function(d){ return d.viajes||0; })) || 1;
+    html += '<div class="chart-wrap"><h4>📍 Destinos más frecuentes</h4>';
     destinos.sort(function(a,b){ return b.viajes - a.viajes; }).forEach(function(d){
-      html += '<tr style="border-bottom:1px solid #f1f5f9">'
-        + '<td style="padding:8px;font-weight:500">' + d.destino + '</td>'
-        + '<td style="padding:8px;text-align:right">' + d.viajes + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmtN(d.km) + '</td>'
-        + '<td style="padding:8px;text-align:right">' + fmtN(d.toneladas) + '</td>'
-        + '</tr>';
+      var p = Math.round((d.viajes/maxV)*100);
+      html += '<div class="bar-row"><span class="bar-row-label">' + d.destino + '</span>'
+        + '<div class="bar-row-track"><div class="bar-row-fill" style="width:' + p + '%;background:#1E6B2E"></div></div>'
+        + '<span class="bar-row-val">' + d.viajes + ' viajes · ' + fmtN(d.toneladas) + ' t</span></div>';
     });
-    html += '</tbody></table></div></div>';
+    html += '</div>';
   }
 
-  if (camiones.length === 0 && areas.length === 0) {
-    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:40px;text-align:center;color:#64748b">'
+  if (!html) {
+    html = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">'
       + '<i class="ti ti-truck" style="font-size:48px;display:block;margin-bottom:12px"></i>'
       + '<p style="font-weight:600">Sin datos todavía</p>'
-      + '<p style="font-size:13px;margin-top:6px">Completá los formularios de Viajes y Combustible para ver los KPIs.</p>'
-      + '</div>';
+      + '<p style="font-size:13px;margin-top:6px">Completá los formularios de Viajes para ver los KPIs.</p></div>';
   }
 
   document.getElementById('transp-contenido').innerHTML = html;
 }
 
+function kpi(label, val, sub, color) {
+  return '<div class="reg-kpi"><div class="reg-kpi-label">' + label + '</div>'
+    + '<div class="reg-kpi-val" style="color:' + color + '">' + val + '</div>'
+    + '<div class="reg-kpi-sub">' + sub + '</div></div>';
+}
+function th(txt, align) {
+  return '<th style="padding:8px;text-align:' + (align==='r'?'right':'left') + ';border-bottom:1px solid var(--border);white-space:nowrap">' + txt + '</th>';
+}
+function td(txt, align, color) {
+  return '<td style="padding:8px;' + (align==='r'?'text-align:right;':'') + (color?'color:'+color+';':'') + '">' + txt + '</td>';
+}
+
 function renderTranspTabla(data, tipo) {
   var rows = Array.isArray(data) ? data : [];
-  var el = document.getElementById('transp-contenido');
+  var tc = getTc();
+
+  // Resumen rápido arriba
+  var indicHtml = '';
+  if (rows.length > 0) {
+    if (tipo === 'viajes') {
+      var totKm = 0, totTon = 0, totIng = 0;
+      rows.forEach(function(r){
+        totKm  += parseFloat(r['km recorridos'])||0;
+        totTon += parseFloat(r['toneladas'])||0;
+        totIng += toARS(r['ingreso'], r['moneda']);
+      });
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
+        + kpi('Registros', rows.length, 'viajes', '#185fa5')
+        + kpi('Km totales', fmtN(totKm) + ' km', 'acumulado', '#639922')
+        + kpi('Toneladas', fmtN(totTon) + ' t', 'transportadas', '#854f0b')
+        + kpi('Ingresos ARS', fmt$(totIng), 'tipo de cambio: $' + fmtN(tc), '#0f6e56')
+        + '</div>';
+    } else if (tipo === 'mantenimientos') {
+      var totCosto = 0;
+      rows.forEach(function(r){ totCosto += toARS(r['costo'], r['moneda']); });
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+        + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
+        + kpi('Costo total ARS', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
+        + kpi('Costo promedio', fmt$(rows.length ? totCosto/rows.length : 0), 'por intervención', '#378add')
+        + '</div>';
+    } else if (tipo === 'combustible') {
+      var totLt = 0, totFactura = 0;
+      rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+        + kpi('Registros', rows.length, 'cargas', '#185fa5')
+        + kpi('Litros totales', fmtN(totLt) + ' L', 'acumulado', '#F07820')
+        + kpi('Costo total', fmt$(totFactura), 'acumulado', '#a32d2d')
+        + '</div>';
+    }
+  }
+  document.getElementById('transp-indicadores').innerHTML = indicHtml;
 
   var colMap = {
-    viajes: ['fecha viaje','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso'],
-    combustible: ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
-    mantenimientos: ['fecha','matricula','acoplado','area','detalle','km equipo','taller','costo'],
-    flota: ['matricula','modelo','año','tipo','chofer habitual','seguro ($/mes)','vtv ($/año)','salario chofer ($/mes)','amortización ($/mes)','km promedio/mes','estado']
+    viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
+    combustible:    ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
+    mantenimientos: ['fecha','moneda','matricula','area','detalle','km equipo','taller','costo','factura'],
+    flota:          ['matricula','modelo','ano','tipo','chofer habitual','estado']
   };
-
-  var cols = colMap[tipo] || Object.keys(rows[0] || {}).filter(function(k){ return k !== 'timestamp'; });
   var labelMap = {
     'fecha viaje':'Fecha','matricula':'Matrícula','fecha factura':'Fecha',
     'acoplado':'Acoplado','km equipo':'Km equipo','taller':'Taller',
     'precio litro':'$/litro','total':'Total','factura':'N° Fact.',
-    'vtv ($/año)':'VTV/año','salario chofer ($/mes)':'Salario',
-    'amortización ($/mes)':'Amortiz.','km promedio/mes':'Km/mes',
     'tipo de carga':'Carga','km recorridos':'Km',
     'peajes':'Peajes','viaticos':'Viáticos','tarifa':'Tarifa/km',
-    'ingreso':'Ingreso','costo':'Costo','detalle':'Detalle',
+    'ingreso':'Ingreso (orig.)','costo':'Costo (orig.)','detalle':'Detalle',
     'area':'Área','litros':'Litros','proveedor':'Proveedor',
-    'seguro ($/mes)':'Seguro','chofer habitual':'Chofer hab.'
+    'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.'
   };
+  var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
 
-  var html = '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;overflow-x:auto">';
+  var cols = colMap[tipo] || Object.keys(rows[0]||{}).filter(function(k){ return k!=='timestamp'&&k!=='observaciones'; });
+
+  var html = '';
   if (rows.length === 0) {
-    html += '<div style="text-align:center;padding:40px;color:#64748b">Sin registros todavía. Completá el formulario correspondiente.</div>';
+    html = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">Sin registros todavía. Completá el formulario correspondiente.</div>';
   } else {
-    html += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f8fafc">';
-    cols.forEach(function(c){ html += '<th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap">' + (labelMap[c]||c) + '</th>'; });
+    // Agregar columna ARS equivalente para viajes/mantenimientos
+    var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
+    html = '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
+    cols.forEach(function(c){ html += th(labelMap[c]||c); });
+    if (showARS) html += th('ARS equiv.', 'r');
     html += '</tr></thead><tbody>';
     rows.forEach(function(r){
-      html += '<tr style="border-bottom:1px solid #f1f5f9">';
+      html += '<tr style="border-bottom:1px solid var(--border)">';
       cols.forEach(function(c){
         var v = r[c];
-        var moneda = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
+        if (c === 'moneda') {
+          html += '<td style="padding:6px 8px">' + badgeMon(v) + '</td>';
+          return;
+        }
         if (v === null || v === undefined || v === '') v = '—';
-        else if (typeof v === 'number' && moneda.indexOf(c) >= 0) v = fmt$(v);
+        else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) v = fmtMon(v, r['moneda']);
         else if (typeof v === 'number' && c.indexOf('$') >= 0) v = fmt$(v);
-        html += '<td style="padding:8px">' + v + '</td>';
+        html += '<td style="padding:6px 8px">' + v + '</td>';
       });
+      if (showARS) {
+        var arsVal = tipo === 'viajes' ? toARS(r['ingreso'], r['moneda']) : toARS(r['costo'], r['moneda']);
+        html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
+      }
       html += '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
-  html += '</div>';
-  el.innerHTML = html;
+  document.getElementById('transp-contenido').innerHTML = html;
 }
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
