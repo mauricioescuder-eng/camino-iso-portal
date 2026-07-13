@@ -1318,8 +1318,8 @@ function loadTransporte(vista, btn) {
     // Carga KPIs + viajes en paralelo para gráficos mensuales
     var kpisData = null, viajesData = null, done = 0;
     function tryRender() { if (++done === 2) renderTranspKPIs(kpisData, viajesData); }
-    callTranspAPI({action:'kpis'},   function(d){ kpisData  = d; tryRender(); });
-    callTranspAPI({action:'viajes'}, function(d){ viajesData = Array.isArray(d) ? d : []; tryRender(); });
+    callTranspAPI({action:'kpis'},   function(d){ kpisData  = d; tryRender(); }, function(){ kpisData  = {}; tryRender(); });
+    callTranspAPI({action:'viajes'}, function(d){ viajesData = Array.isArray(d) ? d : []; tryRender(); }, function(){ viajesData = []; tryRender(); });
   } else {
     callTranspAPI({action: vista}, function(data) {
       if (vista === 'viajes')         renderTranspTabla(data, 'viajes');
@@ -1330,26 +1330,28 @@ function loadTransporte(vista, btn) {
   }
 }
 
-function callTranspAPI(params, cb) {
+function callTranspAPI(params, cb, onTimeout) {
   var cbName = 'transpCb_' + Date.now();
   var url = TRANSP_API + '?callback=' + cbName;
   Object.keys(params).forEach(function(k){ url += '&' + k + '=' + encodeURIComponent(params[k]); });
   var timeout = setTimeout(function(){
-    document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado.</div>';
     if(window[cbName]) delete window[cbName];
-  }, 12000);
+    if (onTimeout) { onTimeout(); }
+    else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado.</div>'; }
+  }, 25000);
   window[cbName] = function(data) {
     clearTimeout(timeout);
     delete window[cbName];
     if (data && data.error) {
-      document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error API: ' + data.error + '</div>';
+      if (onTimeout) { onTimeout(); }
+      else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error API: ' + data.error + '</div>'; }
       return;
     }
     cb(data);
   };
   var s = document.createElement('script');
   s.src = url;
-  s.onerror = function(){ clearTimeout(timeout); document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API.</div>'; };
+  s.onerror = function(){ clearTimeout(timeout); if (onTimeout) { onTimeout(); } else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API.</div>'; } };
   document.body.appendChild(s);
 }
 
