@@ -1315,9 +1315,14 @@ function loadTransporte(vista, btn) {
   document.getElementById('transp-indicadores').innerHTML = '';
 
   if (vista === 'kpis') {
-    // Carga KPIs + viajes en paralelo para gráficos mensuales
     var kpisData = null, viajesData = null, done = 0;
-    function tryRender() { if (++done === 2) renderTranspKPIs(kpisData, viajesData); }
+    function tryRender() {
+      if (++done === 2) {
+        window._transpViajesRaw = viajesData; // guardar para re-filtrar
+        window._transpKpisData  = kpisData;
+        renderTranspKPIs(kpisData, viajesData);
+      }
+    }
     callTranspAPI({action:'kpis'},   function(d){ kpisData  = d; tryRender(); }, function(){ kpisData  = {}; tryRender(); });
     callTranspAPI({action:'viajes'}, function(d){ viajesData = Array.isArray(d) ? d : []; tryRender(); }, function(){ viajesData = []; tryRender(); });
   } else {
@@ -1358,6 +1363,50 @@ function callTranspAPI(params, cb, onTimeout) {
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 function fmtN(n){ return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
+
+function aplicarFiltrosTransp() {
+  var raw = window._transpViajesRaw || [];
+  var per  = document.getElementById('tf-periodo')  ? document.getElementById('tf-periodo').value  : '';
+  var mat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
+  var tipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
+  var filtered = raw.filter(function(v) {
+    if (per  && !(v['fecha viaje']||'').startsWith(per))  return false;
+    if (mat  && v['matricula'] !== mat)                    return false;
+    if (tipo && v['tipo de carga'] !== tipo)               return false;
+    return true;
+  });
+  renderTranspKPIs(window._transpKpisData || {}, filtered);
+}
+
+function buildFiltrosHTML(viajes) {
+  var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  var periodos = {}, mats = {}, tipos = {};
+  viajes.forEach(function(v) {
+    var f = (v['fecha viaje']||'').substring(0,7);
+    if (f) { var p = f.split('-'); periodos[f] = (MESES[parseInt(p[1],10)-1]||p[1]) + ' ' + p[0]; }
+    if (v['matricula'])     mats[v['matricula']] = 1;
+    if (v['tipo de carga']) tipos[v['tipo de carga']] = 1;
+  });
+  var selStyle = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;cursor:pointer';
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0 4px">';
+  html += '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Filtros:</span>';
+  // Período
+  html += '<select id="tf-periodo" style="'+selStyle+'" onchange="aplicarFiltrosTransp()"><option value="">Todos los meses</option>';
+  Object.keys(periodos).sort().forEach(function(k){ html += '<option value="'+k+'">'+periodos[k]+'</option>'; });
+  html += '</select>';
+  // Matrícula
+  html += '<select id="tf-matricula" style="'+selStyle+'" onchange="aplicarFiltrosTransp()"><option value="">Todos los camiones</option>';
+  Object.keys(mats).sort().forEach(function(m){ html += '<option value="'+m+'">'+m+'</option>'; });
+  html += '</select>';
+  // Tipo de carga
+  html += '<select id="tf-tipo" style="'+selStyle+'" onchange="aplicarFiltrosTransp()"><option value="">Todos los tipos</option>';
+  Object.keys(tipos).sort().forEach(function(t){ html += '<option value="'+t+'">'+t+'</option>'; });
+  html += '</select>';
+  // Botón limpiar
+  html += '<button onclick="document.getElementById(\'tf-periodo\').value=\'\';document.getElementById(\'tf-matricula\').value=\'\';document.getElementById(\'tf-tipo\').value=\'\';aplicarFiltrosTransp();" style="'+selStyle+';background:#f1f5f9;border-color:#cbd5e1">✕ Limpiar</button>';
+  html += '</div>';
+  return html;
+}
 
 function renderTranspKPIs(data, viajes) {
   var r = data.resumen || {};
@@ -1417,8 +1466,23 @@ function renderTranspKPIs(data, viajes) {
   var tipoArr = Object.keys(porTipo).map(function(k){ return {tipo:k, ton:porTipo[k]}; })
                   .sort(function(a,b){ return b.ton-a.ton; });
 
+  // ── Preservar valores de filtros activos ──────────────────────
+  var savedPer  = document.getElementById('tf-periodo')  ? document.getElementById('tf-periodo').value  : '';
+  var savedMat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
+  var savedTipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
+  var rawForFilters = window._transpViajesRaw || viajes;
+
+  // ── Barra de filtros ──────────────────────────────────────────
+  var html = buildFiltrosHTML(rawForFilters);
+  // Restaurar valores seleccionados después del re-render
+  setTimeout(function() {
+    if (savedPer  && document.getElementById('tf-periodo'))  document.getElementById('tf-periodo').value  = savedPer;
+    if (savedMat  && document.getElementById('tf-matricula')) document.getElementById('tf-matricula').value = savedMat;
+    if (savedTipo && document.getElementById('tf-tipo'))      document.getElementById('tf-tipo').value      = savedTipo;
+  }, 0);
+
   // ── FILA 2: Torta tipo de carga + Barras ingresos + Barras toneladas ──
-  var html = '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
 
   html += '<div class="chart-wrap" style="margin:0"><h4>Por Tipo de Carga</h4>' + svgDonutTipo(tipoArr) + '</div>';
   html += '<div class="chart-wrap" style="margin:0"><h4>Viajes por Mes</h4>' + svgBarras(mesesArr,'viajes','#4472c4') + '</div>';
