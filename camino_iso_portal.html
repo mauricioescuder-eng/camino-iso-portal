@@ -1367,14 +1367,19 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
-  var ing    = parseFloat(r.total_ingresos)||0;
+  // Calcular desde viajes (más confiable que la API de KPIs)
+  var totalKm  = viajes.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); },0);
+  var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
+  var totalIng = viajes.reduce(function(s,v){ return s+toUYU(parseFloat(v['ingreso'])||0, v['moneda']); },0);
+  var mats = {}; viajes.forEach(function(v){ if(v['matricula']) mats[v['matricula']]=1; });
+  var numUnidades = Object.keys(mats).length;
+
+  var ing    = totalIng || (parseFloat(r.total_ingresos)||0);
   var costo  = parseFloat(r.costo_total)||0;
-  var margen = parseFloat(r.margen_total)||0;
-  var pct    = parseFloat(r.margen_pct)||0;
+  var margen = ing - costo;
+  var pct    = ing > 0 ? (margen/ing*100) : 0;
   var colM   = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
-  var totalKm = parseFloat(r.total_km)||0;
-  var totalTon = parseFloat(r.total_toneladas)||0;
-  var kmObj = Math.max(totalKm * 1.25, 1000); // objetivo = 25% más de lo actual
+  var kmObj  = Math.max(totalKm * 1.25, 1000);
 
   // ── FILA 1: 4 KPI grandes estilo Power BI ──────────────────────
   var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
@@ -1426,7 +1431,7 @@ function renderTranspKPIs(data, viajes) {
 
   html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px">'
     + '<div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Unidades</div>'
-    + '<div style="font-size:56px;font-weight:800;color:#1E6B2E">' + camiones.length + '</div>'
+    + '<div style="font-size:56px;font-weight:800;color:#1E6B2E">' + (numUnidades || camiones.length) + '</div>'
     + '</div>';
 
   html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center"><h4>Km recorridos</h4>' + svgGauge(totalKm, kmObj) + '</div>';
