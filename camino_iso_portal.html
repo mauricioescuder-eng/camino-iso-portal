@@ -1316,11 +1316,11 @@ function loadTransporte(vista, btn) {
 
   if (vista === 'kpis') {
     document.getElementById('transp-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando datos...</div>';
-    callTranspAPI({action:'viajes'}, function(d) {
-      var viajesData = Array.isArray(d) ? d : [];
-      window._transpViajesRaw = viajesData;
-      window._transpKpisData  = {};
-      if (viajesData.length === 0) {
+    // 1° carga viajes (Operaciones en DAX)
+    callTranspAPI({action:'viajes'}, function(viajesArr) {
+      viajesArr = Array.isArray(viajesArr) ? viajesArr : [];
+      window._transpViajesRaw = viajesArr;
+      if (viajesArr.length === 0) {
         document.getElementById('transp-contenido').innerHTML =
           '<div style="padding:40px;text-align:center">' +
           '<div style="color:var(--muted);margin-bottom:16px">Sin datos de viajes o API iniciando.</div>' +
@@ -1328,7 +1328,28 @@ function loadTransporte(vista, btn) {
           '</div>';
         return;
       }
-      renderTranspKPIs({}, viajesData);
+      // Render inmediato con viajes (costos en $0 hasta que carguen)
+      renderTranspKPIs({costosPorMatricula:{}}, viajesArr);
+      // 2° carga costos en paralelo (Costos_Operativos en DAX: combustible + mantenimiento)
+      var costosPorMat = {}, costosTotal = 0, pendientes = 2;
+      function mergeCostos() {
+        if (--pendientes > 0) return;
+        window._transpCostosPorMat = costosPorMat;
+        window._transpCostosTotal  = costosTotal;
+        renderTranspKPIs({costosPorMatricula: costosPorMat, costoTotal: costosTotal}, window._transpViajesRaw || viajesArr);
+      }
+      callTranspAPI({action:'combustible'}, function(d) {
+        (Array.isArray(d)?d:[]).forEach(function(c){
+          var m = c['matricula']||''; var v = parseFloat(c['total'])||0;
+          costosPorMat[m] = (costosPorMat[m]||0) + v; costosTotal += v;
+        }); mergeCostos();
+      }, mergeCostos);
+      callTranspAPI({action:'mantenimientos'}, function(d) {
+        (Array.isArray(d)?d:[]).forEach(function(c){
+          var m = c['matricula']||''; var v = parseFloat(c['costo'])||0;
+          costosPorMat[m] = (costosPorMat[m]||0) + v; costosTotal += v;
+        }); mergeCostos();
+      }, mergeCostos);
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
         '<div style="padding:40px;text-align:center">' +
@@ -1427,26 +1448,54 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
-  // Calcular desde viajes (más confiable que la API de KPIs)
+  // ── MÉTRICAS GLOBALES (alineadas con DAX Power BI) ────────────
+  // DAX: Km totales = SUM(Operaciones[Km_Recorridos])
   var totalKm  = viajes.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); },0);
+  // DAX: Toneladas Totales = SUM(Operaciones[Toneladas])
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
+  // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
   var totalIng = viajes.reduce(function(s,v){ return s+toUYU(parseFloat(v['ingreso'])||0, v['moneda']); },0);
-  var mats = {}; viajes.forEach(function(v){ if(v['matricula']) mats[v['matricula']]=1; });
-  var numUnidades = Object.keys(mats).length;
+  // DAX: Costo total = SUM(Costos_Operativos[Monto]) — directo por matrícula
+  var costosPorMat = data.costosPorMatricula || {};
+  var totalCosto = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
+  // DAX: Margen = [Ingresos Totales] - [Total Costos]
+  var margen = totalIng - totalCosto;
+  // DAX: % Margen = DIVIDE([Margen], [Ingresos Totales])
+  var pct = totalIng > 0 ? (margen / totalIng * 100) : 0;
+  // DAX: Costo por KM = DIVIDE(Total Costos, Total Km) — GLOBAL, no por camión
+  var costoPorKm = totalKm > 0 ? totalCosto / totalKm : 0;
+  var colM  = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
+  var kmObj = Math.max(totalKm * 1.25, 1000);
 
-  var ing    = totalIng || (parseFloat(r.total_ingresos)||0);
-  var costo  = parseFloat(r.costo_total)||0;
-  var margen = ing - costo;
-  var pct    = ing > 0 ? (margen/ing*100) : 0;
-  var colM   = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
-  var kmObj  = Math.max(totalKm * 1.25, 1000);
+  // ── POR CAMIÓN (DAX: agrupar Operaciones por ID_Camion) ───────
+  var byTruck = {};
+  viajes.forEach(function(v) {
+    var m = v['matricula'] || 'Sin matrícula';
+    if (!byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0};
+    byTruck[m].viajes++;
+    byTruck[m].km       += parseFloat(v['km recorridos'])||0;
+    byTruck[m].ton      += parseFloat(v['toneladas'])||0;
+    byTruck[m].ingresos += toUYU(parseFloat(v['ingreso'])||0, v['moneda']);
+  });
+  var camiones = Object.values(byTruck).map(function(c) {
+    // DAX: Costo directo por camión = SUM(Costos_Operativos[Monto]) filtrado por ID_Camion
+    c.costo_directo = costosPorMat[c.matricula] || 0;
+    // DAX: Margen = Ingresos - Costo directo
+    c.margen = c.ingresos - c.costo_directo;
+    // DAX: % Margen = DIVIDE(Margen, Ingresos)
+    c.pct_margen = c.ingresos > 0 ? (c.margen / c.ingresos * 100) : 0;
+    // DAX: Costo por KM del camión = Costo directo / Km
+    c.costo_por_km = c.km > 0 ? c.costo_directo / c.km : 0;
+    return c;
+  });
+  var numUnidades = camiones.length;
 
   // ── FILA 1: 4 KPI grandes estilo Power BI ──────────────────────
   var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
-    + kpiBig('Ingresos Totales', fmtMillones(ing), '#0f6e56', '#e8f5e9')
-    + kpiBig('Costo total', fmtMillones(costo), '#c0392b', '#fdecea')
-    + kpiBig('Margen', fmtMillones(margen), '#0f6e56', '#e8f5e9')
-    + kpiBig('% Margen', pct.toFixed(2) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea')
+    + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9')
+    + kpiBig('Costo total', fmtMillones(totalCosto), '#c0392b', '#fdecea')
+    + kpiBig('Margen', fmtMillones(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea')
+    + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea')
     + '</div>';
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
@@ -1518,34 +1567,45 @@ function renderTranspKPIs(data, viajes) {
 
   html += '</div>';
 
-  // ── FILA 4: Tabla por camión ───────────────────────────────────
+  // ── FILA 4: Tabla por camión (DAX: agrupar por ID_Camion) ─────
   if (camiones.length > 0) {
-    html += '<div class="chart-wrap"><h4>📊 Resultados por camión</h4><div style="overflow-x:auto">'
-      + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
-      + th('Matrícula') + th('Modelo') + th('Viajes','r') + th('Km','r') + th('Ingresos','r') + th('Costo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r')
+    // Chequeo de control DAX: suma por camión debe = total global
+    var sumIngCheck = camiones.reduce(function(s,c){ return s+c.ingresos; },0);
+    var checkOk = Math.abs(sumIngCheck - totalIng) < 1;
+    html += '<div class="chart-wrap"><h4>📊 Resultados por camión</h4>';
+    if (!checkOk) html += '<div style="color:#b97c0a;font-size:11px;margin-bottom:8px">⚠ Control: suma camiones ≠ total global (revisar datos)</div>';
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
+      + th('Matrícula') + th('Viajes','r') + th('Km','r') + th('Ton','r') + th('Ingresos','r') + th('Costo directo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r')
       + '</tr></thead><tbody>';
-    camiones.forEach(function(c){
-      var mc = parseFloat(c.margen_pct);
-      var col = mc >= 20 ? '#0f6e56' : mc >= 10 ? '#b97c0a' : '#a32d2d';
+    camiones.sort(function(a,b){ return b.ingresos-a.ingresos; }).forEach(function(c){
+      var col = c.pct_margen >= 20 ? '#0f6e56' : c.pct_margen >= 10 ? '#b97c0a' : '#a32d2d';
       html += '<tr style="border-bottom:1px solid var(--border)">'
-        + td('<strong>' + c.matricula + '</strong>') + td(c.modelo||'—','','#64748b')
-        + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r')
-        + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_total),'r')
-        + td('$U '+(c.costo_por_km||0),'r') + td(fmt$(c.margen),'r')
-        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + mc + '%</td></tr>';
+        + td('<strong>' + c.matricula + '</strong>')
+        + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r') + td(fmtN(c.ton),'r')
+        + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_directo),'r')
+        + td(fmt$(c.costo_por_km),'r') + td(fmt$(c.margen),'r')
+        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + c.pct_margen.toFixed(1) + '%</td></tr>';
     });
     html += '</tbody></table></div></div>';
   }
 
-  // ── Destinos ───────────────────────────────────────────────────
-  if (destinos.length > 0) {
-    var maxV = Math.max.apply(null, destinos.map(function(d){ return d.viajes||0; })) || 1;
+  // ── Destinos (calculado desde viajes) ─────────────────────────
+  var porDestino = {};
+  viajes.forEach(function(v) {
+    var d = v['destino']; if (!d) return;
+    if (!porDestino[d]) porDestino[d] = {destino:d, viajes:0, ton:0};
+    porDestino[d].viajes++;
+    porDestino[d].ton += parseFloat(v['toneladas'])||0;
+  });
+  var destArr = Object.values(porDestino).sort(function(a,b){ return b.viajes-a.viajes; });
+  if (destArr.length > 0) {
+    var maxV = destArr[0].viajes || 1;
     html += '<div class="chart-wrap"><h4>📍 Destinos más frecuentes</h4>';
-    destinos.sort(function(a,b){ return b.viajes-a.viajes; }).forEach(function(d){
+    destArr.forEach(function(d){
       var p = Math.round((d.viajes/maxV)*100);
       html += '<div class="bar-row"><span class="bar-row-label">' + d.destino + '</span>'
         + '<div class="bar-row-track"><div class="bar-row-fill" style="width:'+p+'%;background:#1E6B2E"></div></div>'
-        + '<span class="bar-row-val">' + d.viajes + ' viajes · ' + fmtN(d.toneladas) + ' t</span></div>';
+        + '<span class="bar-row-val">' + d.viajes + ' viajes · ' + fmtN(d.ton) + ' t</span></div>';
     });
     html += '</div>';
   }
