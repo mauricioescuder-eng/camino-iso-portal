@@ -1316,10 +1316,11 @@ function loadTransporte(vista, btn) {
 
   if (vista === 'kpis') {
     document.getElementById('transp-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando datos...</div>';
-    // 1° carga viajes (Operaciones en DAX)
-    callTranspAPI({action:'viajes'}, function(viajesArr) {
-      viajesArr = Array.isArray(viajesArr) ? viajesArr : [];
-      window._transpViajesRaw = viajesArr;
+    callTranspAPI({action:'viajes'}, function(d) {
+      var viajesArr = Array.isArray(d) ? d : [];
+      window._transpViajesRaw  = viajesArr;
+      window._transpCostosPorMat = {};
+      window._transpCostosTotal  = 0;
       if (viajesArr.length === 0) {
         document.getElementById('transp-contenido').innerHTML =
           '<div style="padding:40px;text-align:center">' +
@@ -1328,28 +1329,7 @@ function loadTransporte(vista, btn) {
           '</div>';
         return;
       }
-      // Render inmediato con viajes (costos en $0 hasta que carguen)
-      renderTranspKPIs({costosPorMatricula:{}}, viajesArr);
-      // 2° carga costos en paralelo (Costos_Operativos en DAX: combustible + mantenimiento)
-      var costosPorMat = {}, costosTotal = 0, pendientes = 2;
-      function mergeCostos() {
-        if (--pendientes > 0) return;
-        window._transpCostosPorMat = costosPorMat;
-        window._transpCostosTotal  = costosTotal;
-        renderTranspKPIs({costosPorMatricula: costosPorMat, costoTotal: costosTotal}, window._transpViajesRaw || viajesArr);
-      }
-      callTranspAPI({action:'combustible'}, function(d) {
-        (Array.isArray(d)?d:[]).forEach(function(c){
-          var m = c['matricula']||''; var v = parseFloat(c['total'])||0;
-          costosPorMat[m] = (costosPorMat[m]||0) + v; costosTotal += v;
-        }); mergeCostos();
-      }, mergeCostos);
-      callTranspAPI({action:'mantenimientos'}, function(d) {
-        (Array.isArray(d)?d:[]).forEach(function(c){
-          var m = c['matricula']||''; var v = parseFloat(c['costo'])||0;
-          costosPorMat[m] = (costosPorMat[m]||0) + v; costosTotal += v;
-        }); mergeCostos();
-      }, mergeCostos);
+      renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr);
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
         '<div style="padding:40px;text-align:center">' +
