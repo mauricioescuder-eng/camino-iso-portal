@@ -1315,11 +1315,20 @@ function loadTransporte(vista, btn) {
   document.getElementById('transp-indicadores').innerHTML = '';
 
   if (vista === 'kpis') {
+    document.getElementById('transp-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Conectando con la API... (puede tardar hasta 30 segundos la primera vez)</div>';
     var kpisData = null, viajesData = null, done = 0;
     function tryRender() {
       if (++done === 2) {
-        window._transpViajesRaw = viajesData; // guardar para re-filtrar
+        window._transpViajesRaw = viajesData;
         window._transpKpisData  = kpisData;
+        if (viajesData.length === 0) {
+          document.getElementById('transp-contenido').innerHTML =
+            '<div style="padding:40px;text-align:center">' +
+            '<div style="color:var(--muted);margin-bottom:16px">No se pudieron cargar los viajes. La API puede estar iniciando.</div>' +
+            '<button onclick="loadTransporte(\'kpis\')" style="padding:10px 24px;background:#1E6B2E;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🔄 Reintentar</button>' +
+            '</div>';
+          return;
+        }
         renderTranspKPIs(kpisData, viajesData);
       }
     }
