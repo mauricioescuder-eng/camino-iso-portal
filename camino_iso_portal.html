@@ -1282,7 +1282,7 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
 // ═══════════════════════════════════════════════════════
-var TRANSP_API = 'https://script.google.com/macros/s/AKfycbwboVlEh7aJ8Yui5mQHjySwxPU1lFAS-7J2YoKxKGwJERIUUwRF3hT1HRnXnutAwnWs/exec';
+var TRANSP_API = 'https://script.google.com/macros/s/AKfycbxoHVPgM6uP8PEkU7LvcBetA5H1vX293LjpDGQwOx-VsynleiIs7EH_7YkVrSf_I6Kg/exec';
 var _transpVista = 'kpis';
 
 function getTc(){ return parseFloat(document.getElementById('transp-tc').value) || 1400; }
@@ -1356,7 +1356,7 @@ function callTranspAPI(params, cb, onTimeout) {
     if(window[cbName]) delete window[cbName];
     if (onTimeout) { onTimeout(); }
     else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado.</div>'; }
-  }, 25000);
+  }, 45000);
   window[cbName] = function(data) {
     clearTimeout(timeout);
     delete window[cbName];
