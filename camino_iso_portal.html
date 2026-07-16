@@ -1347,9 +1347,11 @@ function loadTransporte(vista, btn) {
           var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
           window._transpCostosPorMat = costosPorMat;
           window._transpCostosTotal  = costoTotal;
-          renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal}, viajesArr);
-        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr); });
-      }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr); });
+          window._transpCombArr = combArr;
+          window._transpMantArr = mantArr;
+          renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr}, viajesArr);
+        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[]}, viajesArr); });
+      }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[]}, viajesArr); });
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
         '<div style="padding:40px;text-align:center">' +
@@ -1524,6 +1526,22 @@ function renderTranspKPIs(data, viajes) {
   });
   var mesesArr = Object.keys(meses).sort().map(function(k){ return meses[k]; });
 
+  // ── Agrupar gastos por mes ────────────────────────────────────
+  var gastosM = {};
+  var combArr = data.combArr || window._transpCombArr || [];
+  var mantArr = data.mantArr || window._transpMantArr || [];
+  function addGastoMes(fecha, monto) {
+    var d2 = new Date(fecha); if (isNaN(d2.getTime())) return;
+    var yr = d2.getFullYear(), mo = d2.getMonth()+1;
+    var key2 = yr+'-'+(mo<10?'0':'')+mo;
+    var lbl2 = MESES_LABEL[mo-1]||String(mo);
+    if (!gastosM[key2]) gastosM[key2] = {label:lbl2, gasto:0};
+    gastosM[key2].gasto += monto;
+  }
+  combArr.forEach(function(c){ addGastoMes(c['fecha factura']||c['timestamp'], parseFloat(c['total'])||0); });
+  mantArr.forEach(function(m){ addGastoMes(m['fecha']||m['timestamp'], parseFloat(m['costo'])||0); });
+  var gastosArr = Object.keys(gastosM).sort().map(function(k){ return gastosM[k]; });
+
   // ── Agrupar toneladas por tipo de carga ───────────────────────
   var porTipo = {};
   viajes.forEach(function(v) {
@@ -1553,8 +1571,8 @@ function renderTranspKPIs(data, viajes) {
   html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
 
   html += '<div class="chart-wrap" style="margin:0"><h4>Por Tipo de Carga</h4>' + svgDonutTipo(tipoArr) + '</div>';
-  html += '<div class="chart-wrap" style="margin:0"><h4>Viajes por Mes</h4>' + svgBarras(mesesArr,'viajes','#4472c4') + '</div>';
-  html += '<div class="chart-wrap" style="margin:0"><h4>Toneladas por Mes</h4>' + svgBarras(mesesArr,'ton','#1E6B2E') + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Viajes y Toneladas por Mes</h4>' + svgBarrasDual(mesesArr) + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Gastos por Mes</h4>' + svgBarras(gastosArr,'gasto','#c0392b') + '</div>';
 
   html += '</div>';
 
@@ -1672,6 +1690,38 @@ function svgDonutGen(items) {
   return '<div style="display:flex;align-items:center;gap:10px">'
     + '<svg viewBox="0 0 150 150" width="110" height="110" style="flex-shrink:0"><g>' + svgPaths + '</g></svg>'
     + '<div style="flex:1;min-width:0">' + legend + '</div></div>';
+}
+
+function svgBarrasDual(mesesArr) {
+  if (!mesesArr || mesesArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos</div>';
+  var W=280, H=140, PAD=30, n=mesesArr.length;
+  var BAR_W = Math.max(8, Math.min(24, (W-PAD*2)/n/2 - 3));
+  var maxV = Math.max.apply(null, mesesArr.map(function(m){ return m.viajes||0; })) || 1;
+  var maxT = Math.max.apply(null, mesesArr.map(function(m){ return m.ton||0; })) || 1;
+  var spacing = (W-PAD*2)/n;
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:150px">';
+  // Leyenda
+  svg += '<rect x="'+PAD+'" y="4" width="8" height="8" fill="#4472c4" rx="1"/>';
+  svg += '<text x="'+(PAD+10)+'" y="12" font-size="8" fill="#555">Viajes</text>';
+  svg += '<rect x="'+(PAD+50)+'" y="4" width="8" height="8" fill="#1E6B2E" rx="1"/>';
+  svg += '<text x="'+(PAD+62)+'" y="12" font-size="8" fill="#555">Toneladas</text>';
+  mesesArr.forEach(function(m, i) {
+    var cx = PAD + i*spacing + spacing/2;
+    // Barra viajes (izq)
+    var bV = Math.max(2, Math.round((H-PAD*1.5-16)*(m.viajes||0)/maxV));
+    var xV = cx - BAR_W - 1;
+    svg += '<rect x="'+xV+'" y="'+(H-PAD-bV)+'" width="'+BAR_W+'" height="'+bV+'" fill="#4472c4" rx="2"><title>'+m.label+': '+m.viajes+' viajes</title></rect>';
+    svg += '<text x="'+(xV+BAR_W/2)+'" y="'+(H-PAD-bV-2)+'" text-anchor="middle" font-size="7" fill="#4472c4">'+(m.viajes||0)+'</text>';
+    // Barra toneladas (der)
+    var bT = Math.max(2, Math.round((H-PAD*1.5-16)*(m.ton||0)/maxT));
+    var xT = cx + 1;
+    svg += '<rect x="'+xT+'" y="'+(H-PAD-bT)+'" width="'+BAR_W+'" height="'+bT+'" fill="#1E6B2E" rx="2"><title>'+m.label+': '+Math.round(m.ton||0)+' t</title></rect>';
+    svg += '<text x="'+(xT+BAR_W/2)+'" y="'+(H-PAD-bT-2)+'" text-anchor="middle" font-size="7" fill="#1E6B2E">'+Math.round(m.ton||0)+'</text>';
+    // Label mes
+    svg += '<text x="'+cx+'" y="'+(H-4)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
+  });
+  svg += '</svg>';
+  return svg;
 }
 
 function svgBarras(mesesArr, campo, color) {
