@@ -1329,7 +1329,27 @@ function loadTransporte(vista, btn) {
           '</div>';
         return;
       }
-      renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr);
+      // Llamada secuencial a combustible
+      callTranspAPI({action:'combustible'}, function(comb) {
+        var combArr = Array.isArray(comb) ? comb : [];
+        callTranspAPI({action:'mantenimientos'}, function(mant) {
+          var mantArr = Array.isArray(mant) ? mant : [];
+          // Acumular costos por matrícula
+          var costosPorMat = {};
+          combArr.forEach(function(c) {
+            var m = c['matricula'] || ''; if (!m) return;
+            costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
+          });
+          mantArr.forEach(function(m) {
+            var mat = m['matricula'] || ''; if (!mat) return;
+            costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
+          });
+          var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
+          window._transpCostosPorMat = costosPorMat;
+          window._transpCostosTotal  = costoTotal;
+          renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal}, viajesArr);
+        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr); });
+      }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0}, viajesArr); });
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
         '<div style="padding:40px;text-align:center">' +
