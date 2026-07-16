@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -1485,10 +1485,18 @@ function renderTranspKPIs(data, viajes) {
   viajes.forEach(function(v) {
     var f = v['fecha viaje'] || v['timestamp'] || '';
     if (!f) return;
-    var parts = String(f).split('-');
-    if (parts.length < 2) return;
-    var key = parts[0] + '-' + parts[1];
-    var label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
+    var d = new Date(f);
+    var key, label;
+    if (!isNaN(d.getTime())) {
+      var yr = d.getFullYear(), mo = d.getMonth() + 1;
+      key = yr + '-' + (mo < 10 ? '0' : '') + mo;
+      label = MESES_LABEL[mo - 1] || String(mo);
+    } else {
+      var parts = String(f).split('-');
+      if (parts.length < 2) return;
+      key = parts[0] + '-' + parts[1];
+      label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
+    }
     if (!meses[key]) meses[key] = {label:label, ing:0, ton:0, viajes:0};
     meses[key].ing    += toUYU(v['ingreso'], v['moneda']);
     meses[key].ton    += parseFloat(v['toneladas'])||0;
