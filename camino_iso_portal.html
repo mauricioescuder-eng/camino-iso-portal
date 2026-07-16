@@ -1530,16 +1530,21 @@ function renderTranspKPIs(data, viajes) {
   var gastosM = {};
   var combArr = data.combArr || window._transpCombArr || [];
   var mantArr = data.mantArr || window._transpMantArr || [];
-  function addGastoMes(fecha, monto) {
-    var d2 = new Date(fecha); if (isNaN(d2.getTime())) return;
+  function getMesKey(fecha) {
+    var d2 = new Date(fecha); if (isNaN(d2.getTime())) return null;
     var yr = d2.getFullYear(), mo = d2.getMonth()+1;
-    var key2 = yr+'-'+(mo<10?'0':'')+mo;
-    var lbl2 = MESES_LABEL[mo-1]||String(mo);
-    if (!gastosM[key2]) gastosM[key2] = {label:lbl2, gasto:0};
-    gastosM[key2].gasto += monto;
+    return {key: yr+'-'+(mo<10?'0':'')+mo, label: MESES_LABEL[mo-1]||String(mo)};
   }
-  combArr.forEach(function(c){ addGastoMes(c['fecha factura']||c['timestamp'], parseFloat(c['total'])||0); });
-  mantArr.forEach(function(m){ addGastoMes(m['fecha']||m['timestamp'], parseFloat(m['costo'])||0); });
+  combArr.forEach(function(c) {
+    var mk = getMesKey(c['fecha factura']||c['timestamp']); if (!mk) return;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
+    gastosM[mk.key].combustible += parseFloat(c['total'])||0;
+  });
+  mantArr.forEach(function(m) {
+    var mk = getMesKey(m['fecha']||m['timestamp']); if (!mk) return;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
+    gastosM[mk.key].mantenimiento += parseFloat(m['costo'])||0;
+  });
   var gastosArr = Object.keys(gastosM).sort().map(function(k){ return gastosM[k]; });
 
   // ── Agrupar toneladas por tipo de carga ───────────────────────
@@ -1572,7 +1577,7 @@ function renderTranspKPIs(data, viajes) {
 
   html += '<div class="chart-wrap" style="margin:0"><h4>Por Tipo de Carga</h4>' + svgDonutTipo(tipoArr) + '</div>';
   html += '<div class="chart-wrap" style="margin:0"><h4>Viajes y Toneladas por Mes</h4>' + svgBarrasDual(mesesArr) + '</div>';
-  html += '<div class="chart-wrap" style="margin:0"><h4>Gastos por Mes</h4>' + svgBarras(gastosArr,'gasto','#c0392b') + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Gastos por Mes</h4>' + svgBarrasApiladas(gastosArr) + '</div>';
 
   html += '</div>';
 
@@ -1690,6 +1695,38 @@ function svgDonutGen(items) {
   return '<div style="display:flex;align-items:center;gap:10px">'
     + '<svg viewBox="0 0 150 150" width="110" height="110" style="flex-shrink:0"><g>' + svgPaths + '</g></svg>'
     + '<div style="flex:1;min-width:0">' + legend + '</div></div>';
+}
+
+function svgBarrasApiladas(gastosArr) {
+  if (!gastosArr || gastosArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de gastos</div>';
+  var W=280, H=140, PAD=30, n=gastosArr.length;
+  var BAR_W = Math.max(14, Math.min(36, (W-PAD*2)/n - 8));
+  var maxV = Math.max.apply(null, gastosArr.map(function(m){ return (m.combustible||0)+(m.mantenimiento||0); })) || 1;
+  var spacing = (W-PAD*2)/n;
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:150px">';
+  svg += '<rect x="'+PAD+'" y="4" width="8" height="8" fill="#F07820" rx="1"/>';
+  svg += '<text x="'+(PAD+10)+'" y="12" font-size="8" fill="#555">Combustible</text>';
+  svg += '<rect x="'+(PAD+72)+'" y="4" width="8" height="8" fill="#378add" rx="1"/>';
+  svg += '<text x="'+(PAD+82)+'" y="12" font-size="8" fill="#555">Mantenimiento</text>';
+  var CHART_H = H - PAD*1.5 - 16;
+  gastosArr.forEach(function(m, i) {
+    var cx = PAD + i*spacing + spacing/2;
+    var x = cx - BAR_W/2;
+    var total = (m.combustible||0) + (m.mantenimiento||0);
+    var hC = Math.max(0, Math.round(CHART_H*(m.combustible||0)/maxV));
+    var hM = Math.max(0, Math.round(CHART_H*(m.mantenimiento||0)/maxV));
+    var yBase = H - PAD;
+    if (hC > 0) {
+      svg += '<rect x="'+x+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Combustible: $'+Math.round(m.combustible||0)+'</title></rect>';
+    }
+    if (hM > 0) {
+      svg += '<rect x="'+x+'" y="'+(yBase-hC-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Mantenimiento: $'+Math.round(m.mantenimiento||0)+'</title></rect>';
+    }
+    if (total > 0) svg += '<text x="'+cx+'" y="'+(yBase-hC-hM-3)+'" text-anchor="middle" font-size="7" fill="#555">'+fmtMillones(total)+'</text>';
+    svg += '<text x="'+cx+'" y="'+(H-4)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
+  });
+  svg += '</svg>';
+  return svg;
 }
 
 function svgBarrasDual(mesesArr) {
