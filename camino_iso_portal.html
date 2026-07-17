@@ -1670,7 +1670,29 @@ function svgDonut(areas) {
 
 function svgDonutTipo(tipoArr) {
   if (!tipoArr || tipoArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de viajes</div>';
-  return svgDonutGen(tipoArr.map(function(t){ return {label:t.tipo, val:t.ton}; }));
+  var TIPO_COLORS = {
+    'Soja':                   '#D4AC0D',
+    'Maíz':                   '#F5A623',
+    'Maiz':                   '#F5A623',
+    'Trigo':                  '#C8A850',
+    'Girasol':                '#FFD700',
+    'Ganado':                 '#8B4513',
+    'Fertilizante':           '#27AE60',
+    'Materiales construcción':'#7f8c8d',
+    'Materiales construccion':'#7f8c8d',
+    'Combustible':            '#E74C3C',
+    'Contenedor':             '#2980B9',
+    'General':                '#8E44AD',
+    'Piedra':                 '#616A6B',
+    'Tosca':                  '#C2B280',
+    'Otro':                   '#95A5A6'
+  };
+  var FALLBACK = ['#4472c4','#ed7d31','#a9d18e','#ffc000','#5b9bd5','#70ad47','#c00000','#7030a0'];
+  var fi = 0;
+  return svgDonutGen(tipoArr.map(function(t){
+    var color = TIPO_COLORS[t.tipo] || FALLBACK[fi++ % FALLBACK.length];
+    return {label:t.tipo, val:t.ton, color:color};
+  }));
 }
 
 function svgDonutGen(items) {
@@ -1687,7 +1709,7 @@ function svgDonutGen(items) {
     var xi1=cx+rI*Math.cos(angle), yi1=cy+rI*Math.sin(angle);
     var xi2=cx+rI*Math.cos(angle+slice), yi2=cy+rI*Math.sin(angle+slice);
     var lg = slice > Math.PI ? 1 : 0;
-    var col = COLORS[i % COLORS.length];
+    var col = a.color || COLORS[i % COLORS.length];
     var pct = Math.round((v/total)*100);
     svgPaths += '<path d="M '+xi1+' '+yi1+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+lg+' 1 '+x2+' '+y2+' L '+xi2+' '+yi2+' A '+rI+' '+rI+' 0 '+lg+' 0 '+xi1+' '+yi1+' Z" fill="'+col+'"><title>'+a.label+': '+pct+'%</title></path>';
     legend += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:4px"><div style="width:9px;height:9px;border-radius:2px;background:'+col+';flex-shrink:0"></div><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.label+'</span><strong style="margin-left:auto;flex-shrink:0">'+pct+'%</strong></div>';
