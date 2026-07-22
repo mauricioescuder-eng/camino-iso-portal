@@ -1457,7 +1457,7 @@ function renderTranspKPIs(data, viajes) {
   // DAX: Toneladas Totales = SUM(Operaciones[Toneladas])
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
-  var totalIng = viajes.reduce(function(s,v){ return s+toUYU(parseFloat(v['ingreso'])||0, v['moneda']); },0);
+  var totalIng = viajes.reduce(function(s,v){ return s+toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']); },0);
   // DAX: Costo total = SUM(Costos_Operativos[Monto]) — directo por matrícula
   var costosPorMat = data.costosPorMatricula || {};
   var totalCosto = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
@@ -1478,7 +1478,7 @@ function renderTranspKPIs(data, viajes) {
     byTruck[m].viajes++;
     byTruck[m].km       += parseFloat(v['km recorridos'])||0;
     byTruck[m].ton      += parseFloat(v['toneladas'])||0;
-    byTruck[m].ingresos += toUYU(parseFloat(v['ingreso'])||0, v['moneda']);
+    byTruck[m].ingresos += toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']);
   });
   var camiones = Object.values(byTruck).map(function(c) {
     // DAX: Costo directo por camión = SUM(Costos_Operativos[Monto]) filtrado por ID_Camion
@@ -1521,7 +1521,7 @@ function renderTranspKPIs(data, viajes) {
       label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
     }
     if (!meses[key]) meses[key] = {label:label, ing:0, ton:0, viajes:0};
-    meses[key].ing    += toUYU(v['ingreso'], v['moneda']);
+    meses[key].ing    += toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']);
     meses[key].ton    += parseFloat(v['toneladas'])||0;
     meses[key].viajes++;
   });
