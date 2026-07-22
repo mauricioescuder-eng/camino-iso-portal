@@ -118,6 +118,12 @@ tr:hover td{background:#faf9f6}
 .reg-kpi-sub{font-size:11px;color:var(--muted);margin-top:2px}
 .chart-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
 .chart-wrap h4{font-size:13px;font-weight:600;margin-bottom:12px}
+.chart-wrap-click{cursor:zoom-in}
+.chart-modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);align-items:center;justify-content:center;z-index:600;cursor:pointer}
+.chart-modal-ov.open{display:flex}
+.chart-modal-box{background:#fff;border-radius:14px;padding:28px 32px;max-width:92vw;max-height:92vh;overflow:auto;cursor:default;min-width:360px}
+.chart-modal-box h4{font-size:16px;font-weight:700;margin-bottom:16px}
+.chart-modal-close{position:absolute;top:12px;right:16px;font-size:22px;cursor:pointer;color:#666;background:none;border:none}
 .bar-chart{display:flex;flex-direction:column;gap:8px}
 .bar-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .bar-row-label{width:100px;color:var(--muted);text-align:right;flex-shrink:0}
@@ -1397,7 +1403,7 @@ function callTranspAPI(params, cb, onTimeout) {
 }
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
-function fmtN(n){ return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
+function fmtN(n, dec){ var d=dec||0; return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:d, maximumFractionDigits:d}); }
 
 function aplicarFiltrosTransp() {
   var raw = window._transpViajesRaw || [];
@@ -1469,6 +1475,11 @@ function renderTranspKPIs(data, viajes) {
   var costoPorKm = totalKm > 0 ? totalCosto / totalKm : 0;
   var colM  = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
   var kmObj = Math.max(totalKm * 1.25, 1000);
+  // Promedios
+  var nViajes = viajes.length;
+  var avgTonViaje = nViajes > 0 ? totalTon / nViajes : 0;
+  var avgIngViaje = nViajes > 0 ? totalIng / nViajes : 0;
+  var avgIngTon   = totalTon > 0 ? totalIng / totalTon : 0;
 
   // ── POR CAMIÓN (DAX: agrupar Operaciones por ID_Camion) ───────
   var byTruck = {};
@@ -1495,8 +1506,8 @@ function renderTranspKPIs(data, viajes) {
 
   // ── FILA 1: 4 KPI grandes estilo Power BI ──────────────────────
   var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
-    + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9')
-    + kpiBig('Costo total', fmtMillones(totalCosto), '#c0392b', '#fdecea')
+    + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9', 'Prom. ' + fmt$(avgIngTon) + '/ton · ' + fmt$(avgIngViaje) + '/viaje')
+    + kpiBig('Costo total', fmtMillones(totalCosto), '#c0392b', '#fdecea', 'Prom. ' + fmt$(costoPorKm) + '/km')
     + kpiBig('Margen', fmtMillones(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea')
     + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea')
     + '</div>';
@@ -1576,9 +1587,9 @@ function renderTranspKPIs(data, viajes) {
   // ── FILA 2: Torta tipo de carga + Barras ingresos + Barras toneladas ──
   html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
 
-  html += '<div class="chart-wrap" style="margin:0"><h4>Por Tipo de Carga</h4>' + svgDonutTipo(tipoArr) + '</div>';
-  html += '<div class="chart-wrap" style="margin:0"><h4>Viajes y Toneladas por Mes</h4>' + svgBarrasDual(mesesArr) + '</div>';
-  html += '<div class="chart-wrap" style="margin:0"><h4>Gastos por Mes</h4>' + svgBarrasApiladas(gastosArr) + '</div>';
+  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Por Tipo de Carga 🔍</h4>' + svgDonutTipo(tipoArr) + '</div>';
+  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Viajes y Toneladas por Mes 🔍</h4>' + svgBarrasDual(mesesArr) + '</div>';
+  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Gastos por Mes 🔍</h4>' + svgBarrasApiladas(gastosArr) + '</div>';
 
   html += '</div>';
 
@@ -1595,6 +1606,7 @@ function renderTranspKPIs(data, viajes) {
   html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;background:#3d1f05">'
     + '<div style="font-size:12px;font-weight:600;color:#e8c99a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Toneladas Totales</div>'
     + '<div style="font-size:40px;font-weight:800;color:#fff">' + fmtN(totalTon) + ' t</div>'
+    + '<div style="font-size:11px;color:#e8c99a;margin-top:8px">Prom. ' + fmtN(avgTonViaje, 1) + ' t/viaje</div>'
     + '</div>';
 
   html += '</div>';
@@ -1656,11 +1668,36 @@ function fmtMillones(n) {
   return '$U ' + v.toLocaleString('es-UY',{maximumFractionDigits:0});
 }
 
-function kpiBig(label, val, valColor, bg) {
+function kpiBig(label, val, valColor, bg, sub) {
   return '<div style="background:'+bg+';border:1px solid var(--border);border-radius:10px;padding:20px 16px">'
     + '<div style="font-size:13px;font-weight:700;color:#333;margin-bottom:10px">' + label + '</div>'
     + '<div style="font-size:28px;font-weight:800;color:'+valColor+'">' + val + '</div>'
+    + (sub ? '<div style="font-size:11px;color:var(--muted);margin-top:7px">' + sub + '</div>' : '')
     + '</div>';
+}
+
+function openChartModal(el) {
+  var ov = document.getElementById('_chartModalOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = '_chartModalOv';
+    ov.className = 'chart-modal-ov';
+    ov.innerHTML = '<div class="chart-modal-box" onclick="event.stopPropagation()" id="_chartModalBox" style="position:relative">'
+      + '<button class="chart-modal-close" onclick="document.getElementById(\'_chartModalOv\').classList.remove(\'open\')">✕</button>'
+      + '<div id="_chartModalContent"></div></div>';
+    ov.addEventListener('click', function(){ ov.classList.remove('open'); });
+    document.body.appendChild(ov);
+  }
+  var cont = document.getElementById('_chartModalContent');
+  cont.innerHTML = el.innerHTML;
+  // Escalar SVGs al tamaño completo
+  cont.querySelectorAll('svg').forEach(function(s){
+    s.setAttribute('width','100%');
+    s.style.width='min(800px,80vw)';
+    s.style.height='auto';
+    s.style.maxHeight='75vh';
+  });
+  document.getElementById('_chartModalOv').classList.add('open');
 }
 
 function svgDonut(areas) {
