@@ -1848,7 +1848,7 @@ function renderTranspTabla(data, tipo) {
       rows.forEach(function(r){
         totKm  += parseFloat(r['km recorridos'])||0;
         totTon += parseFloat(r['toneladas'])||0;
-        totIng += toUYU(r['ingreso'], r['moneda']);
+        totIng += toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']);
       });
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
         + kpi('Registros', rows.length, 'viajes', '#185fa5')
@@ -1888,7 +1888,7 @@ function renderTranspTabla(data, tipo) {
     'precio litro':'$/litro','total':'Total','factura':'N° Fact.',
     'tipo de carga':'Carga','km recorridos':'Km',
     'peajes':'Peajes','viaticos':'Viáticos','tarifa':'Tarifa/km',
-    'ingreso':'Ingreso (orig.)','costo':'Costo (orig.)','detalle':'Detalle',
+    'ingreso':'Ingreso','costo':'Costo','detalle':'Detalle',
     'area':'Área','litros':'Litros','proveedor':'Proveedor',
     'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.'
   };
@@ -1914,13 +1914,14 @@ function renderTranspTabla(data, tipo) {
           html += '<td style="padding:6px 8px">' + badgeMon(v) + '</td>';
           return;
         }
+        if (c === 'ingreso') v = (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0);
         if (v === null || v === undefined || v === '') v = '—';
         else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) v = fmtMon(v, r['moneda']);
         else if (typeof v === 'number' && c.indexOf('$') >= 0) v = fmt$(v);
         html += '<td style="padding:6px 8px">' + v + '</td>';
       });
       if (showARS) {
-        var arsVal = tipo === 'viajes' ? toUYU(r['ingreso'], r['moneda']) : toUYU(r['costo'], r['moneda']);
+        var arsVal = tipo === 'viajes' ? toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']) : toUYU(r['costo'], r['moneda']);
         html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
       }
       html += '</tr>';
