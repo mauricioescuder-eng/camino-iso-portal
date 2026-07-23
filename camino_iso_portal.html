@@ -1406,17 +1406,55 @@ function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {min
 function fmtN(n, dec){ var d=dec||0; return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:d, maximumFractionDigits:d}); }
 
 function aplicarFiltrosTransp() {
-  var raw = window._transpViajesRaw || [];
+  var raw  = window._transpViajesRaw || [];
   var per  = document.getElementById('tf-periodo')  ? document.getElementById('tf-periodo').value  : '';
   var mat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
   var tipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
+
+  // Filtrar viajes
   var filtered = raw.filter(function(v) {
     if (per  && !(v['fecha viaje']||'').startsWith(per))  return false;
     if (mat  && v['matricula'] !== mat)                    return false;
     if (tipo && v['tipo de carga'] !== tipo)               return false;
     return true;
   });
-  renderTranspKPIs(window._transpKpisData || {}, filtered);
+
+  // Filtrar costos por período Y matrícula para que el margen sea coherente
+  var combAll = window._transpCombArr || [];
+  var mantAll = window._transpMantArr || [];
+  var combFilt = combAll.filter(function(c) {
+    var fecha = c['fecha factura'] || c['timestamp'] || '';
+    if (per && !fecha.startsWith(per))       return false;
+    if (mat && c['matricula'] !== mat)        return false;
+    return true;
+  });
+  var mantFilt = mantAll.filter(function(m) {
+    var fecha = m['fecha'] || m['timestamp'] || '';
+    if (per && !fecha.startsWith(per))       return false;
+    if (mat && m['matricula'] !== mat)        return false;
+    return true;
+  });
+
+  // Recalcular costosPorMatricula con los costos filtrados
+  var costosPorMat = {};
+  combFilt.forEach(function(c) {
+    var m2 = c['matricula'] || ''; if (!m2) return;
+    costosPorMat[m2] = (costosPorMat[m2]||0) + (parseFloat(c['total'])||0);
+  });
+  mantFilt.forEach(function(m) {
+    var m2 = m['matricula'] || ''; if (!m2) return;
+    costosPorMat[m2] = (costosPorMat[m2]||0) + (parseFloat(m['costo'])||0);
+  });
+  var costoTotal = Object.values(costosPorMat).reduce(function(s,v){ return s+v; }, 0);
+
+  var kpisData = Object.assign({}, window._transpKpisData || {}, {
+    combArr: combFilt,
+    mantArr: mantFilt,
+    costosPorMatricula: costosPorMat,
+    costoTotal: costoTotal
+  });
+
+  renderTranspKPIs(kpisData, filtered);
 }
 
 function buildFiltrosHTML(viajes) {
