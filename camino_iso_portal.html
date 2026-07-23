@@ -1759,31 +1759,38 @@ function svgDonutGen(items) {
 
 function svgBarrasApiladas(gastosArr) {
   if (!gastosArr || gastosArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de gastos</div>';
-  var W=280, H=140, PAD=30, n=gastosArr.length;
-  var BAR_W = Math.max(14, Math.min(36, (W-PAD*2)/n - 8));
-  var maxV = Math.max.apply(null, gastosArr.map(function(m){ return (m.combustible||0)+(m.mantenimiento||0); })) || 1;
+  var W=300, H=150, PAD=32, n=gastosArr.length;
+  var GAP=3; // espacio entre las 2 barras del mismo mes
+  var GROUP_W = Math.max(24, Math.min(60, (W-PAD*2)/n - 6));
+  var BAR_W = (GROUP_W - GAP) / 2;
   var spacing = (W-PAD*2)/n;
-  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:150px">';
+  var maxV = Math.max.apply(null, gastosArr.map(function(m){ return Math.max(m.combustible||0, m.mantenimiento||0); })) || 1;
+  var CHART_H = H - PAD - 24; // espacio para leyenda arriba y label abajo
+  var yBase = H - 14;
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:160px">';
+  // Leyenda
   svg += '<rect x="'+PAD+'" y="4" width="8" height="8" fill="#F07820" rx="1"/>';
   svg += '<text x="'+(PAD+10)+'" y="12" font-size="8" fill="#555">Combustible</text>';
-  svg += '<rect x="'+(PAD+72)+'" y="4" width="8" height="8" fill="#378add" rx="1"/>';
-  svg += '<text x="'+(PAD+82)+'" y="12" font-size="8" fill="#555">Mantenimiento</text>';
-  var CHART_H = H - PAD*1.5 - 16;
+  svg += '<rect x="'+(PAD+78)+'" y="4" width="8" height="8" fill="#378add" rx="1"/>';
+  svg += '<text x="'+(PAD+88)+'" y="12" font-size="8" fill="#555">Mantenimiento</text>';
   gastosArr.forEach(function(m, i) {
     var cx = PAD + i*spacing + spacing/2;
-    var x = cx - BAR_W/2;
-    var total = (m.combustible||0) + (m.mantenimiento||0);
-    var hC = Math.max(0, Math.round(CHART_H*(m.combustible||0)/maxV));
-    var hM = Math.max(0, Math.round(CHART_H*(m.mantenimiento||0)/maxV));
-    var yBase = H - PAD;
+    var xC = cx - BAR_W - GAP/2;
+    var xM = cx + GAP/2;
+    var hC = m.combustible > 0 ? Math.max(3, Math.round(CHART_H*(m.combustible)/maxV)) : 0;
+    var hM = m.mantenimiento > 0 ? Math.max(3, Math.round(CHART_H*(m.mantenimiento)/maxV)) : 0;
+    // Barra combustible
     if (hC > 0) {
-      svg += '<rect x="'+x+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Combustible: $'+Math.round(m.combustible||0)+'</title></rect>';
+      svg += '<rect x="'+xC+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Combustible '+m.label+': '+fmtMillones(m.combustible)+'</title></rect>';
+      svg += '<text x="'+(xC+BAR_W/2)+'" y="'+(yBase-hC-2)+'" text-anchor="middle" font-size="6.5" fill="#c05800">'+fmtMillones(m.combustible)+'</text>';
     }
+    // Barra mantenimiento
     if (hM > 0) {
-      svg += '<rect x="'+x+'" y="'+(yBase-hC-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Mantenimiento: $'+Math.round(m.mantenimiento||0)+'</title></rect>';
+      svg += '<rect x="'+xM+'" y="'+(yBase-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Mantenimiento '+m.label+': '+fmtMillones(m.mantenimiento)+'</title></rect>';
+      svg += '<text x="'+(xM+BAR_W/2)+'" y="'+(yBase-hM-2)+'" text-anchor="middle" font-size="6.5" fill="#185fa5">'+fmtMillones(m.mantenimiento)+'</text>';
     }
-    if (total > 0) svg += '<text x="'+cx+'" y="'+(yBase-hC-hM-3)+'" text-anchor="middle" font-size="7" fill="#555">'+fmtMillones(total)+'</text>';
-    svg += '<text x="'+cx+'" y="'+(H-4)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
+    // Label mes centrado bajo el grupo
+    svg += '<text x="'+cx+'" y="'+(H-2)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
   });
   svg += '</svg>';
   return svg;
