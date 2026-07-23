@@ -1545,9 +1545,15 @@ function renderTranspKPIs(data, viajes) {
     varTonAbs   = mesAct.ton - mesAnt.ton;
     varTonPct   = mesAnt.ton > 0 ? (varTonAbs / mesAnt.ton * 100) : null;
     varTonMesAnt = mesAnt.label;
+    // Detectar si el último mes es el mes actual (en curso)
+    var hoy = new Date();
+    var mesActualKey = hoy.getFullYear() + '-' + (hoy.getMonth()+1 < 10 ? '0' : '') + (hoy.getMonth()+1);
+    var ultimaKey = Object.keys(meses).sort().pop();
+    var enCurso = (ultimaKey === mesActualKey);
     if (varTonPct !== null) {
       var signo = varTonPct >= 0 ? '+' : '';
-      varTonLabel = (varTonAbs >= 0 ? '▲' : '▼') + ' ' + signo + varTonPct.toFixed(1) + '% vs ' + varTonMesAnt;
+      varTonLabel = (varTonAbs >= 0 ? '▲' : '▼') + ' ' + signo + varTonPct.toFixed(1) + '% vs ' + varTonMesAnt
+        + (enCurso ? '<span style="color:#F5A623;font-weight:400"> ⚠ ' + mesAct.label + ' en curso</span>' : '');
     }
   }
 
