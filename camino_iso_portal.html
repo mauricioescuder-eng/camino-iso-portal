@@ -1537,6 +1537,19 @@ function renderTranspKPIs(data, viajes) {
     meses[key].viajes++;
   });
   var mesesArr = Object.keys(meses).sort().map(function(k){ return meses[k]; });
+  // DAX: Variación Toneladas = (Ton mes actual - Ton mes anterior) / Ton mes anterior
+  var varTonPct = null, varTonAbs = null, varTonLabel = '', varTonMesAnt = '';
+  if (mesesArr.length >= 2) {
+    var mesAct  = mesesArr[mesesArr.length - 1];
+    var mesAnt  = mesesArr[mesesArr.length - 2];
+    varTonAbs   = mesAct.ton - mesAnt.ton;
+    varTonPct   = mesAnt.ton > 0 ? (varTonAbs / mesAnt.ton * 100) : null;
+    varTonMesAnt = mesAnt.label;
+    if (varTonPct !== null) {
+      var signo = varTonPct >= 0 ? '+' : '';
+      varTonLabel = (varTonAbs >= 0 ? '▲' : '▼') + ' ' + signo + varTonPct.toFixed(1) + '% vs ' + varTonMesAnt;
+    }
+  }
 
   // ── Agrupar gastos por mes ────────────────────────────────────
   var gastosM = {};
@@ -1603,10 +1616,12 @@ function renderTranspKPIs(data, viajes) {
 
   html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center"><h4>Km recorridos</h4>' + svgGauge(totalKm, kmObj) + '</div>';
 
+  var varTonColor = varTonAbs === null ? '#e8c99a' : varTonAbs >= 0 ? '#6dffb0' : '#ff8a80';
   html += '<div class="chart-wrap" style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;background:#3d1f05">'
     + '<div style="font-size:12px;font-weight:600;color:#e8c99a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Toneladas Totales</div>'
     + '<div style="font-size:40px;font-weight:800;color:#fff">' + fmtN(totalTon) + ' t</div>'
-    + '<div style="font-size:11px;color:#e8c99a;margin-top:8px">Prom. ' + fmtN(avgTonViaje, 1) + ' t/viaje</div>'
+    + '<div style="font-size:11px;color:#e8c99a;margin-top:6px">Prom. ' + fmtN(avgTonViaje, 1) + ' t/viaje</div>'
+    + (varTonLabel ? '<div style="font-size:12px;font-weight:700;color:'+varTonColor+';margin-top:6px">' + varTonLabel + '</div>' : '')
     + '</div>';
 
   html += '</div>';
