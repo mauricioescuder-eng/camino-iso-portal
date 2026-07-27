@@ -1336,29 +1336,33 @@ function loadTransporte(vista, btn) {
           '</div>';
         return;
       }
-      // Llamada secuencial a combustible
+      // Llamadas secuenciales: combustible → mantenimientos → flota
       callTranspAPI({action:'combustible'}, function(comb) {
         var combArr = Array.isArray(comb) ? comb : [];
         callTranspAPI({action:'mantenimientos'}, function(mant) {
           var mantArr = Array.isArray(mant) ? mant : [];
-          // Acumular costos por matrícula
-          var costosPorMat = {};
-          combArr.forEach(function(c) {
-            var m = c['matricula'] || ''; if (!m) return;
-            costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
-          });
-          mantArr.forEach(function(m) {
-            var mat = m['matricula'] || ''; if (!mat) return;
-            costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
-          });
-          var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
-          window._transpCostosPorMat = costosPorMat;
-          window._transpCostosTotal  = costoTotal;
-          window._transpCombArr = combArr;
-          window._transpMantArr = mantArr;
-          renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr}, viajesArr);
-        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[]}, viajesArr); });
-      }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[]}, viajesArr); });
+          callTranspAPI({action:'flota'}, function(flota) {
+            var flotaArr = Array.isArray(flota) ? flota : [];
+            // Costos variables + cuasi variables por matrícula
+            var costosPorMat = {};
+            combArr.forEach(function(c) {
+              var m = c['matricula'] || ''; if (!m) return;
+              costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
+            });
+            mantArr.forEach(function(m) {
+              var mat = m['matricula'] || ''; if (!mat) return;
+              costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
+            });
+            var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
+            window._transpCostosPorMat = costosPorMat;
+            window._transpCostosTotal  = costoTotal;
+            window._transpCombArr  = combArr;
+            window._transpMantArr  = mantArr;
+            window._transpFlotaArr = flotaArr;
+            renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr}, viajesArr);
+          }, function() { renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:[]}, viajesArr); });
+        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[]}, viajesArr); });
+      }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[]}, viajesArr); });
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
         '<div style="padding:40px;text-align:center">' +
@@ -1447,9 +1451,17 @@ function aplicarFiltrosTransp() {
   });
   var costoTotal = Object.values(costosPorMat).reduce(function(s,v){ return s+v; }, 0);
 
+  // Filtrar flota por matrícula para costos fijos
+  var flotaFilt = (window._transpFlotaArr || []).filter(function(f) {
+    if (!mat) return true;
+    var fMat = String(f['matrícula'] || f['matricula'] || '').trim();
+    return fMat === mat;
+  });
+
   var kpisData = Object.assign({}, window._transpKpisData || {}, {
     combArr: combFilt,
     mantArr: mantFilt,
+    flotaArr: flotaFilt,
     costosPorMatricula: costosPorMat,
     costoTotal: costoTotal
   });
@@ -1495,6 +1507,21 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
+  // ── COSTOS FIJOS desde hoja Flota ────────────────────────────
+  // Tipo: Fijo | Rubros: Seguro, Salario, Amortización, VTV
+  var flotaArr = data.flotaArr || window._transpFlotaArr || [];
+  var costoFijoPorMat = {};
+  flotaArr.forEach(function(f) {
+    var mat = String(f['matrícula'] || f['matricula'] || '').trim();
+    if (!mat) return;
+    var seguro = parseFloat(f['seguro ($/mes)'] || f['seguro']) || 0;
+    var salario = parseFloat(f['salario chofer ($/mes)'] || f['salario chofer'] || f['salario']) || 0;
+    var amort   = parseFloat(f['amortización ($/mes)'] || f['amortizacion ($/mes)'] || f['amortización'] || f['amortizacion']) || 0;
+    var vtv     = (parseFloat(f['vtv ($/año)'] || f['vtv ($/ano)'] || f['vtv']) || 0) / 12;
+    costoFijoPorMat[mat] = seguro + salario + amort + vtv;
+  });
+  var costoFijoMensual = Object.values(costoFijoPorMat).reduce(function(s,v){return s+v;},0);
+
   // ── MÉTRICAS GLOBALES (alineadas con DAX Power BI) ────────────
   // DAX: Km totales = SUM(Operaciones[Km_Recorridos])
   var totalKm  = viajes.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); },0);
@@ -1502,9 +1529,15 @@ function renderTranspKPIs(data, viajes) {
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
   var totalIng = viajes.reduce(function(s,v){ return s+toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']); },0);
-  // DAX: Costo total = SUM(Costos_Operativos[Monto]) — directo por matrícula
+  // DAX: Costo total = Variable + Cuasi variable + Fijo
   var costosPorMat = data.costosPorMatricula || {};
-  var totalCosto = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
+  var totalCostoVarCuasi = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
+  // nMeses desde viajes (para no depender de mesesArr que se calcula después)
+  var _mesesSet = {};
+  viajes.forEach(function(v){ var f=(v['fecha viaje']||'').substring(0,7); if(f) _mesesSet[f]=1; });
+  var nMesesEstim = Object.keys(_mesesSet).length || 1;
+  var totalCostoFijoEstim = costoFijoMensual * nMesesEstim;
+  var totalCosto = totalCostoVarCuasi + totalCostoFijoEstim;
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
   // DAX: % Margen = DIVIDE([Margen], [Ingresos Totales])
@@ -1614,6 +1647,10 @@ function renderTranspKPIs(data, viajes) {
     if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
     gastosM[mk.key].mantenimiento += parseFloat(m['costo'])||0;
   });
+  // Agregar costo fijo a cada mes (igual para todos los meses)
+  Object.keys(gastosM).forEach(function(k){ gastosM[k].fijo = costoFijoMensual; });
+  // También agregar fijo a meses de viajes que no tienen gastos variables registrados
+  Object.keys(meses).forEach(function(k){ if (!gastosM[k]) gastosM[k] = {label:meses[k].label, combustible:0, mantenimiento:0, fijo:costoFijoMensual}; });
   var gastosArr = Object.keys(gastosM).sort().map(function(k){ return gastosM[k]; });
 
   // ── Agrupar toneladas por tipo de carga ───────────────────────
@@ -1818,37 +1855,47 @@ function svgDonutGen(items) {
 
 function svgBarrasApiladas(gastosArr) {
   if (!gastosArr || gastosArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de gastos</div>';
-  var W=300, H=150, PAD=32, n=gastosArr.length;
-  var GAP=3; // espacio entre las 2 barras del mismo mes
-  var GROUP_W = Math.max(24, Math.min(60, (W-PAD*2)/n - 6));
-  var BAR_W = (GROUP_W - GAP) / 2;
+  var W=320, H=165, PAD=28, n=gastosArr.length;
+  var GAP=2;
+  var GROUP_W = Math.max(30, Math.min(72, (W-PAD*2)/n - 6));
+  var BAR_W = (GROUP_W - GAP*2) / 3;
   var spacing = (W-PAD*2)/n;
-  var maxV = Math.max.apply(null, gastosArr.map(function(m){ return Math.max(m.combustible||0, m.mantenimiento||0); })) || 1;
-  var CHART_H = H - PAD - 24; // espacio para leyenda arriba y label abajo
-  var yBase = H - 14;
-  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:160px">';
-  // Leyenda
-  svg += '<rect x="'+PAD+'" y="4" width="8" height="8" fill="#F07820" rx="1"/>';
-  svg += '<text x="'+(PAD+10)+'" y="12" font-size="8" fill="#555">Combustible</text>';
-  svg += '<rect x="'+(PAD+78)+'" y="4" width="8" height="8" fill="#378add" rx="1"/>';
-  svg += '<text x="'+(PAD+88)+'" y="12" font-size="8" fill="#555">Mantenimiento</text>';
+  var maxV = Math.max.apply(null, gastosArr.map(function(m){
+    return Math.max(m.combustible||0, m.mantenimiento||0, m.fijo||0);
+  })) || 1;
+  var CHART_H = H - PAD - 28;
+  var yBase = H - 16;
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:175px">';
+  // Leyenda (3 items)
+  svg += '<rect x="'+PAD+'" y="4" width="7" height="7" fill="#F07820" rx="1"/>';
+  svg += '<text x="'+(PAD+9)+'" y="11" font-size="7.5" fill="#555">Variable</text>';
+  svg += '<rect x="'+(PAD+60)+'" y="4" width="7" height="7" fill="#378add" rx="1"/>';
+  svg += '<text x="'+(PAD+69)+'" y="11" font-size="7.5" fill="#555">Cuasi var.</text>';
+  svg += '<rect x="'+(PAD+138)+'" y="4" width="7" height="7" fill="#1E6B2E" rx="1"/>';
+  svg += '<text x="'+(PAD+147)+'" y="11" font-size="7.5" fill="#555">Fijo</text>';
   gastosArr.forEach(function(m, i) {
     var cx = PAD + i*spacing + spacing/2;
-    var xC = cx - BAR_W - GAP/2;
-    var xM = cx + GAP/2;
-    var hC = m.combustible > 0 ? Math.max(3, Math.round(CHART_H*(m.combustible)/maxV)) : 0;
-    var hM = m.mantenimiento > 0 ? Math.max(3, Math.round(CHART_H*(m.mantenimiento)/maxV)) : 0;
-    // Barra combustible
+    var x1 = cx - GROUP_W/2;               // combustible
+    var x2 = x1 + BAR_W + GAP;             // mantenimiento
+    var x3 = x2 + BAR_W + GAP;             // fijo
+    var hC = m.combustible  > 0 ? Math.max(3, Math.round(CHART_H*(m.combustible)/maxV))  : 0;
+    var hM = m.mantenimiento> 0 ? Math.max(3, Math.round(CHART_H*(m.mantenimiento)/maxV)): 0;
+    var hF = m.fijo         > 0 ? Math.max(3, Math.round(CHART_H*(m.fijo)/maxV))         : 0;
+    // Variable (combustible)
     if (hC > 0) {
-      svg += '<rect x="'+xC+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Combustible '+m.label+': '+fmtMillones(m.combustible)+'</title></rect>';
-      svg += '<text x="'+(xC+BAR_W/2)+'" y="'+(yBase-hC-2)+'" text-anchor="middle" font-size="6.5" fill="#c05800">'+fmtMillones(m.combustible)+'</text>';
+      svg += '<rect x="'+x1+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Variable (Combustible) '+m.label+': '+fmtMillones(m.combustible)+'</title></rect>';
+      svg += '<text x="'+(x1+BAR_W/2)+'" y="'+(yBase-hC-2)+'" text-anchor="middle" font-size="6" fill="#c05800">'+fmtMillones(m.combustible)+'</text>';
     }
-    // Barra mantenimiento
+    // Cuasi variable (mantenimiento)
     if (hM > 0) {
-      svg += '<rect x="'+xM+'" y="'+(yBase-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Mantenimiento '+m.label+': '+fmtMillones(m.mantenimiento)+'</title></rect>';
-      svg += '<text x="'+(xM+BAR_W/2)+'" y="'+(yBase-hM-2)+'" text-anchor="middle" font-size="6.5" fill="#185fa5">'+fmtMillones(m.mantenimiento)+'</text>';
+      svg += '<rect x="'+x2+'" y="'+(yBase-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Cuasi variable (Mantenimiento) '+m.label+': '+fmtMillones(m.mantenimiento)+'</title></rect>';
+      svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hM-2)+'" text-anchor="middle" font-size="6" fill="#185fa5">'+fmtMillones(m.mantenimiento)+'</text>';
     }
-    // Label mes centrado bajo el grupo
+    // Fijo
+    if (hF > 0) {
+      svg += '<rect x="'+x3+'" y="'+(yBase-hF)+'" width="'+BAR_W+'" height="'+hF+'" fill="#1E6B2E" rx="2"><title>Fijo '+m.label+': '+fmtMillones(m.fijo)+'</title></rect>';
+      svg += '<text x="'+(x3+BAR_W/2)+'" y="'+(yBase-hF-2)+'" text-anchor="middle" font-size="6" fill="#0d4018">'+fmtMillones(m.fijo)+'</text>';
+    }
     svg += '<text x="'+cx+'" y="'+(H-2)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
   });
   svg += '</svg>';
