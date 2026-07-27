@@ -161,10 +161,20 @@ tr:hover td{background:#faf9f6}
       <h1>Camino </h1><span>ISO</span>
       <p>Portal de Gestión</p>
     </div>
-    <div class="login-field"><label>Usuario</label><input type="text" id="l-user" placeholder="Tu usuario" onkeydown="if(event.key==='Enter')doLogin()"/></div>
-    <div class="login-field"><label>Contraseña</label><input type="password" id="l-pass" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+    <div class="login-field"><label>PIN de acceso</label>
+      <input type="password" id="l-pin" placeholder="••••" maxlength="10" inputmode="numeric"
+             style="font-size:28px;letter-spacing:8px;text-align:center"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
     <button class="login-btn" onclick="doLogin()" id="login-btn">Ingresar</button>
     <div class="login-error" id="login-error"></div>
+    <div style="margin-top:16px;text-align:center">
+      <a href="#" onclick="toggleAdminLogin(event)" style="font-size:12px;color:var(--muted);text-decoration:none">Acceso administrador →</a>
+    </div>
+    <div id="admin-login-fields" style="display:none;margin-top:12px">
+      <div class="login-field"><label>Usuario</label><input type="text" id="l-user" placeholder="Tu usuario" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+      <div class="login-field"><label>Contraseña</label><input type="password" id="l-pass" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+    </div>
   </div>
 </div>
 
@@ -372,11 +382,35 @@ function toast(msg, err){
   setTimeout(function(){ t.classList.remove('show'); }, 2800);
 }
 
+// Clientes: { pin → {nombre, clienteId} }
+var _CLIENTES = {'1611': {nombre:'Camino', clienteId:'camino'}};
+
+function toggleAdminLogin(e) {
+  e.preventDefault();
+  var fields = document.getElementById('admin-login-fields');
+  fields.style.display = fields.style.display === 'none' ? 'block' : 'none';
+}
+
 async function doLogin(){
-  var usuario = document.getElementById('l-user').value.trim();
-  var password = document.getElementById('l-pass').value.trim();
-  if(!usuario||!password) return;
+  var pin     = (document.getElementById('l-pin')  ? document.getElementById('l-pin').value.trim()  : '');
+  var usuario = (document.getElementById('l-user') ? document.getElementById('l-user').value.trim() : '');
+  var password= (document.getElementById('l-pass') ? document.getElementById('l-pass').value.trim() : '');
   var btn = document.getElementById('login-btn');
+
+  // Login por PIN (cliente)
+  if (pin && !usuario) {
+    var cliente = _CLIENTES[pin];
+    if (cliente) {
+      session = {nombre: cliente.nombre, clienteId: cliente.clienteId, rol: 'cliente'};
+      startApp();
+    } else {
+      showError('PIN incorrecto');
+    }
+    return;
+  }
+
+  // Login admin (usuario + contraseña)
+  if (!usuario || !password) { showError('Ingresá usuario y contraseña'); return; }
   btn.textContent = 'Ingresando...'; btn.disabled = true;
   try {
     var data = await callAPI({action:'login', usuario:usuario, password:password});
