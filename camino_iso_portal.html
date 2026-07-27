@@ -150,13 +150,24 @@ tr:hover td{background:#faf9f6}
 <div class="login-wrap" id="login-wrap">
   <div class="login-box">
     <div class="login-logo">
-      <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px">
-        <path d="M32 6L42 28H22Z" fill="#1E6B2E"/>
-        <path d="M22 14L31 32H13Z" fill="#1E6B2E"/>
-        <path d="M42 14L51 32H33Z" fill="#1E6B2E"/>
-        <rect x="20" y="44" width="24" height="5" fill="#1E6B2E"/>
-        <rect x="29" y="32" width="6" height="13" fill="#164f22"/>
-        <path d="M6 52 Q18 56 32 56 Q46 56 58 52 Q56 46 44 49 Q32 52 20 49 Q8 46 6 52Z" fill="#F07820"/>
+      <svg width="96" height="80" viewBox="0 0 96 80" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px">
+        <!-- Pino izquierdo (2 capas) -->
+        <polygon points="14,60 23,40 32,60" fill="#1E6B2E"/>
+        <polygon points="16,48 23,28 30,48" fill="#1E6B2E"/>
+        <rect x="21" y="60" width="4" height="7" fill="#155024"/>
+        <!-- Pino central (3 capas, más alto) -->
+        <polygon points="34,63 48,34 62,63" fill="#1E6B2E"/>
+        <polygon points="36,51 48,22 60,51" fill="#1E6B2E"/>
+        <polygon points="38,40 48,10 58,40" fill="#1E6B2E"/>
+        <rect x="46" y="63" width="4" height="7" fill="#155024"/>
+        <!-- Pino derecho (2 capas) -->
+        <polygon points="64,60 73,40 82,60" fill="#1E6B2E"/>
+        <polygon points="66,48 73,28 80,48" fill="#1E6B2E"/>
+        <rect x="71" y="60" width="4" height="7" fill="#155024"/>
+        <!-- Colina verde -->
+        <path d="M4,70 Q48,58 92,70 L92,75 Q48,67 4,75Z" fill="#1E6B2E"/>
+        <!-- Camino naranja -->
+        <path d="M2,76 Q28,64 52,72 Q68,78 94,66 L94,78 Q68,88 52,82 Q28,74 2,86Z" fill="#F07820"/>
       </svg>
       <h1>Camino </h1><span>ISO</span>
       <p>Portal de Gestión</p>
@@ -180,7 +191,16 @@ tr:hover td{background:#faf9f6}
 
 <div class="app" id="app">
   <div class="topbar">
-    <div class="topbar-logo"><i class="ti ti-leaf" style="font-size:22px"></i> Camino <span class="iso">ISO</span></div>
+    <div class="topbar-logo">
+      <svg width="32" height="28" viewBox="0 0 96 80" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="14,60 23,40 32,60" fill="#1E6B2E"/><polygon points="16,48 23,28 30,48" fill="#1E6B2E"/><rect x="21" y="60" width="4" height="7" fill="#155024"/>
+        <polygon points="34,63 48,34 62,63" fill="#1E6B2E"/><polygon points="36,51 48,22 60,51" fill="#1E6B2E"/><polygon points="38,40 48,10 58,40" fill="#1E6B2E"/><rect x="46" y="63" width="4" height="7" fill="#155024"/>
+        <polygon points="64,60 73,40 82,60" fill="#1E6B2E"/><polygon points="66,48 73,28 80,48" fill="#1E6B2E"/><rect x="71" y="60" width="4" height="7" fill="#155024"/>
+        <path d="M4,70 Q48,58 92,70 L92,75 Q48,67 4,75Z" fill="#1E6B2E"/>
+        <path d="M2,76 Q28,64 52,72 Q68,78 94,66 L94,78 Q68,88 52,82 Q28,74 2,86Z" fill="#F07820"/>
+      </svg>
+      Camino <span class="iso">ISO</span>
+    </div>
     <span class="topbar-client" id="topbar-client"></span>
     <div class="topbar-right">
       <span class="topbar-user" id="topbar-user"></span>
