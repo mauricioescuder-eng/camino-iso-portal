@@ -1415,11 +1415,16 @@ function aplicarFiltrosTransp() {
   var mat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
   var tipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
 
+  // Helper: normalizar fecha a "yyyy-mm"
+  function mesKey(raw) {
+    var d = new Date(raw); if (!isNaN(d.getTime())) { var m=d.getMonth()+1; return d.getFullYear()+'-'+(m<10?'0':'')+m; }
+    return String(raw).substring(0,7);
+  }
   // Filtrar viajes
   var filtered = raw.filter(function(v) {
-    if (per  && !(v['fecha viaje']||'').startsWith(per))  return false;
-    if (mat  && v['matricula'] !== mat)                    return false;
-    if (tipo && v['tipo de carga'] !== tipo)               return false;
+    if (per  && mesKey(v['fecha viaje']||'') !== per)  return false;
+    if (mat  && v['matricula'] !== mat)                 return false;
+    if (tipo && v['tipo de carga'] !== tipo)            return false;
     return true;
   });
 
@@ -1473,8 +1478,24 @@ function buildFiltrosHTML(viajes) {
   var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   var periodos = {}, mats = {}, tipos = {};
   viajes.forEach(function(v) {
-    var f = (v['fecha viaje']||'').substring(0,7);
-    if (f) { var p = f.split('-'); periodos[f] = (MESES[parseInt(p[1],10)-1]||p[1]) + ' ' + p[0]; }
+    var raw = v['fecha viaje'] || '';
+    var key = '', label = '';
+    // Intentar parsear como fecha completa primero
+    var d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      var yr = d.getFullYear(), mo = d.getMonth() + 1;
+      key   = yr + '-' + (mo < 10 ? '0' : '') + mo;
+      label = MESES[mo - 1] + ' ' + yr;
+    } else {
+      // Fallback: substring si ya viene en formato yyyy-mm-dd
+      var sub = raw.substring(0, 7);
+      var p = sub.split('-');
+      if (p.length === 2 && p[0].length === 4) {
+        key   = sub;
+        label = (MESES[parseInt(p[1], 10) - 1] || p[1]) + ' ' + p[0];
+      }
+    }
+    if (key) periodos[key] = label;
     if (v['matricula'])     mats[v['matricula']] = 1;
     if (v['tipo de carga']) tipos[v['tipo de carga']] = 1;
   });
