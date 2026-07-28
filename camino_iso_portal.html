@@ -402,8 +402,15 @@ function toast(msg, err){
   setTimeout(function(){ t.classList.remove('show'); }, 2800);
 }
 
-// Clientes: { pin → {nombre, clienteId} }
-var _CLIENTES = {'1611': {nombre:'Camino', clienteId:'camino'}};
+// Clientes: { pin → {nombre, clienteId, apiUrl} }
+var _CLIENTES = {
+  '1611': {
+    nombre: 'Camino',
+    clienteId: 'camino',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbxoHVPgM6uP8PEkU7LvcBetA5H1vX293LjpDGQwOx-VsynleiIs7EH_7YkVrSf_I6Kg/exec'
+  }
+  // Para agregar cliente: ,'9999': { nombre:'Nuevo', clienteId:'nuevo', apiUrl:'https://script.google.com/.../exec' }
+};
 
 function toggleAdminLogin(e) {
   e.preventDefault();
@@ -421,7 +428,7 @@ async function doLogin(){
   if (pin && !usuario) {
     var cliente = _CLIENTES[pin];
     if (cliente) {
-      session = {nombre: cliente.nombre, clienteId: cliente.clienteId, rol: 'cliente'};
+      session = {nombre: cliente.nombre, clienteId: cliente.clienteId, rol: 'cliente', apiUrl: cliente.apiUrl};
       startApp();
     } else {
       showError('PIN incorrecto');
@@ -1343,7 +1350,9 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
 // ═══════════════════════════════════════════════════════
-var TRANSP_API = 'https://script.google.com/macros/s/AKfycbxoHVPgM6uP8PEkU7LvcBetA5H1vX293LjpDGQwOx-VsynleiIs7EH_7YkVrSf_I6Kg/exec';
+// URL dinámica: se asigna desde session.apiUrl al hacer login
+var TRANSP_API = '';
+function getTranspApi() { return (session && session.apiUrl) ? session.apiUrl : TRANSP_API; }
 var _transpVista = 'kpis';
 
 function getTc(){ return parseFloat(document.getElementById('transp-tc').value) || 1400; }
@@ -1437,7 +1446,7 @@ function loadTransporte(vista, btn) {
 var _transpCbIdx = 0;
 function callTranspAPI(params, cb, onTimeout) {
   var cbName = 'transpCb_' + (++_transpCbIdx) + '_' + Date.now();
-  var url = TRANSP_API + '?callback=' + cbName;
+  var url = getTranspApi() + '?callback=' + cbName;
   Object.keys(params).forEach(function(k){ url += '&' + k + '=' + encodeURIComponent(params[k]); });
   var timeout = setTimeout(function(){
     if(window[cbName]) delete window[cbName];
