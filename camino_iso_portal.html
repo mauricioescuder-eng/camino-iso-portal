@@ -318,6 +318,8 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
             <button class="fb" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
             <button class="fb" onclick="loadTransporte('flota',this)">🚚 Flota</button>
+            <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
+            <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>💱 USD =</span>
@@ -407,7 +409,7 @@ var _CLIENTES = {
   '1611': {
     nombre: 'Camino',
     clienteId: 'camino',
-    apiUrl: 'https://script.google.com/macros/s/AKfycbxoHVPgM6uP8PEkU7LvcBetA5H1vX293LjpDGQwOx-VsynleiIs7EH_7YkVrSf_I6Kg/exec'
+    apiUrl: 'https://script.google.com/macros/s/AKfycbybYx-X5Qmc1As4zTstwSM5B7y0BBGwmpcS7_zAoiwZpq5sE7m60ZCKnshs3jrFNcs2Vw/exec'
   }
   // Para agregar cliente: ,'9999': { nombre:'Nuevo', clienteId:'nuevo', apiUrl:'https://script.google.com/.../exec' }
 };
@@ -1406,25 +1408,36 @@ function loadTransporte(vista, btn) {
           var mantArr = Array.isArray(mant) ? mant : [];
           callTranspAPI({action:'flota'}, function(flota) {
             var flotaArr = Array.isArray(flota) ? flota : [];
-            // Costos variables + cuasi variables por matrícula
-            var costosPorMat = {};
-            combArr.forEach(function(c) {
-              var m = c['matricula'] || ''; if (!m) return;
-              costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
+            callTranspAPI({action:'costosFijos'}, function(fijos) {
+              var fijosArr = Array.isArray(fijos) ? fijos : [];
+              // Costos variables + cuasi variables por matrícula
+              var costosPorMat = {};
+              combArr.forEach(function(c) {
+                var m = c['matricula'] || ''; if (!m) return;
+                costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
+              });
+              mantArr.forEach(function(m) {
+                var mat = m['matricula'] || ''; if (!mat) return;
+                costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
+              });
+              // Costos fijos reales por matrícula
+              fijosArr.forEach(function(f) {
+                var mat = f['matricula'] || ''; if (!mat) return;
+                costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(f['monto'])||0);
+              });
+              var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
+              window._transpCostosPorMat = costosPorMat;
+              window._transpCostosTotal  = costoTotal;
+              window._transpCombArr  = combArr;
+              window._transpMantArr  = mantArr;
+              window._transpFlotaArr = flotaArr;
+              window._transpFijosArr = fijosArr;
+              renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:fijosArr}, viajesArr);
+            }, function() {
+              renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:[]}, viajesArr);
             });
-            mantArr.forEach(function(m) {
-              var mat = m['matricula'] || ''; if (!mat) return;
-              costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
-            });
-            var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
-            window._transpCostosPorMat = costosPorMat;
-            window._transpCostosTotal  = costoTotal;
-            window._transpCombArr  = combArr;
-            window._transpMantArr  = mantArr;
-            window._transpFlotaArr = flotaArr;
-            renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr}, viajesArr);
-          }, function() { renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:[]}, viajesArr); });
-        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[]}, viajesArr); });
+          }, function() { renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[], fijosArr:[]}, viajesArr); });
+        }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[], fijosArr:[]}, viajesArr); });
       }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[]}, viajesArr); });
     }, function() {
       document.getElementById('transp-contenido').innerHTML =
@@ -1434,12 +1447,17 @@ function loadTransporte(vista, btn) {
         '</div>';
     });
   } else {
-    callTranspAPI({action: vista}, function(data) {
-      if (vista === 'viajes')         renderTranspTabla(data, 'viajes');
-      else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
-      else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
-      else if (vista === 'flota')          renderTranspTabla(data, 'flota');
-    });
+    if (vista === 'costos-fijos') {
+      renderFormCostosFijos();
+    } else {
+      callTranspAPI({action: vista}, function(data) {
+        if (vista === 'viajes')              renderTranspTabla(data, 'viajes');
+        else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
+        else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
+        else if (vista === 'flota')          renderTranspTabla(data, 'flota');
+        else if (vista === 'tabla-fijos')    renderTranspTabla(data, 'costosFijos');
+      });
+    }
   }
 }
 
@@ -1581,6 +1599,90 @@ function buildFiltrosHTML(viajes) {
   html += '<button onclick="document.getElementById(\'tf-periodo\').value=\'\';document.getElementById(\'tf-matricula\').value=\'\';document.getElementById(\'tf-tipo\').value=\'\';aplicarFiltrosTransp();" style="'+selStyle+';background:#f1f5f9;border-color:#cbd5e1">✕ Limpiar</button>';
   html += '</div>';
   return html;
+}
+
+// ─── FORMULARIO COSTOS FIJOS ────────────────────────────────────────────────
+function renderFormCostosFijos() {
+  var cont = document.getElementById('transp-contenido');
+  var matriculas = [];
+  if (window._transpFlotaArr) {
+    window._transpFlotaArr.forEach(function(f) {
+      var m = String(f['matrícula'] || f['matricula'] || '').trim();
+      if (m) matriculas.push(m);
+    });
+  }
+  if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
+
+  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Seguro','Patente','VTV','Amortización','Otro'];
+  var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+  var rubOpts = rubros.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+
+  cont.innerHTML =
+    '<div style="max-width:560px;margin:0 auto;padding:24px 0">' +
+    '<h3 style="margin:0 0 20px;font-size:18px;color:var(--text)">Registrar Costo Fijo</h3>' +
+    '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:16px">' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA</label>' +
+    '<input type="date" id="cf-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MATRÍCULA</label>' +
+    '<select id="cf-matricula" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+matOpts+'</select></div>' +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">RUBRO</label>' +
+    '<select id="cf-rubro" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+rubOpts+'</select></div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONTO ($)</label>' +
+    '<input type="number" id="cf-monto" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '</div>' +
+
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">DETALLE</label>' +
+    '<input type="text" id="cf-detalle" placeholder="Ej: Sueldo junio César Silva" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR / BENEFICIARIO</label>' +
+    '<input type="text" id="cf-proveedor" placeholder="Ej: César Silva, BSE, SUCIVE" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+
+    '<button onclick="guardarCostoFijo()" style="padding:12px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px">Guardar</button>' +
+    '<div id="cf-msg" style="text-align:center;font-size:13px;min-height:20px"></div>' +
+    '</div></div>';
+}
+
+function guardarCostoFijo() {
+  var fecha     = document.getElementById('cf-fecha').value;
+  var matricula = document.getElementById('cf-matricula').value;
+  var rubro     = document.getElementById('cf-rubro').value;
+  var monto     = document.getElementById('cf-monto').value;
+  var detalle   = document.getElementById('cf-detalle').value;
+  var proveedor = document.getElementById('cf-proveedor').value;
+  var msg       = document.getElementById('cf-msg');
+
+  if (!fecha || !matricula || !rubro || !monto) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá fecha, matrícula, rubro y monto.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'saveCostoFijo',
+    fecha: fecha, matricula: matricula, rubro: rubro,
+    monto: monto, detalle: detalle, proveedor: proveedor
+  }, function(resp) {
+    if (resp && resp.ok) {
+      msg.style.color = '#1E6B2E';
+      msg.textContent = '✓ Guardado correctamente';
+      document.getElementById('cf-monto').value = '';
+      document.getElementById('cf-detalle').value = '';
+      document.getElementById('cf-proveedor').value = '';
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error de conexión.';
+  });
 }
 
 function renderTranspKPIs(data, viajes) {
