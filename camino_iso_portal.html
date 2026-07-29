@@ -1825,6 +1825,21 @@ function renderTranspKPIs(data, viajes) {
     }
   }
 
+  // ── Clasificación por área (alineada con Power BI / Excel Costos_Operativos)
+  // Variable:     Combustible, Neumáticos, Gomería, Electricistas
+  // Cuasi var.:   Repuestos, Mecánicos, Lubricación, Motor, Rodado, Suspensión,
+  //               Hidráulicos, Refrigeración, Aire acondicionado, Insumos, Taller
+  // Fijo:         Seguros, Patentes, Sueldos, VTV, Amortización → Costos_Fijos
+  var _AREAS_VARIABLE = [
+    'neumático', 'neumatico', 'cubiertas', 'gomería', 'gomeria',
+    'eléctrico', 'electrico', 'electricista', 'sistema eléctrico', 'sistema electrico'
+  ];
+  function tipoMant(area) {
+    var a = String(area||'').toLowerCase();
+    for (var i=0; i<_AREAS_VARIABLE.length; i++) { if (a.indexOf(_AREAS_VARIABLE[i]) >= 0) return 'variable'; }
+    return 'cuasivariable';
+  }
+
   // ── Agrupar gastos por mes ────────────────────────────────────
   var gastosM = {};
   var combArr = data.combArr || window._transpCombArr || [];
@@ -1834,20 +1849,23 @@ function renderTranspKPIs(data, viajes) {
     var yr = d2.getFullYear(), mo = d2.getMonth()+1;
     return {key: yr+'-'+(mo<10?'0':'')+mo, label: MESES_LABEL[mo-1]||String(mo)};
   }
+  // Combustible → Variable
   combArr.forEach(function(c) {
     var mk = getMesKey(c['fecha factura']||c['timestamp']); if (!mk) return;
-    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
-    gastosM[mk.key].combustible += parseFloat(c['total'])||0;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, variable:0, cuasivariable:0};
+    gastosM[mk.key].variable += parseFloat(c['total'])||0;
   });
+  // Mantenimientos → Variable o Cuasi variable según área
   mantArr.forEach(function(m) {
     var mk = getMesKey(m['fecha']||m['timestamp']); if (!mk) return;
-    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
-    gastosM[mk.key].mantenimiento += parseFloat(m['costo'])||0;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, variable:0, cuasivariable:0};
+    var tipo = tipoMant(m['area']);
+    gastosM[mk.key][tipo] += parseFloat(m['costo'])||0;
   });
   // Agregar costo fijo por mes (real si hay registros, estimado como fallback)
   var allMesKeys = Object.keys(Object.assign({}, gastosM, meses));
   allMesKeys.forEach(function(k) {
-    if (!gastosM[k]) gastosM[k] = {label:(meses[k]||{label:k}).label, combustible:0, mantenimiento:0};
+    if (!gastosM[k]) gastosM[k] = {label:(meses[k]||{label:k}).label, variable:0, cuasivariable:0};
     gastosM[k].fijo = totalCostoFijoReal > 0
       ? (fijosPorMes[k] || 0)
       : costoFijoMensual;
@@ -2062,12 +2080,12 @@ function svgBarrasApiladas(gastosArr) {
   var BAR_W = (GROUP_W - GAP*2) / 3;
   var spacing = (W-PAD*2)/n;
   var maxV = Math.max.apply(null, gastosArr.map(function(m){
-    return Math.max(m.combustible||0, m.mantenimiento||0, m.fijo||0);
+    return Math.max(m.variable||0, m.cuasivariable||0, m.fijo||0);
   })) || 1;
   var CHART_H = H - PAD - 28;
   var yBase = H - 16;
   var svg = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-height:175px">';
-  // Leyenda (3 items)
+  // Leyenda
   svg += '<rect x="'+PAD+'" y="4" width="7" height="7" fill="#F07820" rx="1"/>';
   svg += '<text x="'+(PAD+9)+'" y="11" font-size="7.5" fill="#555">Variable</text>';
   svg += '<rect x="'+(PAD+60)+'" y="4" width="7" height="7" fill="#378add" rx="1"/>';
@@ -2076,23 +2094,23 @@ function svgBarrasApiladas(gastosArr) {
   svg += '<text x="'+(PAD+147)+'" y="11" font-size="7.5" fill="#555">Fijo</text>';
   gastosArr.forEach(function(m, i) {
     var cx = PAD + i*spacing + spacing/2;
-    var x1 = cx - GROUP_W/2;               // combustible
-    var x2 = x1 + BAR_W + GAP;             // mantenimiento
-    var x3 = x2 + BAR_W + GAP;             // fijo
-    var hC = m.combustible  > 0 ? Math.max(3, Math.round(CHART_H*(m.combustible)/maxV))  : 0;
-    var hM = m.mantenimiento> 0 ? Math.max(3, Math.round(CHART_H*(m.mantenimiento)/maxV)): 0;
-    var hF = m.fijo         > 0 ? Math.max(3, Math.round(CHART_H*(m.fijo)/maxV))         : 0;
-    // Variable (combustible)
-    if (hC > 0) {
-      svg += '<rect x="'+x1+'" y="'+(yBase-hC)+'" width="'+BAR_W+'" height="'+hC+'" fill="#F07820" rx="2"><title>Variable (Combustible) '+m.label+': '+fmtMillones(m.combustible)+'</title></rect>';
-      svg += '<text x="'+(x1+BAR_W/2)+'" y="'+(yBase-hC-2)+'" text-anchor="middle" font-size="6" fill="#c05800">'+fmtMillones(m.combustible)+'</text>';
+    var x1 = cx - GROUP_W/2;
+    var x2 = x1 + BAR_W + GAP;
+    var x3 = x2 + BAR_W + GAP;
+    var hV = m.variable      > 0 ? Math.max(3, Math.round(CHART_H*(m.variable)/maxV))      : 0;
+    var hQ = m.cuasivariable > 0 ? Math.max(3, Math.round(CHART_H*(m.cuasivariable)/maxV)) : 0;
+    var hF = m.fijo          > 0 ? Math.max(3, Math.round(CHART_H*(m.fijo)/maxV))          : 0;
+    // Variable (combustible + gomería + neumáticos + electricistas)
+    if (hV > 0) {
+      svg += '<rect x="'+x1+'" y="'+(yBase-hV)+'" width="'+BAR_W+'" height="'+hV+'" fill="#F07820" rx="2"><title>Variable '+m.label+': '+fmtMillones(m.variable)+'</title></rect>';
+      svg += '<text x="'+(x1+BAR_W/2)+'" y="'+(yBase-hV-2)+'" text-anchor="middle" font-size="6" fill="#c05800">'+fmtMillones(m.variable)+'</text>';
     }
-    // Cuasi variable (mantenimiento)
-    if (hM > 0) {
-      svg += '<rect x="'+x2+'" y="'+(yBase-hM)+'" width="'+BAR_W+'" height="'+hM+'" fill="#378add" rx="2"><title>Cuasi variable (Mantenimiento) '+m.label+': '+fmtMillones(m.mantenimiento)+'</title></rect>';
-      svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hM-2)+'" text-anchor="middle" font-size="6" fill="#185fa5">'+fmtMillones(m.mantenimiento)+'</text>';
+    // Cuasi variable (repuestos, mecánicos, lubricación, etc.)
+    if (hQ > 0) {
+      svg += '<rect x="'+x2+'" y="'+(yBase-hQ)+'" width="'+BAR_W+'" height="'+hQ+'" fill="#378add" rx="2"><title>Cuasi variable '+m.label+': '+fmtMillones(m.cuasivariable)+'</title></rect>';
+      svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hQ-2)+'" text-anchor="middle" font-size="6" fill="#185fa5">'+fmtMillones(m.cuasivariable)+'</text>';
     }
-    // Fijo
+    // Fijo (sueldos, seguros, patentes, VTV, amortización)
     if (hF > 0) {
       svg += '<rect x="'+x3+'" y="'+(yBase-hF)+'" width="'+BAR_W+'" height="'+hF+'" fill="#1E6B2E" rx="2"><title>Fijo '+m.label+': '+fmtMillones(m.fijo)+'</title></rect>';
       svg += '<text x="'+(x3+BAR_W/2)+'" y="'+(yBase-hF-2)+'" text-anchor="middle" font-size="6" fill="#0d4018">'+fmtMillones(m.fijo)+'</text>';
