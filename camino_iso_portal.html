@@ -1693,20 +1693,31 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
-  // ── COSTOS FIJOS desde hoja Flota ────────────────────────────
-  // Tipo: Fijo | Rubros: Seguro, Salario, Amortización, VTV
+  // ── COSTOS FIJOS desde hoja Costos_Fijos (registros reales) ──
   var flotaArr = data.flotaArr || window._transpFlotaArr || [];
-  var costoFijoPorMat = {};
-  flotaArr.forEach(function(f) {
-    var mat = String(f['matrícula'] || f['matricula'] || '').trim();
-    if (!mat) return;
-    var seguro = parseFloat(f['seguro ($/mes)'] || f['seguro']) || 0;
-    var salario = parseFloat(f['salario chofer ($/mes)'] || f['salario chofer'] || f['salario']) || 0;
-    var amort   = parseFloat(f['amortización ($/mes)'] || f['amortizacion ($/mes)'] || f['amortización'] || f['amortizacion']) || 0;
-    var vtv     = (parseFloat(f['vtv ($/año)'] || f['vtv ($/ano)'] || f['vtv']) || 0) / 12;
-    costoFijoPorMat[mat] = seguro + salario + amort + vtv;
+  var fijosArr = data.fijosArr || window._transpFijosArr || [];
+  // Agrupar fijos por mes para el gráfico
+  var fijosPorMes = {};
+  fijosArr.forEach(function(f) {
+    var mk = getMesKey(f['fecha']||''); if (!mk) return;
+    fijosPorMes[mk.key] = (fijosPorMes[mk.key]||0) + (parseFloat(f['monto'])||0);
   });
-  var costoFijoMensual = Object.values(costoFijoPorMat).reduce(function(s,v){return s+v;},0);
+  var totalCostoFijoReal = fijosArr.reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+  // Fallback: si aún no hay registros reales, usar estimado de Flota
+  var costoFijoPorMat = {};
+  var costoFijoMensual = 0;
+  if (totalCostoFijoReal === 0) {
+    flotaArr.forEach(function(f) {
+      var mat = String(f['matrícula'] || f['matricula'] || '').trim();
+      if (!mat) return;
+      var seguro = parseFloat(f['seguro ($/mes)'] || f['seguro']) || 0;
+      var salario = parseFloat(f['salario chofer ($/mes)'] || f['salario chofer'] || f['salario']) || 0;
+      var amort   = parseFloat(f['amortización ($/mes)'] || f['amortizacion ($/mes)'] || f['amortización'] || f['amortizacion']) || 0;
+      var vtv     = (parseFloat(f['vtv ($/año)'] || f['vtv ($/ano)'] || f['vtv']) || 0) / 12;
+      costoFijoPorMat[mat] = seguro + salario + amort + vtv;
+    });
+    costoFijoMensual = Object.values(costoFijoPorMat).reduce(function(s,v){return s+v;},0);
+  }
 
   // ── MÉTRICAS GLOBALES (alineadas con DAX Power BI) ────────────
   // DAX: Km totales = SUM(Operaciones[Km_Recorridos])
@@ -1722,8 +1733,8 @@ function renderTranspKPIs(data, viajes) {
   var _mesesSet = {};
   viajes.forEach(function(v){ var f=(v['fecha viaje']||'').substring(0,7); if(f) _mesesSet[f]=1; });
   var nMesesEstim = Object.keys(_mesesSet).length || 1;
-  var totalCostoFijoEstim = costoFijoMensual * nMesesEstim;
-  var totalCosto = totalCostoVarCuasi + totalCostoFijoEstim;
+  var totalCostoFijo = totalCostoFijoReal > 0 ? totalCostoFijoReal : (costoFijoMensual * nMesesEstim);
+  var totalCosto = totalCostoVarCuasi + totalCostoFijo;
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
   // DAX: % Margen = DIVIDE([Margen], [Ingresos Totales])
@@ -1833,10 +1844,14 @@ function renderTranspKPIs(data, viajes) {
     if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, combustible:0, mantenimiento:0};
     gastosM[mk.key].mantenimiento += parseFloat(m['costo'])||0;
   });
-  // Agregar costo fijo a cada mes (igual para todos los meses)
-  Object.keys(gastosM).forEach(function(k){ gastosM[k].fijo = costoFijoMensual; });
-  // También agregar fijo a meses de viajes que no tienen gastos variables registrados
-  Object.keys(meses).forEach(function(k){ if (!gastosM[k]) gastosM[k] = {label:meses[k].label, combustible:0, mantenimiento:0, fijo:costoFijoMensual}; });
+  // Agregar costo fijo por mes (real si hay registros, estimado como fallback)
+  var allMesKeys = Object.keys(Object.assign({}, gastosM, meses));
+  allMesKeys.forEach(function(k) {
+    if (!gastosM[k]) gastosM[k] = {label:(meses[k]||{label:k}).label, combustible:0, mantenimiento:0};
+    gastosM[k].fijo = totalCostoFijoReal > 0
+      ? (fijosPorMes[k] || 0)
+      : costoFijoMensual;
+  });
   var gastosArr = Object.keys(gastosM).sort().map(function(k){ return gastosM[k]; });
 
   // ── Agrupar toneladas por tipo de carga ───────────────────────
