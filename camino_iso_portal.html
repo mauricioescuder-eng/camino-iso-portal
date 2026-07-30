@@ -124,6 +124,21 @@ tr:hover td{background:#faf9f6}
 .chart-modal-box{background:#fff;border-radius:14px;padding:28px 32px;max-width:92vw;max-height:92vh;overflow:auto;cursor:default;min-width:360px}
 .chart-modal-box h4{font-size:16px;font-weight:700;margin-bottom:16px}
 .chart-modal-close{position:absolute;top:12px;right:16px;font-size:22px;cursor:pointer;color:#666;background:none;border:none}
+.kpi-drillable:hover{box-shadow:0 4px 16px rgba(0,0,0,.13);transform:translateY(-2px)}
+/* Drill-through panel */
+#dt-panel{position:fixed;top:0;right:-520px;width:510px;height:100vh;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:700;transition:right .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow:hidden}
+#dt-panel.open{right:0}
+#dt-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:699}
+#dt-overlay.open{display:block}
+#dt-header{padding:20px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0}
+#dt-title{font-size:15px;font-weight:700;color:var(--text);flex:1}
+#dt-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0}
+#dt-body{flex:1;overflow-y:auto;padding:16px 20px}
+#dt-body table{width:100%;border-collapse:collapse;font-size:12px}
+#dt-body th{background:var(--gray);padding:7px 8px;text-align:left;font-weight:600;color:var(--muted);position:sticky;top:0}
+#dt-body td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+#dt-body tr:last-child td{border-bottom:none}
+#dt-count{font-size:11px;color:var(--muted);margin-bottom:10px}
 .bar-chart{display:flex;flex-direction:column;gap:8px}
 .bar-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .bar-row-label{width:100px;color:var(--muted);text-align:right;flex-shrink:0}
@@ -1745,6 +1760,10 @@ function renderTranspKPIs(data, viajes) {
   var avgTonViaje = nViajes > 0 ? totalTon / nViajes : 0;
   var avgIngViaje = nViajes > 0 ? totalIng / nViajes : 0;
   var avgIngTon   = totalTon > 0 ? totalIng / totalTon : 0;
+  // Litros de gasoil
+  var combArr0 = data.combArr || window._transpCombArr || [];
+  var totalLitros  = combArr0.reduce(function(s,c){ return s+(parseFloat(c['litros'])||0); },0);
+  var litrosPorKm  = totalKm > 0 ? (totalLitros / totalKm * 100) : 0; // L/100km
 
   // ── POR CAMIÓN (DAX: agrupar Operaciones por ID_Camion) ───────
   var byTruck = {};
@@ -1769,12 +1788,13 @@ function renderTranspKPIs(data, viajes) {
   });
   var numUnidades = camiones.length;
 
-  // ── FILA 1: 4 KPI grandes estilo Power BI ──────────────────────
-  var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
-    + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9', 'Prom. ' + fmt$(avgIngTon) + '/ton · ' + fmt$(avgIngViaje) + '/viaje')
-    + kpiBig('Costo total', fmtMillones(totalCosto), '#c0392b', '#fdecea', 'Prom. ' + fmt$(costoPorKm) + '/km')
-    + kpiBig('Margen', fmtMillones(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea')
-    + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea')
+  // ── FILA 1: 5 KPI grandes estilo Power BI (click → drill-through) ───
+  var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
+    + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9', 'Prom. ' + fmt$(avgIngTon) + '/ton · ' + fmt$(avgIngViaje) + '/viaje', 'openDrillThrough("viajes")')
+    + kpiBig('Costo total', fmtMillones(totalCosto), '#c0392b', '#fdecea', 'Prom. ' + fmt$(costoPorKm) + '/km', 'openDrillThrough("costos")')
+    + kpiBig('Margen', fmtMillones(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea', '', 'openDrillThrough("viajes")')
+    + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea', '', 'openDrillThrough("viajes")')
+    + kpiBig('Gasoil', fmtN(totalLitros,0) + ' L', '#1565c0', '#e3f2fd', fmtN(litrosPorKm,1) + ' L/100km', 'openDrillThrough("combustible")')
     + '</div>';
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
@@ -1979,11 +1999,15 @@ function fmtMillones(n) {
   return '$U ' + v.toLocaleString('es-UY',{maximumFractionDigits:0});
 }
 
-function kpiBig(label, val, valColor, bg, sub) {
-  return '<div style="background:'+bg+';border:1px solid var(--border);border-radius:10px;padding:20px 16px">'
-    + '<div style="font-size:13px;font-weight:700;color:#333;margin-bottom:10px">' + label + '</div>'
-    + '<div style="font-size:28px;font-weight:800;color:'+valColor+'">' + val + '</div>'
-    + (sub ? '<div style="font-size:11px;color:var(--muted);margin-top:7px">' + sub + '</div>' : '')
+function kpiBig(label, val, valColor, bg, sub, onclick) {
+  var clickable = onclick ? 'cursor:pointer;transition:box-shadow .15s,transform .1s' : '';
+  var hover     = onclick ? ' class="kpi-drillable"' : '';
+  var oc        = onclick ? ' onclick="'+onclick+'"' : '';
+  var drill     = onclick ? '<span style="float:right;font-size:10px;color:var(--muted);font-weight:400">Ver →</span>' : '';
+  return '<div'+hover+oc+' style="background:'+bg+';border:1px solid var(--border);border-radius:10px;padding:18px 14px;'+clickable+'">'
+    + '<div style="font-size:12px;font-weight:700;color:#333;margin-bottom:8px">' + label + drill + '</div>'
+    + '<div style="font-size:26px;font-weight:800;color:'+valColor+'">' + val + '</div>'
+    + (sub ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">' + sub + '</div>' : '')
     + '</div>';
 }
 
@@ -2009,6 +2033,94 @@ function openChartModal(el) {
     s.style.maxHeight='75vh';
   });
   document.getElementById('_chartModalOv').classList.add('open');
+}
+
+function openDrillThrough(type, filterKey, filterVal) {
+  // Crear panel si no existe
+  if (!document.getElementById('dt-panel')) {
+    var ov = document.createElement('div');
+    ov.id = 'dt-overlay';
+    ov.onclick = closeDrillThrough;
+    document.body.appendChild(ov);
+    var panel = document.createElement('div');
+    panel.id = 'dt-panel';
+    panel.innerHTML = '<div id="dt-header"><span id="dt-title"></span><button id="dt-close" onclick="closeDrillThrough()">✕</button></div><div id="dt-body"></div>';
+    document.body.appendChild(panel);
+  }
+
+  var viajes  = window._transpViajesRaw  || [];
+  var combArr = window._transpCombArr    || [];
+  var mantArr = window._transpMantArr    || [];
+  var fijosArr= window._transpFijosArr   || [];
+
+  var title = '', rows = [], cols = [];
+
+  if (type === 'viajes') {
+    title = '📋 Viajes (' + viajes.length + ')';
+    cols  = ['Fecha','Matrícula','Destino','Tipo carga','Ton','Tarifa','Moneda','Km'];
+    rows  = viajes.map(function(v){ return [
+      v['fecha viaje']||v['timestamp']||'',
+      v['matricula']||'',
+      v['destino']||'',
+      v['tipo de carga']||'',
+      fmtN(v['toneladas'],1),
+      fmt$(v['tarifa']),
+      v['moneda']||'UYU',
+      fmtN(v['km recorridos'])
+    ]; });
+
+  } else if (type === 'combustible') {
+    title = '⛽ Combustible (' + combArr.length + ')';
+    cols  = ['Fecha','Matrícula','Proveedor','Litros','$/L','Total'];
+    rows  = combArr.map(function(c){ return [
+      c['fecha factura']||c['timestamp']||'',
+      c['matricula']||'',
+      c['proveedor']||'',
+      fmtN(c['litros'],2) + ' L',
+      fmt$(c['precio litro']),
+      fmt$(c['total'])
+    ]; });
+
+  } else if (type === 'costos') {
+    var allCosts = [];
+    combArr.forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+c['proveedor'],tipo:'Variable',monto:parseFloat(c['total'])||0}); });
+    mantArr.forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'Mant.')+' - '+(m['proveedor']||m['taller']||''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:parseFloat(m['costo'])||0}); });
+    fijosArr.forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:'Fijo',monto:parseFloat(f['monto'])||0}); });
+    allCosts.sort(function(a,b){ return (b.fecha>a.fecha)?1:-1; });
+    title = '💰 Costos (' + allCosts.length + ' registros)';
+    cols  = ['Fecha','Matrícula','Descripción','Tipo','Monto'];
+    rows  = allCosts.map(function(c){ return [c.fecha, c.mat, c.desc, c.tipo, fmt$(c.monto)]; });
+  }
+
+  if (filterKey && filterVal) {
+    var fi = cols.indexOf(filterKey);
+    if (fi >= 0) rows = rows.filter(function(r){ return r[fi] === filterVal; });
+    title += ' — ' + filterVal;
+  }
+
+  var html = '<div id="dt-count">' + rows.length + ' registros</div>';
+  html += '<table><thead><tr>' + cols.map(function(c){ return '<th>'+c+'</th>'; }).join('') + '</tr></thead><tbody>';
+  rows.forEach(function(r){ html += '<tr>' + r.map(function(c){ return '<td>'+c+'</td>'; }).join('') + '</tr>'; });
+  html += '</tbody></table>';
+
+  document.getElementById('dt-title').textContent = title;
+  document.getElementById('dt-body').innerHTML = html;
+  document.getElementById('dt-panel').classList.add('open');
+  document.getElementById('dt-overlay').classList.add('open');
+}
+
+function closeDrillThrough() {
+  var p = document.getElementById('dt-panel');
+  var o = document.getElementById('dt-overlay');
+  if (p) p.classList.remove('open');
+  if (o) o.classList.remove('open');
+}
+
+function tipoMant(area) {
+  var _AV = ['neumático','neumatico','cubiertas','gomería','gomeria','eléctrico','electrico','electricista','sistema eléctrico','sistema electrico'];
+  var a = String(area||'').toLowerCase();
+  for (var i=0; i<_AV.length; i++) { if (a.indexOf(_AV[i]) >= 0) return 'variable'; }
+  return 'cuasivariable';
 }
 
 function svgDonut(areas) {
