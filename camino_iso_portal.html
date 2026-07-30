@@ -1686,6 +1686,7 @@ function guardarCostoFijo() {
 }
 
 function renderTranspKPIs(data, viajes) {
+  var MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   var r = data.resumen || {};
   var camiones = data.por_camion || [];
   var areas = data.por_area_mantenimiento || [];
@@ -1783,7 +1784,6 @@ function renderTranspKPIs(data, viajes) {
 
   // ── Agrupar viajes por mes ─────────────────────────────────────
   var meses = {};
-  var MESES_LABEL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   viajes.forEach(function(v) {
     var f = v['fecha viaje'] || v['timestamp'] || '';
     if (!f) return;
