@@ -1410,7 +1410,7 @@ function loadTransporte(vista, btn) {
             var flotaArr = Array.isArray(flota) ? flota : [];
             callTranspAPI({action:'costosFijos'}, function(fijos) {
               var fijosArr = Array.isArray(fijos) ? fijos : [];
-              // Costos variables + cuasi variables por matrícula
+              // Costos variables + cuasi variables por matrícula (sin fijos — se suman aparte)
               var costosPorMat = {};
               combArr.forEach(function(c) {
                 var m = c['matricula'] || ''; if (!m) return;
@@ -1420,11 +1420,7 @@ function loadTransporte(vista, btn) {
                 var mat = m['matricula'] || ''; if (!mat) return;
                 costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
               });
-              // Costos fijos reales por matrícula
-              fijosArr.forEach(function(f) {
-                var mat = f['matricula'] || ''; if (!mat) return;
-                costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(f['monto'])||0);
-              });
+              // costoTotal = solo variable + cuasi-variable; los fijos se suman en renderTranspKPIs via fijosArr
               var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
               window._transpCostosPorMat = costosPorMat;
               window._transpCostosTotal  = costoTotal;
