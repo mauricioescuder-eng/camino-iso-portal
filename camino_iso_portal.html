@@ -1861,9 +1861,12 @@ function renderTranspKPIs(data, viajes) {
   var combArr = data.combArr || window._transpCombArr || [];
   var mantArr = data.mantArr || window._transpMantArr || [];
   function getMesKey(fecha) {
-    var d2 = new Date(fecha); if (isNaN(d2.getTime())) return null;
-    var yr = d2.getFullYear(), mo = d2.getMonth()+1;
-    return {key: yr+'-'+(mo<10?'0':'')+mo, label: MESES_LABEL[mo-1]||String(mo)};
+    var s = String(fecha||'').trim();
+    var m = s.match(/^(\d{4})-(\d{2})/);
+    if (!m) return null;
+    var mo = parseInt(m[2], 10);
+    if (mo < 1 || mo > 12) return null;
+    return {key: m[1]+'-'+m[2], label: MESES_LABEL[mo-1]||String(mo)};
   }
   // Combustible → Variable
   combArr.forEach(function(c) {
