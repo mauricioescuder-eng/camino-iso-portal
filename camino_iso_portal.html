@@ -1868,20 +1868,20 @@ function renderTranspKPIs(data, viajes) {
   // Combustible → Variable
   combArr.forEach(function(c) {
     var mk = getMesKey(c['fecha factura']||c['timestamp']); if (!mk) return;
-    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, variable:0, cuasivariable:0};
+    if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
     gastosM[mk.key].variable += parseFloat(c['total'])||0;
   });
   // Mantenimientos → Variable o Cuasi variable según área
   mantArr.forEach(function(m) {
     var mk = getMesKey(m['fecha']||m['timestamp']); if (!mk) return;
-    if (!gastosM[mk.key]) gastosM[mk.key] = {label:mk.label, variable:0, cuasivariable:0};
+    if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
     var tipo = tipoMant(m['area']);
     gastosM[mk.key][tipo] += parseFloat(m['costo'])||0;
   });
   // Agregar costo fijo por mes (real si hay registros, estimado como fallback)
   var allMesKeys = Object.keys(Object.assign({}, gastosM, meses));
   allMesKeys.forEach(function(k) {
-    if (!gastosM[k]) gastosM[k] = {label:(meses[k]||{label:k}).label, variable:0, cuasivariable:0};
+    if (!gastosM[k]) gastosM[k] = {key:k, label:(meses[k]||{label:k}).label, variable:0, cuasivariable:0};
     gastosM[k].fijo = totalCostoFijoReal > 0
       ? (fijosPorMes[k] || 0)
       : costoFijoMensual;
@@ -2053,49 +2053,72 @@ function openDrillThrough(type, filterKey, filterVal) {
   var mantArr = window._transpMantArr    || [];
   var fijosArr= window._transpFijosArr   || [];
 
+  // mesKey = 'YYYY-MM' para filtrar por mes (viene de las barras del gráfico)
+  var mesKey = filterKey || null;
+  function inMes(fecha) { return !mesKey || String(fecha||'').substring(0,7) === mesKey; }
+  var mesLabel = mesKey ? (' — ' + (mesKey.split('-')[1]|0 > 0 ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][(mesKey.split('-')[1]|0)-1] + ' ' + mesKey.split('-')[0] : mesKey)) : '';
+
   var title = '', rows = [], cols = [];
 
   if (type === 'viajes') {
-    title = '📋 Viajes (' + viajes.length + ')';
-    cols  = ['Fecha','Matrícula','Destino','Tipo carga','Ton','Tarifa','Moneda','Km'];
-    rows  = viajes.map(function(v){ return [
-      v['fecha viaje']||v['timestamp']||'',
-      v['matricula']||'',
-      v['destino']||'',
-      v['tipo de carga']||'',
-      fmtN(v['toneladas'],1),
-      fmt$(v['tarifa']),
-      v['moneda']||'UYU',
-      fmtN(v['km recorridos'])
+    var data = viajes.filter(function(v){ return inMes(v['fecha viaje']||v['timestamp']); });
+    title = '📋 Viajes' + mesLabel + ' (' + data.length + ')';
+    cols  = ['Fecha','Matrícula','Destino','Tipo carga','Ton','Tarifa','Km'];
+    rows  = data.map(function(v){ return [
+      v['fecha viaje']||v['timestamp']||'', v['matricula']||'', v['destino']||'',
+      v['tipo de carga']||'', fmtN(v['toneladas'],1), fmt$(v['tarifa']), fmtN(v['km recorridos'])
     ]; });
 
   } else if (type === 'combustible') {
-    title = '⛽ Combustible (' + combArr.length + ')';
+    var data = combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); });
+    title = '⛽ Combustible' + mesLabel + ' (' + data.length + ')';
     cols  = ['Fecha','Matrícula','Proveedor','Litros','$/L','Total'];
-    rows  = combArr.map(function(c){ return [
-      c['fecha factura']||c['timestamp']||'',
-      c['matricula']||'',
-      c['proveedor']||'',
-      fmtN(c['litros'],2) + ' L',
-      fmt$(c['precio litro']),
-      fmt$(c['total'])
+    rows  = data.map(function(c){ return [
+      c['fecha factura']||c['timestamp']||'', c['matricula']||'', c['proveedor']||'',
+      fmtN(c['litros'],2) + ' L', fmt$(c['precio litro']), fmt$(c['total'])
+    ]; });
+
+  } else if (type === 'variable') {
+    var allCosts = [];
+    combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
+      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),monto:parseFloat(c['total'])||0}); });
+    mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']) && tipoMant(m['area'])==='variable'; })
+      .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),monto:parseFloat(m['costo'])||0}); });
+    allCosts.sort(function(a,b){ return a.fecha < b.fecha ? 1 : -1; });
+    title = '🟠 Variable' + mesLabel + ' (' + allCosts.length + ' registros)';
+    cols  = ['Fecha','Matrícula','Descripción','Monto'];
+    rows  = allCosts.map(function(c){ return [c.fecha, c.mat, c.desc, fmt$(c.monto)]; });
+
+  } else if (type === 'cuasivariable') {
+    var data = mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']) && tipoMant(m['area'])==='cuasivariable'; });
+    title = '🔵 Cuasi variable' + mesLabel + ' (' + data.length + ' registros)';
+    cols  = ['Fecha','Matrícula','Área','Proveedor','Monto'];
+    rows  = data.map(function(m){ return [
+      m['fecha']||m['timestamp']||'', m['matricula']||'', m['area']||'',
+      m['proveedor']||m['taller']||'', fmt$(m['costo'])
+    ]; });
+
+  } else if (type === 'fijo') {
+    var data = fijosArr.filter(function(f){ return inMes(f['fecha']); });
+    title = '🟢 Fijo' + mesLabel + ' (' + data.length + ' registros)';
+    cols  = ['Fecha','Matrícula','Rubro','Detalle','Proveedor','Monto'];
+    rows  = data.map(function(f){ return [
+      f['fecha']||'', f['matrícula']||f['matricula']||'', f['rubro']||'',
+      f['detalle']||'', f['proveedor']||'', fmt$(f['monto'])
     ]; });
 
   } else if (type === 'costos') {
     var allCosts = [];
-    combArr.forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+c['proveedor'],tipo:'Variable',monto:parseFloat(c['total'])||0}); });
-    mantArr.forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'Mant.')+' - '+(m['proveedor']||m['taller']||''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:parseFloat(m['costo'])||0}); });
-    fijosArr.forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:'Fijo',monto:parseFloat(f['monto'])||0}); });
-    allCosts.sort(function(a,b){ return (b.fecha>a.fecha)?1:-1; });
-    title = '💰 Costos (' + allCosts.length + ' registros)';
+    combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
+      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),tipo:'Variable',monto:parseFloat(c['total'])||0}); });
+    mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']); })
+      .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:parseFloat(m['costo'])||0}); });
+    fijosArr.filter(function(f){ return inMes(f['fecha']); })
+      .forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matrícula']||f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:'Fijo',monto:parseFloat(f['monto'])||0}); });
+    allCosts.sort(function(a,b){ return a.fecha < b.fecha ? 1 : -1; });
+    title = '💰 Costos' + mesLabel + ' (' + allCosts.length + ' registros)';
     cols  = ['Fecha','Matrícula','Descripción','Tipo','Monto'];
     rows  = allCosts.map(function(c){ return [c.fecha, c.mat, c.desc, c.tipo, fmt$(c.monto)]; });
-  }
-
-  if (filterKey && filterVal) {
-    var fi = cols.indexOf(filterKey);
-    if (fi >= 0) rows = rows.filter(function(r){ return r[fi] === filterVal; });
-    title += ' — ' + filterVal;
   }
 
   var html = '<div id="dt-count">' + rows.length + ' registros</div>';
@@ -2208,20 +2231,24 @@ function svgBarrasApiladas(gastosArr) {
     var hV = m.variable      > 0 ? Math.max(3, Math.round(CHART_H*(m.variable)/maxV))      : 0;
     var hQ = m.cuasivariable > 0 ? Math.max(3, Math.round(CHART_H*(m.cuasivariable)/maxV)) : 0;
     var hF = m.fijo          > 0 ? Math.max(3, Math.round(CHART_H*(m.fijo)/maxV))          : 0;
+    var mk = m.key || '';
+    var ocV = mk ? ' onclick="openDrillThrough(\'variable\',\''+mk+'\')" style="cursor:pointer"' : '';
+    var ocQ = mk ? ' onclick="openDrillThrough(\'cuasivariable\',\''+mk+'\')" style="cursor:pointer"' : '';
+    var ocF = mk ? ' onclick="openDrillThrough(\'fijo\',\''+mk+'\')" style="cursor:pointer"' : '';
     // Variable (combustible + gomería + neumáticos + electricistas)
     if (hV > 0) {
-      svg += '<rect x="'+x1+'" y="'+(yBase-hV)+'" width="'+BAR_W+'" height="'+hV+'" fill="#F07820" rx="2"><title>Variable '+m.label+': '+fmtMillones(m.variable)+'</title></rect>';
-      svg += '<text x="'+(x1+BAR_W/2)+'" y="'+(yBase-hV-2)+'" text-anchor="middle" font-size="6" fill="#c05800">'+fmtMillones(m.variable)+'</text>';
+      svg += '<rect x="'+x1+'" y="'+(yBase-hV)+'" width="'+BAR_W+'" height="'+hV+'" fill="#F07820" rx="2"'+ocV+'><title>Variable '+m.label+': '+fmtMillones(m.variable)+' — clic para ver detalle</title></rect>';
+      svg += '<text x="'+(x1+BAR_W/2)+'" y="'+(yBase-hV-2)+'" text-anchor="middle" font-size="6" fill="#c05800" pointer-events="none">'+fmtMillones(m.variable)+'</text>';
     }
     // Cuasi variable (repuestos, mecánicos, lubricación, etc.)
     if (hQ > 0) {
-      svg += '<rect x="'+x2+'" y="'+(yBase-hQ)+'" width="'+BAR_W+'" height="'+hQ+'" fill="#378add" rx="2"><title>Cuasi variable '+m.label+': '+fmtMillones(m.cuasivariable)+'</title></rect>';
-      svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hQ-2)+'" text-anchor="middle" font-size="6" fill="#185fa5">'+fmtMillones(m.cuasivariable)+'</text>';
+      svg += '<rect x="'+x2+'" y="'+(yBase-hQ)+'" width="'+BAR_W+'" height="'+hQ+'" fill="#378add" rx="2"'+ocQ+'><title>Cuasi var. '+m.label+': '+fmtMillones(m.cuasivariable)+' — clic para ver detalle</title></rect>';
+      svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hQ-2)+'" text-anchor="middle" font-size="6" fill="#185fa5" pointer-events="none">'+fmtMillones(m.cuasivariable)+'</text>';
     }
     // Fijo (sueldos, seguros, patentes, VTV, amortización)
     if (hF > 0) {
-      svg += '<rect x="'+x3+'" y="'+(yBase-hF)+'" width="'+BAR_W+'" height="'+hF+'" fill="#1E6B2E" rx="2"><title>Fijo '+m.label+': '+fmtMillones(m.fijo)+'</title></rect>';
-      svg += '<text x="'+(x3+BAR_W/2)+'" y="'+(yBase-hF-2)+'" text-anchor="middle" font-size="6" fill="#0d4018">'+fmtMillones(m.fijo)+'</text>';
+      svg += '<rect x="'+x3+'" y="'+(yBase-hF)+'" width="'+BAR_W+'" height="'+hF+'" fill="#1E6B2E" rx="2"'+ocF+'><title>Fijo '+m.label+': '+fmtMillones(m.fijo)+' — clic para ver detalle</title></rect>';
+      svg += '<text x="'+(x3+BAR_W/2)+'" y="'+(yBase-hF-2)+'" text-anchor="middle" font-size="6" fill="#0d4018" pointer-events="none">'+fmtMillones(m.fijo)+'</text>';
     }
     svg += '<text x="'+cx+'" y="'+(H-2)+'" text-anchor="middle" font-size="9" fill="#888">'+m.label+'</text>';
   });
