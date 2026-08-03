@@ -1947,17 +1947,31 @@ function renderTranspKPIs(data, viajes) {
     +'<div style="font-size:10px;color:var(--muted)">Sueldos + Seguros + VTV</div></div>';
   eHtml += '</div>';
   // Punto de equilibrio + alerta
-  eHtml += '<div style="display:flex;gap:12px;flex-wrap:wrap">';
+  // Punto de equilibrio en $ (exacto, independiente de tarifa por viaje)
+  var peSuperado = margenContrib > 0 && totalIng >= pdE_ing;
+  var peColor = peSuperado ? '#0f6e56' : '#c0392b';
+  var peBg    = peSuperado ? '#e8f5e9' : '#fdecea';
+  var pePct   = (margenContrib > 0 && pdE_ing > 0) ? Math.min(totalIng / pdE_ing * 100, 100) : 0;
+  var peDelta = totalIng - pdE_ing;
+
+  eHtml += '<div style="border-radius:10px;background:'+peBg+';border:1px solid '+peColor+';padding:14px 16px;margin-top:4px">';
+  eHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  eHtml += '<div style="font-size:12px;font-weight:700;color:'+peColor+'">PUNTO DE EQUILIBRIO (en ingresos)</div>';
+  eHtml += '<div style="font-size:11px;color:'+peColor+'">'+(peSuperado ? '✅ Superado' : '❌ No alcanzado')+'</div>';
+  eHtml += '</div>';
+  // Barra de progreso
+  eHtml += '<div style="height:10px;border-radius:6px;background:rgba(0,0,0,.1);margin-bottom:10px;overflow:hidden">';
+  eHtml += '<div style="height:100%;width:'+pePct.toFixed(1)+'%;background:'+peColor+';border-radius:6px;transition:width .4s"></div>';
+  eHtml += '</div>';
+  // Números clave
+  eHtml += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+  eHtml += '<div><div style="font-size:10px;color:'+peColor+';font-weight:600">INGRESOS REALES</div><div style="font-size:14px;font-weight:800;color:'+peColor+'">'+fmtMillones(totalIng)+'</div></div>';
+  eHtml += '<div><div style="font-size:10px;color:'+peColor+';font-weight:600">PE NECESARIO</div><div style="font-size:14px;font-weight:800;color:'+peColor+'">'+fmtMillones(pdE_ing)+'</div><div style="font-size:9px;color:var(--muted)">Fijos ÷ Margen contrib. ('+( margenContrib*100).toFixed(1)+'%)</div></div>';
+  eHtml += '<div><div style="font-size:10px;color:'+peColor+';font-weight:600">'+(peSuperado?'EXCEDENTE':'FALTANTE')+'</div><div style="font-size:14px;font-weight:800;color:'+peColor+'">'+(peSuperado?'+':'')+fmtMillones(peDelta)+'</div></div>';
+  eHtml += '</div>';
   if (alertaFijo) {
-    eHtml += '<div style="flex:1;min-width:200px;padding:10px 14px;border-radius:8px;background:#fff8e1;border:1px solid #F5A623;display:flex;align-items:center;gap:10px">'
-      +'<span style="font-size:20px">⚠</span>'
-      +'<div><div style="font-size:11px;font-weight:700;color:#b97c0a">COSTOS FIJOS ALTOS</div>'
-      +'<div style="font-size:11px;color:#666">Representan el '+pctF.toFixed(0)+'% del costo total. Aumentar volumen de viajes para diluirlos.</div></div></div>';
+    eHtml += '<div style="margin-top:10px;font-size:11px;color:#b97c0a;background:#fff8e1;border-radius:6px;padding:7px 10px">⚠ Costos fijos representan el '+pctF.toFixed(0)+'% del total. Cada viaje adicional contribuye '+fmtMillones(totalIng>0?(totalIng-eVar-eCuasi)/nViajes:0)+' al margen.</div>';
   }
-  eHtml += '<div style="flex:1;min-width:200px;padding:10px 14px;border-radius:8px;background:var(--gray);border:1px solid var(--border)">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">PUNTO DE EQUILIBRIO</div>'
-    +'<div style="font-size:15px;font-weight:800;color:var(--text)">'+(pdE_viajes>0 ? pdE_viajes+' viajes' : fmtMillones(pdE_ing)+' ingresos')+'</div>'
-    +'<div style="font-size:10px;color:var(--muted)">para cubrir todos los costos fijos</div></div>';
   eHtml += '</div></div>';
 
   // ── Barra de filtros ──────────────────────────────────────────
