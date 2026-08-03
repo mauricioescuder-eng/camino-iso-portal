@@ -1905,8 +1905,63 @@ function renderTranspKPIs(data, viajes) {
   var savedTipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
   var rawForFilters = window._transpViajesRaw || viajes;
 
+  // ── Estructura de costos ──────────────────────────────────────
+  var combArrE = data.combArr || window._transpCombArr || [];
+  var mantArrE = data.mantArr || window._transpMantArr || [];
+  var eVar = combArrE.reduce(function(s,c){return s+(parseFloat(c['total'])||0);},0);
+  mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='variable') eVar+=(parseFloat(m['costo'])||0); });
+  var eCuasi = 0;
+  mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='cuasivariable') eCuasi+=(parseFloat(m['costo'])||0); });
+  var eFijo = totalCostoFijoReal > 0 ? totalCostoFijoReal : (totalCosto - eVar - eCuasi);
+  var pctV = totalCosto > 0 ? eVar/totalCosto*100 : 0;
+  var pctQ = totalCosto > 0 ? eCuasi/totalCosto*100 : 0;
+  var pctF = totalCosto > 0 ? eFijo/totalCosto*100 : 0;
+  // Punto de equilibrio: ingresos mínimos para cubrir costos fijos
+  var margenContrib = totalIng > 0 ? (totalIng - eVar - eCuasi) / totalIng : 0;
+  var pdE_ing = margenContrib > 0 ? eFijo / margenContrib : 0;
+  var pdE_viajes = nViajes > 0 && totalIng > 0 ? Math.ceil(pdE_ing / (totalIng / nViajes)) : 0;
+  var alertaFijo = pctF > 50;
+  var eHtml = '<div class="chart-wrap" style="margin:0 0 12px;padding:18px 20px">';
+  eHtml += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  eHtml += '<h4 style="margin:0;font-size:14px">📊 Estructura de Costos</h4>';
+  eHtml += '<span style="font-size:12px;color:var(--muted)">Total: ' + fmtMillones(totalCosto) + '</span></div>';
+  // Barra apilada
+  eHtml += '<div style="height:30px;border-radius:8px;overflow:hidden;display:flex;margin-bottom:10px;box-shadow:inset 0 1px 3px rgba(0,0,0,.1)">';
+  eHtml += '<div style="width:'+pctV.toFixed(1)+'%;background:#F07820;display:flex;align-items:center;justify-content:center" title="Variable: '+fmtMillones(eVar)+'">'+(pctV>=8?'<span style="font-size:10px;font-weight:800;color:#fff">'+pctV.toFixed(0)+'%</span>':'')+'</div>';
+  eHtml += '<div style="width:'+pctQ.toFixed(1)+'%;background:#378add;display:flex;align-items:center;justify-content:center" title="Cuasi variable: '+fmtMillones(eCuasi)+'">'+(pctQ>=8?'<span style="font-size:10px;font-weight:800;color:#fff">'+pctQ.toFixed(0)+'%</span>':'')+'</div>';
+  eHtml += '<div style="width:'+pctF.toFixed(1)+'%;background:#1E6B2E;display:flex;align-items:center;justify-content:center" title="Fijo: '+fmtMillones(eFijo)+'">'+(pctF>=8?'<span style="font-size:10px;font-weight:800;color:#fff">'+pctF.toFixed(0)+'%</span>':'')+'</div>';
+  eHtml += '</div>';
+  // Leyenda con montos
+  eHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">';
+  eHtml += '<div onclick="openDrillThrough(\'variable\')" style="cursor:pointer;padding:10px 12px;border-radius:8px;background:#fff8f3;border:1px solid #F07820">'
+    +'<div style="font-size:10px;font-weight:700;color:#F07820;margin-bottom:4px">● VARIABLE</div>'
+    +'<div style="font-size:16px;font-weight:800;color:#333">'+fmtMillones(eVar)+'</div>'
+    +'<div style="font-size:10px;color:var(--muted)">Combustible + Gomería</div></div>';
+  eHtml += '<div onclick="openDrillThrough(\'cuasivariable\')" style="cursor:pointer;padding:10px 12px;border-radius:8px;background:#f3f8ff;border:1px solid #378add">'
+    +'<div style="font-size:10px;font-weight:700;color:#378add;margin-bottom:4px">● CUASI VARIABLE</div>'
+    +'<div style="font-size:16px;font-weight:800;color:#333">'+fmtMillones(eCuasi)+'</div>'
+    +'<div style="font-size:10px;color:var(--muted)">Repuestos + Mecánicos</div></div>';
+  eHtml += '<div onclick="openDrillThrough(\'fijo\')" style="cursor:pointer;padding:10px 12px;border-radius:8px;background:#f0f7f0;border:1px solid #1E6B2E">'
+    +'<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">● FIJO</div>'
+    +'<div style="font-size:16px;font-weight:800;color:#333">'+fmtMillones(eFijo)+'</div>'
+    +'<div style="font-size:10px;color:var(--muted)">Sueldos + Seguros + VTV</div></div>';
+  eHtml += '</div>';
+  // Punto de equilibrio + alerta
+  eHtml += '<div style="display:flex;gap:12px;flex-wrap:wrap">';
+  if (alertaFijo) {
+    eHtml += '<div style="flex:1;min-width:200px;padding:10px 14px;border-radius:8px;background:#fff8e1;border:1px solid #F5A623;display:flex;align-items:center;gap:10px">'
+      +'<span style="font-size:20px">⚠</span>'
+      +'<div><div style="font-size:11px;font-weight:700;color:#b97c0a">COSTOS FIJOS ALTOS</div>'
+      +'<div style="font-size:11px;color:#666">Representan el '+pctF.toFixed(0)+'% del costo total. Aumentar volumen de viajes para diluirlos.</div></div></div>';
+  }
+  eHtml += '<div style="flex:1;min-width:200px;padding:10px 14px;border-radius:8px;background:var(--gray);border:1px solid var(--border)">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">PUNTO DE EQUILIBRIO</div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--text)">'+(pdE_viajes>0 ? pdE_viajes+' viajes' : fmtMillones(pdE_ing)+' ingresos')+'</div>'
+    +'<div style="font-size:10px;color:var(--muted)">para cubrir todos los costos fijos</div></div>';
+  eHtml += '</div></div>';
+
   // ── Barra de filtros ──────────────────────────────────────────
-  var html = buildFiltrosHTML(rawForFilters);
+  var html = eHtml + buildFiltrosHTML(rawForFilters);
   // Restaurar valores seleccionados después del re-render
   setTimeout(function() {
     if (savedPer  && document.getElementById('tf-periodo'))  document.getElementById('tf-periodo').value  = savedPer;
