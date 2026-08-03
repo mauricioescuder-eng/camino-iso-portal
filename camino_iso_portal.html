@@ -1425,7 +1425,7 @@ function loadTransporte(vista, btn) {
             var flotaArr = Array.isArray(flota) ? flota : [];
             callTranspAPI({action:'costosFijos'}, function(fijos) {
               var fijosArr = Array.isArray(fijos) ? fijos : [];
-              // Costos variables + cuasi variables por matrícula (sin fijos — se suman aparte)
+              // Costos por matrícula: variable + cuasi-variable + fijo (para tabla por camión correcta)
               var costosPorMat = {};
               combArr.forEach(function(c) {
                 var m = c['matricula'] || ''; if (!m) return;
@@ -1435,7 +1435,11 @@ function loadTransporte(vista, btn) {
                 var mat = m['matricula'] || ''; if (!mat) return;
                 costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(m['costo'])||0);
               });
-              // costoTotal = solo variable + cuasi-variable; los fijos se suman en renderTranspKPIs via fijosArr
+              fijosArr.forEach(function(f) {
+                var mat = f['matrícula'] || f['matricula'] || ''; if (!mat) return;
+                costosPorMat[mat] = (costosPorMat[mat]||0) + (parseFloat(f['monto'])||0);
+              });
+              // costoTotal incluye todo: var + cuasi + fijo (ya sin doble conteo en renderTranspKPIs)
               var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
               window._transpCostosPorMat = costosPorMat;
               window._transpCostosTotal  = costoTotal;
@@ -1738,15 +1742,9 @@ function renderTranspKPIs(data, viajes) {
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
   var totalIng = viajes.reduce(function(s,v){ return s+toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']); },0);
-  // DAX: Costo total = Variable + Cuasi variable + Fijo
+  // DAX: Costo total = Variable + Cuasi variable + Fijo (ya incluidos en data.costoTotal)
   var costosPorMat = data.costosPorMatricula || {};
-  var totalCostoVarCuasi = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
-  // nMeses desde viajes (para no depender de mesesArr que se calcula después)
-  var _mesesSet = {};
-  viajes.forEach(function(v){ var f=(v['fecha viaje']||'').substring(0,7); if(f) _mesesSet[f]=1; });
-  var nMesesEstim = Object.keys(_mesesSet).length || 1;
-  var totalCostoFijo = totalCostoFijoReal > 0 ? totalCostoFijoReal : (costoFijoMensual * nMesesEstim);
-  var totalCosto = totalCostoVarCuasi + totalCostoFijo;
+  var totalCosto = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
   // DAX: % Margen = DIVIDE([Margen], [Ingresos Totales])
