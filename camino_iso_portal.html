@@ -1624,7 +1624,7 @@ function renderFormCostosFijos() {
   }
   if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
 
-  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Seguro','Patente','VTV','Amortización','Otro'];
+  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Seguro','Patente','VTV','Amortización','Otro'];
   var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
   var rubOpts = rubros.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
 
