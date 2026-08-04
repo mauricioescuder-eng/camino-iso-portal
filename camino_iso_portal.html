@@ -2453,17 +2453,43 @@ function renderTranspTabla(data, tipo) {
   var indicHtml = '';
   if (rows.length > 0) {
     if (tipo === 'viajes') {
-      var totKm = 0, totTon = 0, totIng = 0;
+      var totKm = 0, totTon = 0, totIng = 0, totViat = 0, totPeaj = 0;
       rows.forEach(function(r){
-        totKm  += parseFloat(r['km recorridos'])||0;
-        totTon += parseFloat(r['toneladas'])||0;
-        totIng += toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']);
+        totKm   += parseFloat(r['km recorridos'])||0;
+        totTon  += parseFloat(r['toneladas'])||0;
+        totIng  += toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']);
+        totViat += toUYU(parseFloat(r['viaticos'])||0, r['moneda']);
+        totPeaj += toUYU(parseFloat(r['peajes'])||0, r['moneda']);
       });
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
-        + kpi('Registros', rows.length, 'viajes', '#185fa5')
-        + kpi('Km totales', fmtN(totKm) + ' km', 'acumulado', '#639922')
-        + kpi('Toneladas', fmtN(totTon) + ' t', 'transportadas', '#854f0b')
-        + kpi('Ingresos UYU', fmt$(totIng), 'tipo de cambio: $' + fmtN(tc), '#0f6e56')
+      // ── Costos por KM (DAX: Costo por KM = DIVIDE(Total Costos, Total Km)) ──
+      var _combArr  = window._transpCombArr  || [];
+      var _mantArr  = window._transpMantArr  || [];
+      var _fijosArr = window._transpFijosArr || [];
+      var _totComb     = _combArr.reduce(function(s,c){ return s+(parseFloat(c['total'])||0); },0);
+      var _totMantVar  = _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='variable'     ? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
+      var _totMantCuasi= _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='cuasivariable'? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
+      var _totComis    = _fijosArr.filter(function(f){ return (f['clasificacion']||'fijo')==='variable'; }).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+      var _totFijo     = _fijosArr.filter(function(f){ return (f['clasificacion']||'fijo')!=='variable'; }).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+      var _eVar  = _totComb + _totMantVar + totViat + totPeaj + _totComis;
+      var _eCuasi= _totMantCuasi;
+      var _eFijo = _totFijo;
+      var _totalCosto = _eVar + _eCuasi + _eFijo;
+      // DAX: Costo por KM = DIVIDE(Total Costos, Total Km)
+      var _cKm     = totKm > 0 ? _totalCosto / totKm : 0;
+      var _cVarKm  = totKm > 0 ? _eVar       / totKm : 0;
+      var _cCuasiKm= totKm > 0 ? _eCuasi     / totKm : 0;
+      var _cFijoKm = totKm > 0 ? _eFijo      / totKm : 0;
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'
+        + kpi('Registros',    rows.length,          'viajes',                    '#185fa5')
+        + kpi('Km totales',   fmtN(totKm)+' km',    'acumulado',                 '#639922')
+        + kpi('Toneladas',    fmtN(totTon)+' t',    'transportadas',             '#854f0b')
+        + kpi('Ingresos UYU', fmt$(totIng),          'T/C: $'+fmtN(tc),          '#0f6e56')
+        + '</div>'
+        + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
+        + kpi('Costo total / km',      fmt$(_cKm),      'Variable+Cuasi+Fijo',    '#c0392b')
+        + kpi('Costo variable / km',   fmt$(_cVarKm),   'Comb+Viát+Peaj+Comis',  '#F07820')
+        + kpi('Costo cuasi-var / km',  fmt$(_cCuasiKm), 'Repuestos+Mecánicos',    '#378add')
+        + kpi('Costo fijo / km',       fmt$(_cFijoKm),  'Sueldos+Seguros+VTV',    '#1E6B2E')
         + '</div>';
     } else if (tipo === 'mantenimientos') {
       var totCosto = 0;
