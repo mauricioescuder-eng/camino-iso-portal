@@ -1628,7 +1628,10 @@ function renderFormCostosFijos() {
   }
   if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
 
-  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Seguro','Patente','VTV','Amortización','Otro'];
+  // Rubros FIJOS (sueldo base, cargas sociales, costos estructurales del camión)
+  // Rubros VARIABLE: Comisión por viaje → clasificado como variable al guardar
+  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Comisión por viaje','Seguro','Patente','VTV','Amortización','Otro'];
+  var rubrosVariable = ['Comisión por viaje'];
   var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
   var rubOpts = rubros.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
 
@@ -1679,10 +1682,12 @@ function guardarCostoFijo() {
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Guardando...';
 
+  var clasificacion = rubrosVariable.indexOf(rubro) >= 0 ? 'variable' : 'fijo';
   callTranspAPI({
     action: 'saveCostoFijo',
     fecha: fecha, matricula: matricula, rubro: rubro,
-    monto: monto, detalle: detalle, proveedor: proveedor
+    monto: monto, detalle: detalle, proveedor: proveedor,
+    clasificacion: clasificacion
   }, function(resp) {
     if (resp && resp.ok) {
       msg.style.color = '#1E6B2E';
@@ -1712,13 +1717,23 @@ function renderTranspKPIs(data, viajes) {
   // ── COSTOS FIJOS desde hoja Costos_Fijos (registros reales) ──
   var flotaArr = data.flotaArr || window._transpFlotaArr || [];
   var fijosArr = data.fijosArr || window._transpFijosArr || [];
-  // Agrupar fijos por mes para el gráfico
+  // Separar en fijo vs variable según campo clasificacion
+  // Retrocompatibilidad: sin campo clasificacion → fijo por defecto
+  var fijosArrFijo = fijosArr.filter(function(f){ return (f['clasificacion']||'fijo') !== 'variable'; });
+  var fijosArrVar  = fijosArr.filter(function(f){ return (f['clasificacion']||'fijo') === 'variable'; });
+  // Agrupar fijos (solo los realmente fijos) por mes para el gráfico
   var fijosPorMes = {};
-  fijosArr.forEach(function(f) {
+  fijosArrFijo.forEach(function(f) {
     var mk = getMesKey(f['fecha']||''); if (!mk) return;
     fijosPorMes[mk.key] = (fijosPorMes[mk.key]||0) + (parseFloat(f['monto'])||0);
   });
-  var totalCostoFijoReal = fijosArr.reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+  // Variable desde Costos_Fijos (comisiones) por mes
+  var fijosVarPorMes = {};
+  fijosArrVar.forEach(function(f) {
+    var mk = getMesKey(f['fecha']||''); if (!mk) return;
+    fijosVarPorMes[mk.key] = (fijosVarPorMes[mk.key]||0) + (parseFloat(f['monto'])||0);
+  });
+  var totalCostoFijoReal = fijosArrFijo.reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
   // Fallback: si aún no hay registros reales, usar estimado de Flota
   var costoFijoPorMat = {};
   var costoFijoMensual = 0;
@@ -1840,10 +1855,12 @@ function renderTranspKPIs(data, viajes) {
   }
 
   // ── Clasificación por área (alineada con Power BI / Excel Costos_Operativos)
-  // Variable:     Combustible, Neumáticos, Gomería, Electricistas
+  // Variable:     Combustible, Neumáticos, Gomería, Electricistas,
+  //               Viáticos (viajes), Peajes (viajes), Comisión por viaje (Costos_Fijos.clasificacion='variable')
   // Cuasi var.:   Repuestos, Mecánicos, Lubricación, Motor, Rodado, Suspensión,
   //               Hidráulicos, Refrigeración, Aire acondicionado, Insumos, Taller
-  // Fijo:         Seguros, Patentes, Sueldos, VTV, Amortización → Costos_Fijos
+  // Fijo:         Sueldo base, Aguinaldo, Vacaciones, Aportes, Seguros, Patentes, VTV, Amortización
+  //               → Costos_Fijos con clasificacion='fijo' (o sin campo = retrocompatible como fijo)
   var _AREAS_VARIABLE = [
     'neumático', 'neumatico', 'cubiertas', 'gomería', 'gomeria',
     'eléctrico', 'electrico', 'electricista', 'sistema eléctrico', 'sistema electrico'
@@ -1879,6 +1896,19 @@ function renderTranspKPIs(data, viajes) {
     var tipo = tipoMant(m['area']);
     gastosM[mk.key][tipo] += parseFloat(m['costo'])||0;
   });
+  // Viáticos y peajes de la hoja Viajes → Variable
+  viajes.forEach(function(v) {
+    var mk = getMesKey(v['fecha viaje']||v['timestamp']); if (!mk) return;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
+    gastosM[mk.key].variable += toUYU(parseFloat(v['viaticos'])||0, v['moneda']);
+    gastosM[mk.key].variable += toUYU(parseFloat(v['peajes'])||0, v['moneda']);
+  });
+  // Comisiones por viaje desde Costos_Fijos (clasificacion='variable') → Variable
+  fijosArrVar.forEach(function(f) {
+    var mk = getMesKey(f['fecha']||''); if (!mk) return;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
+    gastosM[mk.key].variable += parseFloat(f['monto'])||0;
+  });
   // Agregar costo fijo por mes (real si hay registros, estimado como fallback)
   var allMesKeys = Object.keys(Object.assign({}, gastosM, meses));
   allMesKeys.forEach(function(k) {
@@ -1910,6 +1940,11 @@ function renderTranspKPIs(data, viajes) {
   var mantArrE = data.mantArr || window._transpMantArr || [];
   var eVar = combArrE.reduce(function(s,c){return s+(parseFloat(c['total'])||0);},0);
   mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='variable') eVar+=(parseFloat(m['costo'])||0); });
+  // Viáticos y peajes de viajes → Variable
+  viajes.forEach(function(v){ eVar += toUYU(parseFloat(v['viaticos'])||0, v['moneda']); });
+  viajes.forEach(function(v){ eVar += toUYU(parseFloat(v['peajes'])||0, v['moneda']); });
+  // Comisiones por viaje desde Costos_Fijos → Variable
+  fijosArrVar.forEach(function(f){ eVar += parseFloat(f['monto'])||0; });
   var eCuasi = 0;
   mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='cuasivariable') eCuasi+=(parseFloat(m['costo'])||0); });
   var eFijo = totalCostoFijoReal > 0 ? totalCostoFijoReal : (totalCosto - eVar - eCuasi);
