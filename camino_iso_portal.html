@@ -1718,10 +1718,17 @@ function renderTranspKPIs(data, viajes) {
   // ── COSTOS FIJOS desde hoja Costos_Fijos (registros reales) ──
   var flotaArr = data.flotaArr || window._transpFlotaArr || [];
   var fijosArr = data.fijosArr || window._transpFijosArr || [];
-  // Separar en fijo vs variable según campo clasificacion
-  // Retrocompatibilidad: sin campo clasificacion → fijo por defecto
-  var fijosArrFijo = fijosArr.filter(function(f){ return (f['clasificacion']||'fijo') !== 'variable'; });
-  var fijosArrVar  = fijosArr.filter(function(f){ return (f['clasificacion']||'fijo') === 'variable'; });
+  // Clasificar costos_fijos por rubro — no depende del campo 'clasificacion' (no lo devuelve el API)
+  var _rubrosVarCF = ['Comisión por viaje'];
+  function esCFVariable(f) {
+    var rubro = f['rubro'] || '';
+    // Campo guardado tiene prioridad; si no existe, derivar del rubro
+    if (f['clasificacion'] === 'variable') return true;
+    if (f['clasificacion'] === 'fijo')     return false;
+    return _rubrosVarCF.indexOf(rubro) >= 0;
+  }
+  var fijosArrFijo = fijosArr.filter(function(f){ return !esCFVariable(f); });
+  var fijosArrVar  = fijosArr.filter(function(f){ return  esCFVariable(f); });
   // Agrupar fijos (solo los realmente fijos) por mes para el gráfico
   var fijosPorMes = {};
   fijosArrFijo.forEach(function(f) {
@@ -2469,8 +2476,10 @@ function renderTranspTabla(data, tipo) {
       var _totComb     = _combArr.reduce(function(s,c){ return s+(parseFloat(c['total'])||0); },0);
       var _totMantVar  = _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='variable'     ? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
       var _totMantCuasi= _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='cuasivariable'? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
-      var _totComis    = _fijosArr.filter(function(f){ return (f['clasificacion']||'fijo')==='variable'; }).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
-      var _totFijo     = _fijosArr.filter(function(f){ return (f['clasificacion']||'fijo')!=='variable'; }).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+      var _rubrosVarCF2 = ['Comisión por viaje'];
+      function _esCFVar2(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rubrosVarCF2.indexOf(rb)>=0; }
+      var _totComis    = _fijosArr.filter(_esCFVar2).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
+      var _totFijo     = _fijosArr.filter(function(f){ return !_esCFVar2(f); }).reduce(function(s,f){ return s+(parseFloat(f['monto'])||0); },0);
       var _eVar  = _totComb + _totMantVar + totViat + totPeaj + _totComis;
       var _eCuasi= _totMantCuasi;
       var _eFijo = _totFijo;
