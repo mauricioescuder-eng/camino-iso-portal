@@ -2212,7 +2212,9 @@ function openDrillThrough(type, filterKey, filterVal) {
     ]; });
 
   } else if (type === 'fijo') {
-    var data = fijosArr.filter(function(f){ return inMes(f['fecha']); });
+    var _rvCF = ['Comisión por viaje'];
+    function _dtEsFijo(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return false; if(f['clasificacion']==='fijo') return true; return _rvCF.indexOf(rb)<0; }
+    var data = fijosArr.filter(function(f){ return inMes(f['fecha']) && _dtEsFijo(f); });
     title = '🟢 Fijo' + mesLabel + ' (' + data.length + ' registros)';
     cols  = ['Fecha','Matrícula','Rubro','Detalle','Proveedor','Monto'];
     rows  = data.map(function(f){ return [
@@ -2221,13 +2223,15 @@ function openDrillThrough(type, filterKey, filterVal) {
     ]; });
 
   } else if (type === 'costos') {
+    var _rvCF2 = ['Comisión por viaje'];
+    function _dtEsVar(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rvCF2.indexOf(rb)>=0; }
     var allCosts = [];
     combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
       .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),tipo:'Variable',monto:parseFloat(c['total'])||0}); });
     mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']); })
       .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:parseFloat(m['costo'])||0}); });
     fijosArr.filter(function(f){ return inMes(f['fecha']); })
-      .forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matrícula']||f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:'Fijo',monto:parseFloat(f['monto'])||0}); });
+      .forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matrícula']||f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:_dtEsVar(f)?'Variable':'Fijo',monto:parseFloat(f['monto'])||0}); });
     allCosts.sort(function(a,b){ return a.fecha < b.fecha ? 1 : -1; });
     title = '💰 Costos' + mesLabel + ' (' + allCosts.length + ' registros)';
     cols  = ['Fecha','Matrícula','Descripción','Tipo','Monto'];
