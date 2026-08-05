@@ -2192,11 +2192,24 @@ function openDrillThrough(type, filterKey, filterVal) {
     ]; });
 
   } else if (type === 'variable') {
+    var _rvCFv = ['Comisión por viaje'];
+    function _dtEsVarV(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rvCFv.indexOf(rb)>=0; }
     var allCosts = [];
     combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
       .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),monto:parseFloat(c['total'])||0}); });
     mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']) && tipoMant(m['area'])==='variable'; })
       .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),monto:parseFloat(m['costo'])||0}); });
+    // Viáticos y peajes de viajes
+    viajes.filter(function(v){ return inMes(v['fecha viaje']||v['timestamp']); })
+      .forEach(function(v){
+        var viat = toUYU(parseFloat(v['viaticos'])||0, v['moneda']);
+        var peaj = toUYU(parseFloat(v['peajes'])||0,   v['moneda']);
+        if(viat>0) allCosts.push({fecha:v['fecha viaje']||'',mat:v['matricula']||'',desc:'Viáticos',monto:viat});
+        if(peaj>0) allCosts.push({fecha:v['fecha viaje']||'',mat:v['matricula']||'',desc:'Peajes',monto:peaj});
+      });
+    // Comisiones por viaje desde Costos_Fijos
+    fijosArr.filter(function(f){ return inMes(f['fecha']) && _dtEsVarV(f); })
+      .forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matrícula']||f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),monto:parseFloat(f['monto'])||0}); });
     allCosts.sort(function(a,b){ return a.fecha < b.fecha ? 1 : -1; });
     title = '🟠 Variable' + mesLabel + ' (' + allCosts.length + ' registros)';
     cols  = ['Fecha','Matrícula','Descripción','Monto'];
