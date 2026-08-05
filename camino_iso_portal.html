@@ -1682,6 +1682,7 @@ function guardarCostoFijo() {
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Guardando...';
 
+  var rubrosVariable = ['Comisión por viaje'];
   var clasificacion = rubrosVariable.indexOf(rubro) >= 0 ? 'variable' : 'fijo';
   callTranspAPI({
     action: 'saveCostoFijo',
