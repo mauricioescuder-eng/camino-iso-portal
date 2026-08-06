@@ -2269,6 +2269,50 @@ function closeDrillThrough() {
   if (o) o.classList.remove('open');
 }
 
+function openCtrlDrill(grupo) {
+  var lista = grupo === 'arriba' ? (window._ctrlArriba||[]) : (window._ctrlAbajo||[]);
+  var avgIng = window._ctrlAvgIng || 0;
+  var titulo = grupo === 'arriba'
+    ? '▲ Viajes por encima del promedio (' + fmt$(avgIng) + ')'
+    : '▼ Viajes por debajo del promedio (' + fmt$(avgIng) + ')';
+  var color  = grupo === 'arriba' ? '#1E6B2E' : '#c0392b';
+
+  if (!document.getElementById('dt-panel')) {
+    var ov = document.createElement('div'); ov.id='dt-overlay'; ov.onclick=closeDrillThrough; document.body.appendChild(ov);
+    var panel = document.createElement('div'); panel.id='dt-panel';
+    panel.innerHTML='<div id="dt-header"><span id="dt-title"></span><button id="dt-close" onclick="closeDrillThrough()">✕</button></div><div id="dt-body"></div>';
+    document.body.appendChild(panel);
+  }
+
+  document.getElementById('dt-title').textContent = titulo;
+  document.getElementById('dt-title').style.color = color;
+
+  var totalIng = lista.reduce(function(s,v){ return s+v.ing; }, 0);
+  var html = '<div id="dt-count" style="color:'+color+'">'+lista.length+' viajes · Total: '+fmt$(totalIng)+'</div>';
+  html += '<table><thead><tr>'
+    + '<th>Fecha</th><th>Matrícula</th><th>Destino</th><th>Carga</th><th style="text-align:right">Ton</th><th style="text-align:right">Km</th><th style="text-align:right">Ingreso</th>'
+    + '</tr></thead><tbody>';
+  lista.slice().sort(function(a,b){ return b.ing - a.ing; }).forEach(function(v){
+    var dif    = v.ing - avgIng;
+    var difStr = (dif >= 0 ? '+' : '') + fmt$(dif);
+    var difCol = dif >= 0 ? '#1E6B2E' : '#c0392b';
+    html += '<tr>'
+      + '<td>'+v.fecha+'</td>'
+      + '<td>'+v.mat+'</td>'
+      + '<td>'+(v.dest||'—')+'</td>'
+      + '<td>'+(v.tipo||'—')+'</td>'
+      + '<td style="text-align:right">'+fmtN(v.ton,1)+'</td>'
+      + '<td style="text-align:right">'+fmtN(v.km,0)+'</td>'
+      + '<td style="text-align:right;font-weight:700">'+fmt$(v.ing)+'<br><span style="font-size:10px;color:'+difCol+'">'+difStr+'</span></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+
+  document.getElementById('dt-body').innerHTML = html;
+  document.getElementById('dt-panel').classList.add('open');
+  document.getElementById('dt-overlay').classList.add('open');
+}
+
 function tipoMant(area) {
   var _AV = ['neumático','neumatico','cubiertas','gomería','gomeria','eléctrico','electrico','electricista','sistema eléctrico','sistema electrico'];
   var a = String(area||'').toLowerCase();
@@ -2546,8 +2590,8 @@ function renderTranspTabla(data, tipo) {
 
         // Mini gráfico de barras: cada viaje como barra vs promedio
         var maxIng = Math.max.apply(null, ingPorViaje.map(function(v){ return v.ing; })) || 1;
-        var barW   = Math.max(18, Math.floor(700 / n) - 3);
-        var svgH   = 140;
+        var barW   = Math.max(22, Math.floor(900 / n) - 3);
+        var svgH   = 200;
         var avgY   = Math.round(svgH * (1 - avgIng / maxIng));
         var barsHtml = ingPorViaje.map(function(v, i){
           var h  = Math.round(svgH * (v.ing / maxIng));
@@ -2563,6 +2607,11 @@ function renderTranspTabla(data, tipo) {
           + '<text x="2" y="'+(avgY-3)+'" font-size="9" fill="#F07820" font-weight="600">Prom. '+fmt$(avgIng)+'</text>'
           + '</svg>';
 
+        // Guardar en globales para el drill-through de las tarjetas
+        window._ctrlArriba = arriba;
+        window._ctrlAbajo  = abajo;
+        window._ctrlAvgIng = avgIng;
+
         indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
           + '<h4 style="margin:0;font-size:13px">📊 Control de Proceso — Ingreso por Viaje</h4>'
@@ -2570,13 +2619,13 @@ function renderTranspTabla(data, tipo) {
           + '</div>'
           + svgChart
           + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">'
-          + '<div style="padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
-          + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">▲ POR ENCIMA DEL PROMEDIO</div>'
+          + '<div onclick="openCtrlDrill(\'arriba\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
+          + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">▲ POR ENCIMA DEL PROMEDIO <span style="float:right;font-weight:400">Ver → </span></div>'
           + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+arriba.length+' viajes <span style="font-size:12px;font-weight:600">('+pctArriba+'%)</span></div>'
           + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumArriba)+'</div>'
           + '</div>'
-          + '<div style="padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
-          + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">▼ POR DEBAJO DEL PROMEDIO</div>'
+          + '<div onclick="openCtrlDrill(\'abajo\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
+          + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">▼ POR DEBAJO DEL PROMEDIO <span style="float:right;font-weight:400">Ver → </span></div>'
           + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+abajo.length+' viajes <span style="font-size:12px;font-weight:600">('+pctAbajo+'%)</span></div>'
           + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumAbajo)+'</div>'
           + '</div>'
