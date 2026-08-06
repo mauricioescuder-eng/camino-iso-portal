@@ -2546,8 +2546,8 @@ function renderTranspTabla(data, tipo) {
 
         // Mini gráfico de barras: cada viaje como barra vs promedio
         var maxIng = Math.max.apply(null, ingPorViaje.map(function(v){ return v.ing; })) || 1;
-        var barW   = Math.max(8, Math.floor(520 / n) - 2);
-        var svgH   = 60;
+        var barW   = Math.max(18, Math.floor(700 / n) - 3);
+        var svgH   = 140;
         var avgY   = Math.round(svgH * (1 - avgIng / maxIng));
         var barsHtml = ingPorViaje.map(function(v, i){
           var h  = Math.round(svgH * (v.ing / maxIng));
