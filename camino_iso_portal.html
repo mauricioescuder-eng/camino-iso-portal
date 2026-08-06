@@ -2518,6 +2518,71 @@ function renderTranspTabla(data, tipo) {
         + kpi('Costo cuasi-var / km',  fmt$(_cCuasiKm), 'Repuestos+Mecánicos',    '#378add')
         + kpi('Costo fijo / km',       fmt$(_cFijoKm),  'Sueldos+Seguros+VTV',    '#1E6B2E')
         + '</div>';
+
+      // ── Control de Proceso ────────────────────────────────────────
+      // Calcular ingreso por viaje para cada registro
+      var ingPorViaje = rows.map(function(r){
+        return {
+          fecha: r['fecha viaje'] || r['timestamp'] || '',
+          mat:   r['matricula'] || '',
+          dest:  r['destino'] || '',
+          ing:   toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']),
+          km:    parseFloat(r['km recorridos'])||0,
+          ton:   parseFloat(r['toneladas'])||0
+        };
+      }).filter(function(v){ return v.ing > 0; });
+
+      var n = ingPorViaje.length;
+      if (n > 0) {
+        var avgIng    = totIng / n;
+        var avgKm     = totKm  / n;
+        var avgTon    = totTon / n;
+        var arriba    = ingPorViaje.filter(function(v){ return v.ing >= avgIng; });
+        var abajo     = ingPorViaje.filter(function(v){ return v.ing <  avgIng; });
+        var pctArriba = (arriba.length / n * 100).toFixed(0);
+        var pctAbajo  = (abajo.length  / n * 100).toFixed(0);
+        var sumArriba = arriba.reduce(function(s,v){ return s+v.ing; },0);
+        var sumAbajo  = abajo.reduce(function(s,v){ return s+v.ing; },0);
+
+        // Mini gráfico de barras: cada viaje como barra vs promedio
+        var maxIng = Math.max.apply(null, ingPorViaje.map(function(v){ return v.ing; })) || 1;
+        var barW   = Math.max(8, Math.floor(520 / n) - 2);
+        var svgH   = 60;
+        var avgY   = Math.round(svgH * (1 - avgIng / maxIng));
+        var barsHtml = ingPorViaje.map(function(v, i){
+          var h  = Math.round(svgH * (v.ing / maxIng));
+          var y  = svgH - h;
+          var col = v.ing >= avgIng ? '#1E6B2E' : '#c0392b';
+          var x   = i * (barW + 2);
+          return '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+h+'" fill="'+col+'" rx="2" title="'+v.fecha+' '+fmt$(v.ing)+'" />';
+        }).join('');
+        var svgW = n * (barW + 2);
+        var svgChart = '<svg viewBox="0 0 '+svgW+' '+svgH+'" style="width:100%;height:'+svgH+'px;display:block;overflow:visible">'
+          + barsHtml
+          + '<line x1="0" y1="'+avgY+'" x2="'+svgW+'" y2="'+avgY+'" stroke="#F07820" stroke-width="1.5" stroke-dasharray="4,3"/>'
+          + '<text x="2" y="'+(avgY-3)+'" font-size="9" fill="#F07820" font-weight="600">Prom. '+fmt$(avgIng)+'</text>'
+          + '</svg>';
+
+        indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+          + '<h4 style="margin:0;font-size:13px">📊 Control de Proceso — Ingreso por Viaje</h4>'
+          + '<span style="font-size:11px;color:var(--muted)">Prom. '+fmt$(avgIng)+'/viaje · '+fmtN(avgKm,0)+' km/viaje · '+fmtN(avgTon,1)+' t/viaje</span>'
+          + '</div>'
+          + svgChart
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">'
+          + '<div style="padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
+          + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">▲ POR ENCIMA DEL PROMEDIO</div>'
+          + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+arriba.length+' viajes <span style="font-size:12px;font-weight:600">('+pctArriba+'%)</span></div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumArriba)+'</div>'
+          + '</div>'
+          + '<div style="padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
+          + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">▼ POR DEBAJO DEL PROMEDIO</div>'
+          + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+abajo.length+' viajes <span style="font-size:12px;font-weight:600">('+pctAbajo+'%)</span></div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumAbajo)+'</div>'
+          + '</div>'
+          + '</div></div>';
+      }
+
     } else if (tipo === 'mantenimientos') {
       var totCosto = 0;
       rows.forEach(function(r){ totCosto += toUYU(r['costo'], r['moneda']); });
