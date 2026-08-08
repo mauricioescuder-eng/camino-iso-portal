@@ -2643,10 +2643,18 @@ function renderTranspTabla(data, tipo) {
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
-        + kpi('Registros', rows.length, 'cargas', '#185fa5')
-        + kpi('Litros totales', fmtN(totLt) + ' L', 'acumulado', '#F07820')
-        + kpi('Costo total', fmt$(totFactura), 'acumulado', '#a32d2d')
+      // Km desde viajes para calcular rendimiento
+      var _viajesKm = (window._transpViajesRaw || []).reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); }, 0);
+      var _lPor100km  = _viajesKm > 0 ? (totLt / _viajesKm * 100) : 0;
+      var _kmPorL     = totLt    > 0 ? (_viajesKm / totLt)        : 0;
+      var _combPorKm  = _viajesKm > 0 ? (totFactura / _viajesKm)  : 0;
+      var _precioProm = totLt    > 0 ? (totFactura / totLt)       : 0;
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">'
+        + kpi('Registros',       rows.length,               'cargas',          '#185fa5')
+        + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
+        + kpi('Costo total',     fmt$(totFactura),           'acumulado',       '#a32d2d')
+        + kpi('Rendimiento',     fmtN(_lPor100km,1)+' L/100km', fmtN(_kmPorL,2)+' km/L', '#639922')
+        + kpi('Comb. / km',      fmt$(_combPorKm),           'Prom. '+fmt$(_precioProm)+'/L', '#854f0b')
         + '</div>';
     }
   }
