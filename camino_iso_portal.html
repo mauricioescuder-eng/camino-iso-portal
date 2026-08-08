@@ -2663,7 +2663,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Registros',       rows.length,               'cargas',          '#185fa5')
         + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
         + kpi('Costo total',     fmt$(totFactura),           'acumulado',       '#a32d2d')
-        + kpi('Rendimiento',     fmtN(_lPor100km,1)+' L/100km', fmtN(_kmPorL,2)+' km/L', '#639922')
+        + kpi('Rendimiento',     fmtN(_lPor100km,1)+' L/100km', fmtN(_kmPorL,2)+' km/L · '+fmtN(totLt>0&&_viajesKm>0?totLt/_viajesKm:0,3)+' L/km', '#639922')
         + kpi('Comb. / km',      fmt$(_combPorKm),           'Prom. '+fmt$(_precioProm)+'/L', '#854f0b')
         + '</div>';
     }
