@@ -1467,7 +1467,17 @@ function loadTransporte(vista, btn) {
     } else {
       callTranspAPI({action: vista}, function(data) {
         if (vista === 'viajes')              renderTranspTabla(data, 'viajes');
-        else if (vista === 'combustible')    renderTranspTabla(data, 'combustible');
+        else if (vista === 'combustible') {
+          // Si los viajes ya están en memoria los usamos; si no, los traemos para calcular km
+          if (window._transpViajesRaw && window._transpViajesRaw.length > 0) {
+            renderTranspTabla(data, 'combustible');
+          } else {
+            callTranspAPI({action: 'viajes'}, function(vData) {
+              window._transpViajesRaw = Array.isArray(vData) ? vData : [];
+              renderTranspTabla(data, 'combustible');
+            }, function() { renderTranspTabla(data, 'combustible'); });
+          }
+        }
         else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
         else if (vista === 'flota')          renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')    renderTranspTabla(data, 'costosFijos');
