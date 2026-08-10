@@ -2560,11 +2560,14 @@ function renderTranspTabla(data, tipo) {
       var _cVarKm  = totKm > 0 ? _eVar       / totKm : 0;
       var _cCuasiKm= totKm > 0 ? _eCuasi     / totKm : 0;
       var _cFijoKm = totKm > 0 ? _eFijo      / totKm : 0;
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'
+      var _avgIngViaje = rows.length > 0 ? totIng / rows.length : 0;
+      var _avgIngTon   = totTon > 0 ? totIng / totTon : 0;
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:10px">'
         + kpi('Registros',    rows.length,          'viajes',                    '#185fa5')
         + kpi('Km totales',   fmtN(totKm)+' km',    'acumulado',                 '#639922')
         + kpi('Toneladas',    fmtN(totTon)+' t',    'transportadas',             '#854f0b')
         + kpi('Ingresos UYU', fmt$(totIng),          'T/C: $'+fmtN(tc),          '#0f6e56')
+        + kpi('Ing. prom. / viaje', fmt$(_avgIngViaje), fmt$(_avgIngTon)+'/ton', '#7B3F00')
         + '</div>'
         + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
         + kpi('Costo total / km',      fmt$(_cKm),      'Variable+Cuasi+Fijo',    '#c0392b')
