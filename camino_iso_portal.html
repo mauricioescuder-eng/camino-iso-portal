@@ -1367,8 +1367,8 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
 // ═══════════════════════════════════════════════════════
-// URL dinámica: se asigna desde session.apiUrl al hacer login
-var TRANSP_API = '';
+// URL dinámica: se asigna desde session.apiUrl al hacer login; si no hay, se usa esta por defecto
+var TRANSP_API = 'https://script.google.com/macros/s/AKfycbxoHVPgM6uP8PEkU7LvcBetA5H1vX293LjpDGQwOx-VsynleiIs7EH_7YkVrSf_I6Kg/exec';
 function getTranspApi() { return (session && session.apiUrl) ? session.apiUrl : TRANSP_API; }
 var _transpVista = 'kpis';
 
