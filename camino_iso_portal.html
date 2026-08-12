@@ -1895,11 +1895,28 @@ function renderTranspKPIs(data, viajes) {
   var mantArr = data.mantArr || window._transpMantArr || [];
   function getMesKey(fecha) {
     var s = String(fecha||'').trim();
+    if (!s) return null;
+    // Formato ISO: yyyy-mm-dd (o con hora/T)
     var m = s.match(/^(\d{4})-(\d{2})/);
-    if (!m) return null;
-    var mo = parseInt(m[2], 10);
-    if (mo < 1 || mo > 12) return null;
-    return {key: m[1]+'-'+m[2], label: MESES_LABEL[mo-1]||String(mo)};
+    if (m) {
+      var mo = parseInt(m[2], 10);
+      if (mo < 1 || mo > 12) return null;
+      return {key: m[1]+'-'+m[2], label: MESES_LABEL[mo-1]||String(mo)};
+    }
+    // Formato dd/mm/yyyy (típico de Sheets en español/UY)
+    var m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m2) {
+      var mo2 = parseInt(m2[2], 10);
+      if (mo2 < 1 || mo2 > 12) return null;
+      return {key: m2[3]+'-'+(mo2<10?'0':'')+mo2, label: MESES_LABEL[mo2-1]||String(mo2)};
+    }
+    // Fallback: dejar que el motor de fechas de JS lo interprete (p.ej. "Tue Aug 12 2026 ...")
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      var yr = d.getFullYear(), mo3 = d.getMonth()+1;
+      return {key: yr+'-'+(mo3<10?'0':'')+mo3, label: MESES_LABEL[mo3-1]||String(mo3)};
+    }
+    return null;
   }
   // Combustible → Variable
   combArr.forEach(function(c) {
