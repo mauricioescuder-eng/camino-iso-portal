@@ -2577,7 +2577,7 @@ function renderTranspTabla(data, tipo) {
         + '</div>';
 
       // ── Control de Proceso ────────────────────────────────────────
-      // Calcular ingreso por viaje para cada registro
+      // Calcular ingreso por viaje para cada registro (todos, incluidos tarifa=0)
       var ingPorViaje = rows.map(function(r){
         return {
           fecha: r['fecha viaje'] || r['timestamp'] || '',
@@ -2587,13 +2587,14 @@ function renderTranspTabla(data, tipo) {
           km:    parseFloat(r['km recorridos'])||0,
           ton:   parseFloat(r['toneladas'])||0
         };
-      }).filter(function(v){ return v.ing > 0; });
+      });
 
       var n = ingPorViaje.length;
       if (n > 0) {
-        var avgIng    = totIng / n;
-        var avgKm     = totKm  / n;
-        var avgTon    = totTon / n;
+        // Promedios consistentes con los KPI cards (usa todos los viajes)
+        var avgIng = totIng / n;
+        var avgKm  = totKm  / n;
+        var avgTon = totTon / n;
         var arriba    = ingPorViaje.filter(function(v){ return v.ing >= avgIng; });
         var abajo     = ingPorViaje.filter(function(v){ return v.ing <  avgIng; });
         var pctArriba = (arriba.length / n * 100).toFixed(0);
