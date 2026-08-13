@@ -1514,6 +1514,15 @@ function callTranspAPI(params, cb, onTimeout) {
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
 function fmtN(n, dec){ var d=dec||0; return (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+var _MESES_LABEL_G = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function getMesKey(fecha) {
+  var s = String(fecha||'').trim();
+  var m = s.match(/^(\d{4})-(\d{2})/);
+  if (!m) return null;
+  var mo = parseInt(m[2], 10);
+  if (mo < 1 || mo > 12) return null;
+  return {key: m[1]+'-'+m[2], label: _MESES_LABEL_G[mo-1]||String(mo)};
+}
 
 function aplicarFiltrosTransp() {
   var raw  = window._transpViajesRaw || [];
@@ -2663,13 +2672,62 @@ function renderTranspTabla(data, tipo) {
       var _kmPorL     = totLt    > 0 ? (_viajesKm / totLt)        : 0;
       var _combPorKm  = _viajesKm > 0 ? (totFactura / _viajesKm)  : 0;
       var _precioProm = totLt    > 0 ? (totFactura / totLt)       : 0;
+      // Agrupar por mes: litros y costo
+      var _combPorMes = {};
+      rows.forEach(function(r) {
+        var mk = getMesKey(r['fecha factura'] || r['timestamp'] || '');
+        if (!mk) return;
+        if (!_combPorMes[mk.key]) _combPorMes[mk.key] = { label: mk.label, litros: 0, costo: 0 };
+        _combPorMes[mk.key].litros += parseFloat(r['litros']) || 0;
+        _combPorMes[mk.key].costo  += parseFloat(r['total'])  || 0;
+      });
+      var _combMeses = Object.keys(_combPorMes).sort().map(function(k){ return _combPorMes[k]; });
+
+      var _combChartHtml = '';
+      if (_combMeses.length > 0) {
+        var _maxCosto = Math.max.apply(null, _combMeses.map(function(m){ return m.costo; })) || 1;
+        var _maxLt    = Math.max.apply(null, _combMeses.map(function(m){ return m.litros; })) || 1;
+        var _svgH = 140, _svgW = Math.max(300, _combMeses.length * 100);
+        var _bw = Math.floor(_svgW / _combMeses.length) - 16;
+        var _barsC = '', _barsL = '', _labelsX = '';
+        _combMeses.forEach(function(m, i) {
+          var x  = i * (_bw + 16) + 8;
+          var hC = Math.round(_svgH * 0.85 * (m.costo  / _maxCosto));
+          var hL = Math.round(_svgH * 0.85 * (m.litros / _maxLt));
+          var yC = _svgH - hC - 20;
+          var yL = _svgH - hL - 20;
+          // Barra costo (azul oscuro)
+          _barsC += '<rect x="'+x+'" y="'+yC+'" width="'+Math.floor(_bw*0.48)+'" height="'+hC+'" fill="#185fa5" rx="2"/>';
+          _barsC += '<text x="'+(x+Math.floor(_bw*0.24))+'" y="'+(yC-3)+'" font-size="8" fill="#185fa5" text-anchor="middle">'+fmtN(m.costo/1000,0)+'k</text>';
+          // Barra litros (naranja)
+          var xL = x + Math.floor(_bw*0.52);
+          _barsL += '<rect x="'+xL+'" y="'+yL+'" width="'+Math.floor(_bw*0.48)+'" height="'+hL+'" fill="#F07820" rx="2"/>';
+          _barsL += '<text x="'+(xL+Math.floor(_bw*0.24))+'" y="'+(yL-3)+'" font-size="8" fill="#F07820" text-anchor="middle">'+fmtN(m.litros,0)+'L</text>';
+          // Etiqueta mes
+          _labelsX += '<text x="'+(x+_bw/2)+'" y="'+(_svgH-6)+'" font-size="9" fill="var(--muted)" text-anchor="middle">'+m.label+'</text>';
+        });
+        _combChartHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          + '<h4 style="margin:0;font-size:13px">⛽ Combustible por Mes</h4>'
+          + '<span style="font-size:11px;color:var(--muted)">'
+          + '<span style="display:inline-block;width:10px;height:10px;background:#185fa5;border-radius:2px;margin-right:4px"></span>Costo ($U)'
+          + '&nbsp;&nbsp;<span style="display:inline-block;width:10px;height:10px;background:#F07820;border-radius:2px;margin-right:4px"></span>Litros'
+          + '</span>'
+          + '</div>'
+          + '<div style="overflow-x:auto">'
+          + '<svg viewBox="0 0 '+_svgW+' '+_svgH+'" style="width:100%;min-width:'+_svgW+'px;height:'+_svgH+'px;display:block">'
+          + _barsC + _barsL + _labelsX
+          + '</svg></div></div>';
+      }
+
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">'
         + kpi('Registros',       rows.length,               'cargas',          '#185fa5')
         + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
         + kpi('Costo total',     fmt$(totFactura),           'acumulado',       '#a32d2d')
         + kpi('Consumo / km',    fmtN(_viajesKm>0?totLt/_viajesKm:0,2)+' L/km', fmtN(_lPor100km,1)+' L/100km · '+fmtN(_kmPorL,2)+' km/L', '#639922')
         + kpi('Costo comb. / km', fmt$(_combPorKm),          'Prom. '+fmt$(_precioProm)+'/L', '#854f0b')
-        + '</div>';
+        + '</div>'
+        + _combChartHtml;
     }
   }
   document.getElementById('transp-indicadores').innerHTML = indicHtml;
