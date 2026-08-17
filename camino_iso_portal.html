@@ -429,6 +429,16 @@ var _CLIENTES = {
   // Para agregar cliente: ,'9999': { nombre:'Nuevo', clienteId:'nuevo', apiUrl:'https://script.google.com/.../exec' }
 };
 
+// Usuarios admin: { usuario → {password, rol, clienteid, apiUrl} }
+var _USUARIOS = {
+  'admin': {
+    password: 'elodia',
+    rol: 'admin',
+    clienteid: '',
+    apiUrl: 'https://script.google.com/macros/s/AKfycbzoLKARQn9mo5t4QabEppbDuE7EI0mE7GeUoAbloO0PyoE6IL-CJTL7kefpujLbB6Tm/exec'
+  }
+};
+
 function toggleAdminLogin(e) {
   e.preventDefault();
   var fields = document.getElementById('admin-login-fields');
@@ -455,13 +465,13 @@ async function doLogin(){
 
   // Login admin (usuario + contraseña)
   if (!usuario || !password) { showError('Ingresá usuario y contraseña'); return; }
-  btn.textContent = 'Ingresando...'; btn.disabled = true;
-  try {
-    var data = await callAPI({action:'login', usuario:usuario, password:password});
-    if(data.ok){ session = data.user; startApp(); }
-    else { showError(data.error || 'Error de acceso'); }
-  } catch(e){ showError('Error de conexión'); }
-  btn.textContent = 'Ingresar'; btn.disabled = false;
+  var u = _USUARIOS[usuario.toLowerCase()];
+  if (u && u.password === password) {
+    session = { usuario: usuario, rol: u.rol, clienteid: u.clienteid || '', apiUrl: u.apiUrl || '' };
+    startApp();
+  } else {
+    showError('Usuario o contraseña incorrectos');
+  }
 }
 
 function showError(msg){ var el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
