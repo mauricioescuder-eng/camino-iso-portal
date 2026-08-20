@@ -376,7 +376,7 @@ tr:hover td{background:#faf9f6}
 <div class="toast" id="toast"></div>
 
 <script>
-var API = 'https://script.google.com/macros/s/AKfycbyLsoln7PY8DSTdQnx9sO0iGTqNWeACelXWjDR58j82ZPSh8I_3FU1P9ryiLgtvQN8epg/exec';
+var API = 'https://script.google.com/macros/s/AKfycbzGUUU5jtY7GVkh92KV31nqlxk3bPFMfPIkOlyAkJmG2NzzddFDca7y5Z40pW3-n78Ykg/exec';
 function loadConfig(){ return Promise.resolve(); }
 
 function callAPI(params){
@@ -837,27 +837,27 @@ function loadRegistros(tipo, btn){
       seen[key] = true;
       return true;
     });
-    // Corregir headers incorrectos en Registros_Alimentacion (causado por reorganizarRegistros)
+    // Normalizar campos de Alimentación (soporta columnas viejas y nuevas del GAS)
     data = data.map(function(r){
       if(!r.tipo_registro || r.tipo_registro.toLowerCase().indexOf('aliment') < 0) return r;
       return {
         'fecha_registro': r['fecha_registro'],
-        'tipo_registro': r['tipo_registro'],
-        'clienteid': r['clienteid'],
-        'timestamp': r['timestamp'],
-        'fecha': r['fecha'],
-        'lote': r['lote afectado'],
-        'etapa de alimentación': r['tipo de evento'],
-        'fibra (kg)': r['cantidad de animales involucrados'],
-        'grano (kg)': r['diagnóstico / motivo'],
-        'núcleo mineral (kg)': r['medicamento / vacuna aplicada'],
-        'subproducto (kg)': r['dosis aplicada'],
-        '¿se cumplió el plan de alimentación?': r['vía de administración'],
-        '¿hubo rechazo de alimento en comederos?': r['período de carencia (días)'],
-        'disponibilidad de agua en bebederos': r['fecha habilitada para faena'],
-        'causa del desvío (si hubo)': r['responsable del tratamiento'],
-        'observaciones': r['observaciones / evolución esperada'],
-        'registrado por': r['cual es tu código de cliente?']
+        'tipo_registro':  r['tipo_registro'],
+        'clienteid':      r['clienteid'],
+        'timestamp':      r['timestamp'],
+        'fecha':          r['fecha'],
+        'lote':                              r['lote'] || r['lote afectado'],
+        'etapa de alimentación':             r['etapa de alimentación'] || r['tipo de evento'],
+        'fibra (kg)':                        r['fibra (kg)'] || r['cantidad de animales involucrados'],
+        'grano (kg)':                        r['grano (kg)'] || r['diagnóstico / motivo'],
+        'núcleo mineral (kg)':               r['núcleo mineral (kg)'] || r['medicamento / vacuna aplicada'],
+        'subproducto (kg)':                  r['subproducto (kg)'] || r['dosis aplicada'],
+        '¿se cumplió el plan de alimentación?':  r['¿se cumplió el plan de alimentación?'] || r['vía de administración'],
+        '¿hubo rechazo de alimento en comederos?': r['¿hubo rechazo de alimento en comederos?'] || r['período de carencia (días)'],
+        'disponibilidad de agua en bebederos':   r['disponibilidad de agua en bebederos'] || r['fecha habilitada para faena'],
+        'causa del desvío (si hubo)':        r['causa del desvío (si hubo)'] || r['responsable del tratamiento'],
+        'observaciones':                     r['observaciones'] || r['observaciones / evolución esperada'],
+        'registrado por':                    r['registrado por'] || r['cual es tu código de cliente?']
       };
     });
     var tipoLower = apiTipo.toLowerCase();
@@ -1568,8 +1568,19 @@ function aplicarFiltrosTransp() {
     if (mat && m['matricula'] !== mat)        return false;
     return true;
   });
+  // CAMBIO 1: incluir costos fijos filtrados por período y matrícula
+  var fijosAll = window._transpFijosArr || [];
+  var fijosArrFilt = fijosAll.filter(function(f) {
+    var fecha = f['fecha'] || '';
+    if (per && !fecha.startsWith(per)) return false;
+    if (mat) {
+      var fMat = String(f['matrícula'] || f['matricula'] || '').trim();
+      if (fMat && fMat !== mat) return false;
+    }
+    return true;
+  });
 
-  // Recalcular costosPorMatricula con los costos filtrados
+  // Recalcular costosPorMatricula con los costos filtrados (comb + mant + fijos)
   var costosPorMat = {};
   combFilt.forEach(function(c) {
     var m2 = c['matricula'] || ''; if (!m2) return;
@@ -1578,6 +1589,10 @@ function aplicarFiltrosTransp() {
   mantFilt.forEach(function(m) {
     var m2 = m['matricula'] || ''; if (!m2) return;
     costosPorMat[m2] = (costosPorMat[m2]||0) + (parseFloat(m['costo'])||0);
+  });
+  fijosArrFilt.forEach(function(f) {
+    var m2 = f['matrícula'] || f['matricula'] || ''; if (!m2) return;
+    costosPorMat[m2] = (costosPorMat[m2]||0) + (parseFloat(f['monto'])||0);
   });
   var costoTotal = Object.values(costosPorMat).reduce(function(s,v){ return s+v; }, 0);
 
@@ -1592,6 +1607,7 @@ function aplicarFiltrosTransp() {
     combArr: combFilt,
     mantArr: mantFilt,
     flotaArr: flotaFilt,
+    fijosArr: fijosArrFilt,
     costosPorMatricula: costosPorMat,
     costoTotal: costoTotal
   });
@@ -2666,13 +2682,130 @@ function renderTranspTabla(data, tipo) {
       }
 
     } else if (tipo === 'mantenimientos') {
-      var totCosto = 0;
-      rows.forEach(function(r){ totCosto += toUYU(r['costo'], r['moneda']); });
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+      var totCosto = 0, totKm = 0;
+      var nPrev = 0, nCorr = 0;
+      rows.forEach(function(r){
+        totCosto += toUYU(r['costo'], r['moneda']);
+        totKm    += parseFloat(r['km equipo']) || 0;
+        var t = String(r['tipo']||r['tipo de intervención']||'').toLowerCase();
+        if      (t.indexOf('prev') >= 0) nPrev++;
+        else if (t.indexOf('corr') >= 0) nCorr++;
+      });
+      var pctPrev = rows.length > 0 ? Math.round(nPrev / rows.length * 100) : 0;
+      var pctCorr = rows.length > 0 ? Math.round(nCorr / rows.length * 100) : 0;
+      var costoPorKmMant = totKm > 0 ? totCosto / totKm : 0;
+
+      // Disponibilidad: % camiones de flota sin correctivos en el período
+      var flotaTotal = (window._transpFlotaArr || []).length;
+      var matsConCorr = {};
+      rows.forEach(function(r){ if (String(r['tipo']||'').toLowerCase().indexOf('corr') >= 0) matsConCorr[r['matricula']] = 1; });
+      var dispPct = flotaTotal > 0 ? Math.round((flotaTotal - Object.keys(matsConCorr).length) / flotaTotal * 100) : 100;
+
+      // ── Pareto por área ──────────────────────────────────────────
+      var _areaCostos = {};
+      rows.forEach(function(r){
+        var a = r['area'] || 'Sin área';
+        _areaCostos[a] = (_areaCostos[a]||0) + toUYU(r['costo'], r['moneda']);
+      });
+      var _areaSorted = Object.keys(_areaCostos).map(function(a){ return {area:a, costo:_areaCostos[a]}; })
+                          .sort(function(a,b){ return b.costo - a.costo; });
+      var _paretoHtml = '';
+      if (_areaSorted.length > 0) {
+        var _maxA = _areaSorted[0].costo || 1;
+        var _accum = 0, _totA = totCosto || 1;
+        var _paretoRows = '';
+        _areaSorted.forEach(function(a) {
+          var pct2 = Math.round(a.costo / _maxA * 100);
+          _accum += a.costo;
+          var cumPct = Math.round(_accum / _totA * 100);
+          _paretoRows += '<tr style="border-bottom:1px solid var(--border)">'
+            + '<td style="padding:5px 8px;font-size:12px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="'+a.area+'">'+a.area+'</td>'
+            + '<td style="padding:5px 8px;min-width:120px">'
+            + '<div style="display:flex;align-items:center;gap:6px">'
+            + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden">'
+            + '<div style="width:'+pct2+'%;height:100%;background:#185fa5;border-radius:2px"></div></div>'
+            + '<span style="font-size:11px;font-weight:600;color:var(--text);min-width:52px;text-align:right">'+fmt$(a.costo)+'</span>'
+            + '</div></td>'
+            + '<td style="padding:5px 8px;font-size:11px;text-align:right;color:var(--muted)">'+cumPct+'%</td>'
+            + '</tr>';
+        });
+        _paretoHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">📊 Pareto de Costos por Área</h4>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr style="background:var(--gray)">'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Área</th>'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Costo UYU</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Acum.</th>'
+          + '</tr></thead><tbody>' + _paretoRows + '</tbody></table></div></div>';
+      }
+
+      // ── Evolución mensual ────────────────────────────────────────
+      var _mantMes = {};
+      rows.forEach(function(r){
+        var mk = getMesKey(r['fecha']||r['timestamp']||''); if (!mk) return;
+        if (!_mantMes[mk.key]) _mantMes[mk.key] = {label:mk.label, costo:0, n:0};
+        _mantMes[mk.key].costo += toUYU(r['costo'], r['moneda']);
+        _mantMes[mk.key].n++;
+      });
+      var _mantMesesArr = Object.keys(_mantMes).sort().map(function(k){ return _mantMes[k]; });
+      var _evolHtml = '';
+      if (_mantMesesArr.length > 1) {
+        var _maxMC = Math.max.apply(null, _mantMesesArr.map(function(m){ return m.costo; })) || 1;
+        var _svgH2 = 130, _svgW2 = Math.max(300, _mantMesesArr.length * 90);
+        var _bw2 = Math.floor(_svgW2 / _mantMesesArr.length) - 14;
+        var _bars2 = '', _labs2 = '';
+        _mantMesesArr.forEach(function(m, i){
+          var x = i*(_bw2+14)+7;
+          var h = Math.round(_svgH2*0.8*(m.costo/_maxMC));
+          var y = _svgH2 - h - 20;
+          _bars2 += '<rect x="'+x+'" y="'+y+'" width="'+_bw2+'" height="'+h+'" fill="#185fa5" rx="2"/>';
+          _bars2 += '<text x="'+(x+_bw2/2)+'" y="'+(y-3)+'" font-size="8" fill="#185fa5" text-anchor="middle">'+fmtN(m.costo/1000,0)+'k</text>';
+          _labs2 += '<text x="'+(x+_bw2/2)+'" y="'+(_svgH2-6)+'" font-size="9" fill="var(--muted)" text-anchor="middle">'+m.label+'</text>';
+        });
+        _evolHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">📈 Evolución Mensual de Costos</h4>'
+          + '<div style="overflow-x:auto"><svg viewBox="0 0 '+_svgW2+' '+_svgH2+'" style="width:100%;min-width:'+_svgW2+'px;height:'+_svgH2+'px;display:block">'
+          + _bars2 + _labs2 + '</svg></div></div>';
+      }
+
+      // ── Por taller ───────────────────────────────────────────────
+      var _tallerCostos = {};
+      rows.forEach(function(r){
+        var t = r['taller'] || 'Sin especificar';
+        _tallerCostos[t] = (_tallerCostos[t]||0) + toUYU(r['costo'], r['moneda']);
+      });
+      var _tallerArr = Object.keys(_tallerCostos).map(function(t){ return {taller:t, costo:_tallerCostos[t]}; })
+                        .sort(function(a,b){ return b.costo - a.costo; });
+      var _tallerHtml = '';
+      if (_tallerArr.length > 1) {
+        var _maxT = _tallerArr[0].costo || 1;
+        var _tRows = '';
+        _tallerArr.forEach(function(t){
+          var p = Math.round(t.costo / _maxT * 100);
+          _tRows += '<tr style="border-bottom:1px solid var(--border)">'
+            + '<td style="padding:5px 8px;font-size:12px">'+t.taller+'</td>'
+            + '<td style="padding:5px 8px"><div style="display:flex;align-items:center;gap:6px">'
+            + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden"><div style="width:'+p+'%;height:100%;background:#F07820;border-radius:2px"></div></div>'
+            + '<span style="font-size:11px;font-weight:600;min-width:52px;text-align:right">'+fmt$(t.costo)+'</span>'
+            + '</div></td></tr>';
+        });
+        _tallerHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">🔧 Costo por Taller</h4>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr style="background:var(--gray)">'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Taller</th>'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Costo UYU</th>'
+          + '</tr></thead><tbody>' + _tRows + '</tbody></table></div></div>';
+      }
+
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
         + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
-        + kpi('Costo promedio', fmt$(rows.length ? totCosto/rows.length : 0), 'por intervención', '#378add')
-        + '</div>';
+        + kpi('% Prev. / Corr.', pctPrev+'% / '+pctCorr+'%', nPrev+' prev. · '+nCorr+' corr.', nCorr > nPrev ? '#b97c0a' : '#0f6e56')
+        + kpi('Costo / km', costoPorKmMant > 0 ? fmt$(costoPorKmMant)+'/km' : '—', totKm > 0 ? fmtN(totKm,0)+' km equipo' : 'sin km', '#378add')
+        + kpi('Disponibilidad', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones sin correctivos', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
+        + '</div>'
+        + _paretoHtml + _evolHtml + _tallerHtml;
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
@@ -2745,7 +2878,7 @@ function renderTranspTabla(data, tipo) {
   var colMap = {
     viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
     combustible:    ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
-    mantenimientos: ['fecha','moneda','matricula','area','detalle','km equipo','taller','costo','factura'],
+    mantenimientos: ['fecha','tipo','moneda','matricula','area','detalle','km equipo','taller','costo','factura'],
     flota:          ['matricula','modelo','ano','tipo','chofer habitual','estado']
   };
   var labelMap = {
@@ -2755,7 +2888,7 @@ function renderTranspTabla(data, tipo) {
     'tipo de carga':'Carga','km recorridos':'Km',
     'peajes':'Peajes','viaticos':'Viáticos','tarifa':'Tarifa/km',
     'ingreso':'Ingreso','costo':'Costo','detalle':'Detalle',
-    'area':'Área','litros':'Litros','proveedor':'Proveedor',
+    'tipo':'Tipo','area':'Área','litros':'Litros','proveedor':'Proveedor',
     'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.'
   };
   var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
