@@ -1410,6 +1410,8 @@ function loadTransporte(vista, btn) {
   }
   document.getElementById('transp-contenido').innerHTML = '<div class="loading" style="padding:40px;text-align:center">Cargando...</div>';
   document.getElementById('transp-indicadores').innerHTML = '';
+  // Limpiar caché del GAS antes de cargar para garantizar datos frescos
+  callTranspAPI({action:'clearCache'}, function(){}, function(){});
 
   if (vista === 'kpis') {
     document.getElementById('transp-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando datos...</div>';
