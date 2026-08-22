@@ -436,6 +436,13 @@ var _USUARIOS = {
     rol: 'admin',
     clienteid: '',
     apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec'
+  },
+  'jorajuria': {
+    password: 'Manuel',
+    rol: 'cliente',
+    clienteid: 'jorajuria',
+    nombre: 'Transporte Jorajuria',
+    apiUrl: 'PENDIENTE'
   }
 };
 
@@ -480,10 +487,23 @@ function logout(){ session=null; document.getElementById('app').style.display='n
 function startApp(){
   document.getElementById('login-wrap').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('topbar-user').textContent = session.usuario;
-  document.getElementById('topbar-client').textContent = session.rol==='admin' ? '👑 Administrador' : (session.clienteid||'');
-  document.getElementById('dash-title').textContent = session.rol==='admin' ? 'Panel de Administración' : 'Bienvenido, '+session.usuario;
-  if(session.rol==='admin') document.querySelectorAll('.admin-only').forEach(function(el){ el.style.display=''; });
+  var nombreMostrar = session.nombre || session.usuario || '';
+  document.getElementById('topbar-user').textContent = nombreMostrar;
+  document.getElementById('topbar-client').textContent = session.rol==='admin' ? '👑 Administrador' : (session.nombre || session.clienteid || '');
+  document.getElementById('dash-title').textContent = session.rol==='admin' ? 'Panel de Administración' : 'Bienvenido, ' + nombreMostrar;
+  if(session.rol==='admin'){
+    document.querySelectorAll('.admin-only').forEach(function(el){ el.style.display=''; });
+  } else if(session.clienteid === 'jorajuria'){
+    // Cliente transporte: ocultar secciones ISO, mostrar solo Transporte
+    var ocultarTextos = ['Dashboard','Proyectos','Documentos ISO','Indicadores','Archivos','Ganadería'];
+    document.querySelectorAll('.sidebar-btn').forEach(function(btn){
+      var txt = btn.textContent.trim();
+      var esOcultar = ocultarTextos.some(function(t){ return txt.indexOf(t) >= 0; });
+      if(esOcultar) btn.style.display='none';
+    });
+    document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
+    setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
+  }
   loadAll();
 }
 
