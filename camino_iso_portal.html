@@ -309,6 +309,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
             <button class="fb" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
             <button class="fb" onclick="loadTransporte('flota',this)">🚚 Flota</button>
+            <button class="fb" onclick="loadTransporte('documentacion',this)">📄 Documentación</button>
             <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
             <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
           </div>
@@ -1479,6 +1480,8 @@ function loadTransporte(vista, btn) {
   } else {
     if (vista === 'costos-fijos') {
       renderFormCostosFijos();
+    } else if (vista === 'documentacion') {
+      renderDocumentacion();
     } else {
       callTranspAPI({action: vista}, function(data) {
         if (vista === 'viajes')              renderTranspTabla(data, 'viajes');
@@ -1493,9 +1496,9 @@ function loadTransporte(vista, btn) {
             }, function() { renderTranspTabla(data, 'combustible'); });
           }
         }
-        else if (vista === 'mantenimientos') renderTranspTabla(data, 'mantenimientos');
-        else if (vista === 'flota')          renderTranspTabla(data, 'flota');
-        else if (vista === 'tabla-fijos')    renderTranspTabla(data, 'costosFijos');
+        else if (vista === 'mantenimientos')  renderTranspTabla(data, 'mantenimientos');
+        else if (vista === 'flota')           renderTranspTabla(data, 'flota');
+        else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
       });
     }
   }
@@ -2600,6 +2603,82 @@ function td(txt, align, color) {
   return '<td style="padding:8px;' + (align==='r'?'text-align:right;':'') + (color?'color:'+color+';':'') + '">' + txt + '</td>';
 }
 
+function renderDocumentacion() {
+  var cont = document.getElementById('transp-contenido');
+  var ind  = document.getElementById('transp-indicadores');
+  ind.innerHTML = '';
+  cont.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando documentación...</div>';
+
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  function diasHasta(fechaStr) {
+    if (!fechaStr) return null;
+    var d = new Date(fechaStr); if (isNaN(d)) return null;
+    return Math.round((d - hoy) / 86400000);
+  }
+  function estadoBadge(dias) {
+    if (dias === null) return '<span style="color:var(--muted);font-size:11px">—</span>';
+    if (dias < 0)   return '<span style="background:#a32d2d;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Vencido</span>';
+    if (dias <= 30) return '<span style="background:#c77700;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Vence en '+dias+'d</span>';
+    if (dias <= 60) return '<span style="background:#d4a017;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">'+dias+'d</span>';
+    return '<span style="background:#1a6b2e;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">'+dias+'d</span>';
+  }
+  function buildTable(title, rows, cols, icon) {
+    if (!rows || rows.length === 0) return '<div class="card" style="margin-bottom:16px;padding:20px"><b>'+icon+' '+title+'</b><p style="color:var(--muted);margin-top:8px">Sin registros.</p></div>';
+    var h = '<div class="card" style="margin-bottom:16px;overflow-x:auto"><div style="padding:14px 16px 10px;font-weight:700;font-size:14px">'+icon+' '+title+'</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
+    cols.forEach(function(c){ h += '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">'+c+'</th>'; });
+    h += '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">Estado</th></tr></thead><tbody>';
+    rows.forEach(function(r, i) {
+      var bg = i%2===0 ? '' : 'background:var(--gray)';
+      var dias = diasHasta(r.vto);
+      h += '<tr style="'+bg+'">';
+      r.vals.forEach(function(v){ h += '<td style="padding:7px 8px">'+v+'</td>'; });
+      h += '<td style="padding:7px 8px;text-align:center">'+estadoBadge(dias)+'</td></tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  callTranspAPI({action:'docCamiones'}, function(dc) {
+    callTranspAPI({action:'docChoferes'}, function(dch) {
+      // Alertas de vencimiento próximo (≤60 días)
+      var alertas = [];
+      (Array.isArray(dc)?dc:[]).concat(Array.isArray(dch)?dch:[]).forEach(function(r) {
+        var dias = diasHasta(r['fecha_vencimiento']);
+        if (dias !== null && dias <= 60) {
+          var quien = r['matricula'] || r['chofer'] || '';
+          alertas.push({quien:quien, tipo:r['tipo'], dias:dias});
+        }
+      });
+      var alertHtml = '';
+      if (alertas.length > 0) {
+        alertas.sort(function(a,b){ return a.dias - b.dias; });
+        alertHtml = '<div class="card" style="margin-bottom:16px;padding:16px;border-left:4px solid #c77700">'
+          +'<div style="font-weight:700;margin-bottom:10px">⚠️ Vencimientos próximos (60 días)</div>';
+        alertas.forEach(function(a) {
+          var color = a.dias < 0 ? '#a32d2d' : a.dias <= 30 ? '#c77700' : '#856b00';
+          alertHtml += '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">'
+            +'<span><b>'+a.quien+'</b> — '+a.tipo+'</span>'
+            +'<span style="color:'+color+';font-weight:600">'+(a.dias<0?'Vencido hace '+Math.abs(a.dias)+'d':'En '+a.dias+'d')+'</span></div>';
+        });
+        alertHtml += '</div>';
+      }
+
+      var dcRows = (Array.isArray(dc)?dc:[]).map(function(r){
+        return {vto: r['fecha_vencimiento'], vals: [r['matricula'],r['tipo'],r['numero']||'—',r['proveedor']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
+      });
+      var dchRows = (Array.isArray(dch)?dch:[]).map(function(r){
+        return {vto: r['fecha_vencimiento'], vals: [r['chofer'],r['tipo'],r['numero']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
+      });
+
+      var html = alertHtml
+        + buildTable('Documentación de Camiones', dcRows, ['Matrícula','Tipo','N° Documento','Proveedor / Aseg.','Emisión','Vencimiento'], '🚛')
+        + buildTable('Documentación de Choferes', dchRows, ['Chofer','Tipo','N° Documento','Emisión','Vencimiento'], '👤');
+
+      cont.innerHTML = html;
+    }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
+  }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
+}
+
 function renderTranspTabla(data, tipo) {
   var rows = Array.isArray(data) ? data : [];
   var tc = getTc();
@@ -2920,7 +2999,7 @@ function renderTranspTabla(data, tipo) {
     viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
     combustible:    ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
     mantenimientos: ['fecha','tipo','moneda','matricula','area','detalle','km equipo','taller','costo','factura'],
-    flota:          ['matricula','modelo','ano','tipo','chofer habitual','estado']
+    flota:          ['matricula','marca','modelo','año','tipo','propietario','chasis','motor']
   };
   var labelMap = {
     'fecha viaje':'Fecha','matricula':'Matrícula','fecha factura':'Fecha',
@@ -2930,7 +3009,8 @@ function renderTranspTabla(data, tipo) {
     'peajes':'Peajes','viaticos':'Viáticos','tarifa':'Tarifa/km',
     'ingreso':'Ingreso','costo':'Costo','detalle':'Detalle',
     'tipo':'Tipo','area':'Área','litros':'Litros','proveedor':'Proveedor',
-    'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.'
+    'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.',
+    'marca':'Marca','año':'Año','propietario':'Propietario','chasis':'N° Chasis','motor':'N° Motor'
   };
   var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
 
