@@ -1817,7 +1817,22 @@ function renderTranspKPIs(data, viajes) {
   var totalIng = viajes.reduce(function(s,v){ return s+toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']); },0);
   // DAX: Costo total = Variable + Cuasi variable + Fijo (ya incluidos en data.costoTotal)
   var costosPorMat = data.costosPorMatricula || {};
-  var totalCosto = parseFloat(data.costoTotal) || Object.values(costosPorMat).reduce(function(s,v){ return s+v; },0);
+  var totalCosto = parseFloat(data.costoTotal) || 0;
+  // Fallback: si costoTotal es 0 (ej. costosFijos hizo timeout), recalcular desde arrays disponibles
+  if (!totalCosto) {
+    var combArr0b = data.combArr || window._transpCombArr || [];
+    var mantArr0b = data.mantArr || window._transpMantArr || [];
+    var fijosArr0b = data.fijosArr || window._transpFijosArr || [];
+    combArr0b.forEach(function(c){ totalCosto += parseFloat(c['total'])||0; });
+    mantArr0b.forEach(function(m){ totalCosto += parseFloat(m['costo'])||0; });
+    fijosArr0b.forEach(function(f){ totalCosto += parseFloat(f['monto'])||0; });
+    // Reconstruir costosPorMat también
+    if (!Object.keys(costosPorMat).length) {
+      combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+(parseFloat(c['total'])||0); });
+      mantArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+(parseFloat(c['costo'])||0); });
+      fijosArr0b.forEach(function(c){ var m=c['matrícula']||c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+(parseFloat(c['monto'])||0); });
+    }
+  }
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
   // DAX: % Margen = DIVIDE([Margen], [Ingresos Totales])
