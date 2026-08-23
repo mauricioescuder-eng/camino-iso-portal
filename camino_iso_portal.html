@@ -1834,7 +1834,28 @@ function renderTranspKPIs(data, viajes) {
   // Litros de gasoil
   var combArr0 = data.combArr || window._transpCombArr || [];
   var totalLitros  = combArr0.reduce(function(s,c){ return s+(parseFloat(c['litros'])||0); },0);
-  var litrosPorKm  = totalKm > 0 ? (totalLitros / totalKm * 100) : 0; // L/100km
+  // L/100km usando odómetro: diferencia de km entre cargas consecutivas por camión
+  var litrosPorKm = 0;
+  var combConKm = combArr0.filter(function(c){ return (parseFloat(c['km actuales'])||0) > 0; });
+  if (combConKm.length >= 2) {
+    var byMatComb = {};
+    combConKm.forEach(function(c) {
+      var m = c['matricula'] || 'x';
+      if (!byMatComb[m]) byMatComb[m] = [];
+      byMatComb[m].push({km: parseFloat(c['km actuales']), litros: parseFloat(c['litros'])||0});
+    });
+    var litOdo = 0, kmOdo = 0;
+    Object.values(byMatComb).forEach(function(arr) {
+      arr.sort(function(a,b){ return a.km - b.km; });
+      for (var i = 1; i < arr.length; i++) {
+        var diff = arr[i].km - arr[i-1].km;
+        if (diff > 0 && diff < 50000) { litOdo += arr[i].litros; kmOdo += diff; }
+      }
+    });
+    litrosPorKm = kmOdo > 0 ? (litOdo / kmOdo * 100) : 0;
+  } else {
+    litrosPorKm = totalKm > 0 ? (totalLitros / totalKm * 100) : 0; // fallback
+  }
 
   // ── POR CAMIÓN (DAX: agrupar Operaciones por ID_Camion) ───────
   var byTruck = {};
