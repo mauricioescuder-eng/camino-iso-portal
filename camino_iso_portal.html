@@ -464,6 +464,10 @@ function logout(){ session=null; document.getElementById('app').style.display='n
 function startApp(){
   document.getElementById('login-wrap').style.display='none';
   document.getElementById('app').style.display='flex';
+  // Resetear visibilidad del sidebar (por si venía de una sesión anterior con otro rol)
+  document.querySelectorAll('.sidebar-btn').forEach(function(el){ el.style.display=''; });
+  document.querySelectorAll('.sidebar-section').forEach(function(el){ el.style.display=''; });
+  document.querySelectorAll('.admin-only').forEach(function(el){ el.style.display='none'; });
   var nombreMostrar = session.nombre || session.usuario || '';
   document.getElementById('topbar-user').textContent = nombreMostrar;
   document.getElementById('topbar-client').textContent = session.rol==='admin' ? '👑 Administrador' : (session.nombre || session.clienteid || '');
