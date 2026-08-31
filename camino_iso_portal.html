@@ -1846,9 +1846,17 @@ function renderTranspKPIs(data, viajes) {
   var avgTonViaje = nViajes > 0 ? totalTon / nViajes : 0;
   var avgIngViaje = nViajes > 0 ? totalIng / nViajes : 0;
   var avgIngTon   = totalTon > 0 ? totalIng / totalTon : 0;
+  // DAX: Km promedio por viaje = Km totales / N° viajes
+  var avgKmViaje  = nViajes > 0 ? totalKm / nViajes : 0;
+  // DAX: Margen por tonelada = Margen / Toneladas totales
+  var margenPorTon = totalTon > 0 ? margen / totalTon : 0;
   // Litros de gasoil
   var combArr0 = data.combArr || window._transpCombArr || [];
   var totalLitros  = combArr0.reduce(function(s,c){ return s+(parseFloat(c['litros'])||0); },0);
+  // DAX: Costo combustible total = SUM(Combustible[Total])
+  var totalCostoComb = combArr0.reduce(function(s,c){ return s+(parseFloat(c['total'])||0); },0);
+  // DAX: Costo combustible/km = Costo combustible total / Km totales
+  var costoCombPorKm = totalKm > 0 ? totalCostoComb / totalKm : 0;
   // L/100km usando odómetro: diferencia de km entre cargas consecutivas por camión
   var litrosPorKm = 0;
   var combConKm = combArr0.filter(function(c){ return (parseFloat(c['km actuales'])||0) > 0; });
@@ -1902,6 +1910,12 @@ function renderTranspKPIs(data, viajes) {
     + kpiBig('Margen', fmtMillones(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea', '', 'openDrillThrough("viajes")')
     + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea', '', 'openDrillThrough("viajes")')
     + kpiBig('Gasoil', fmtN(totalLitros,0) + ' L', '#1565c0', '#e3f2fd', fmtN(litrosPorKm,1) + ' L/100km', 'openDrillThrough("combustible")')
+    + '</div>';
+  // ── FILA 2: indicadores derivados (matriz de indicadores — sección Operacionales/Financieros) ──
+  kpiHtml += '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+    + kpi('Km promedio por viaje', fmtN(avgKmViaje,1) + ' km', nViajes + ' viaje' + (nViajes===1?'':'s') + ' registrado' + (nViajes===1?'':'s'), '#378add')
+    + kpi('Margen por tonelada', fmt$(margenPorTon) + '/ton', totalTon > 0 ? fmtN(totalTon,1) + ' ton transportadas' : 'Sin toneladas registradas', margenPorTon>=0?'#0f6e56':'#c0392b')
+    + kpi('Costo combustible/km', fmt$(costoCombPorKm) + '/km', fmtMillones(totalCostoComb) + ' en gasoil', '#1565c0')
     + '</div>';
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
