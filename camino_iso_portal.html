@@ -1903,6 +1903,22 @@ function renderTranspKPIs(data, viajes) {
   });
   var numUnidades = camiones.length;
 
+  // DAX: Días activos del período = rango entre el primer y el último viaje registrado
+  var fechasViajes = viajes.map(function(v) {
+    var f = v['fecha viaje'] || v['timestamp'] || '';
+    var d = new Date(f);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }).filter(function(t){ return t !== null; });
+  var diasActivos = 1;
+  if (fechasViajes.length) {
+    diasActivos = Math.max(Math.round((Math.max.apply(null, fechasViajes) - Math.min.apply(null, fechasViajes)) / 86400000) + 1, 1);
+  }
+  // DAX: Viajes por camión/día = Nº viajes / (camiones con viajes × días activos)
+  var viajesPorCamionDia = (numUnidades > 0 && diasActivos > 0) ? nViajes / (numUnidades * diasActivos) : 0;
+  // DAX: % Ocupación de flota = camiones con viajes en el período / camiones totales en Flota
+  var flotaTotalDash = flotaArr.length;
+  var ocupacionFlotaPct = flotaTotalDash > 0 ? (numUnidades / flotaTotalDash * 100) : 0;
+
   // ── FILA 1: 5 KPI grandes estilo Power BI (click → drill-through) ───
   var kpiHtml = '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">'
     + kpiBig('Ingresos Totales', fmtMillones(totalIng), '#0f6e56', '#e8f5e9', 'Prom. ' + fmt$(avgIngTon) + '/ton · ' + fmt$(avgIngViaje) + '/viaje', 'openDrillThrough("viajes")')
@@ -1916,6 +1932,12 @@ function renderTranspKPIs(data, viajes) {
     + kpi('Km promedio por viaje', fmtN(avgKmViaje,1) + ' km', nViajes + ' viaje' + (nViajes===1?'':'s') + ' registrado' + (nViajes===1?'':'s'), '#378add')
     + kpi('Margen por tonelada', fmt$(margenPorTon) + '/ton', totalTon > 0 ? fmtN(totalTon,1) + ' ton transportadas' : 'Sin toneladas registradas', margenPorTon>=0?'#0f6e56':'#c0392b')
     + kpi('Costo combustible/km', fmt$(costoCombPorKm) + '/km', fmtMillones(totalCostoComb) + ' en gasoil', '#1565c0')
+    + '</div>';
+  // ── FILA 3: más indicadores derivados de la matriz ──
+  kpiHtml += '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
+    + kpi('Ingreso por tonelada', fmt$(avgIngTon) + '/ton', totalTon > 0 ? fmtN(totalTon,1) + ' ton transportadas' : 'Sin toneladas registradas', '#0f6e56')
+    + kpi('Viajes por camión/día', fmtN(viajesPorCamionDia,2), numUnidades + ' camión' + (numUnidades===1?'':'es') + ' · ' + diasActivos + ' día' + (diasActivos===1?'':'s') + ' del período', '#378add')
+    + kpi('% Ocupación de flota', fmtN(ocupacionFlotaPct,0) + '%', numUnidades + '/' + flotaTotalDash + ' camiones con viajes en el período', ocupacionFlotaPct >= 70 ? '#0f6e56' : '#a32d2d')
     + '</div>';
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
