@@ -310,6 +310,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('documentacion',this)">📄 Documentación</button>
             <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
             <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
+            <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>💱 USD =</span>
@@ -346,6 +347,24 @@ tr:hover td{background:#faf9f6}
       <button class="btn-c" onclick="closeModal()">Cancelar</button>
       <button class="btn-s" id="btn-save" onclick="saveRecord()">Guardar</button>
     </div>
+  </div>
+</div>
+<div class="overlay" id="ov-neu-retiro">
+  <div class="modal">
+    <h3>Retirar neumático</h3>
+    <div class="fg"><label>Fecha de retiro</label><input type="date" id="nr-fecha"></div>
+    <div class="fg"><label>Km del camión en ese momento</label><input type="number" id="nr-km" placeholder="0"></div>
+    <div class="fg"><label>Motivo</label><select id="nr-motivo">
+      <option value="Desgaste normal">Desgaste normal</option>
+      <option value="Pinchazo">Pinchazo</option>
+      <option value="Rotura / corte">Rotura / corte</option>
+      <option value="Otro">Otro</option>
+    </select></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeRetiroNeumatico()">Cancelar</button>
+      <button class="btn-s" onclick="guardarRetiroNeumatico()">Confirmar retiro</button>
+    </div>
+    <div id="nr-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -488,6 +507,8 @@ function startApp(){
       if(esOcultar) btn.style.display='none';
     });
     document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
+    var tabNeu = document.getElementById('tab-neumaticos');
+    if (tabNeu) tabNeu.style.display = '';
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
   }
   loadAll();
@@ -1501,6 +1522,7 @@ function loadTransporte(vista, btn) {
         else if (vista === 'mantenimientos')  renderTranspTabla(data, 'mantenimientos');
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
+        else if (vista === 'neumaticos')      renderNeumaticos(data);
       });
     }
   }
@@ -1751,6 +1773,164 @@ function guardarCostoFijo() {
       document.getElementById('cf-monto').value = '';
       document.getElementById('cf-detalle').value = '';
       document.getElementById('cf-proveedor').value = '';
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error de conexión.';
+  });
+}
+
+function renderNeumaticos(data) {
+  var rows = Array.isArray(data) ? data : [];
+  window._transpNeumaticos = rows;
+  var activos = rows.filter(function(r){ return r.activo; });
+  var retirados = rows.filter(function(r){ return !r.activo; });
+  var retiradosConKm = retirados.filter(function(r){ return r.km_recorridos > 0; });
+  var avgCostoKm = retiradosConKm.length
+    ? retiradosConKm.reduce(function(s,r){ return s+r.costo_por_km; },0) / retiradosConKm.length
+    : 0;
+  var avgKmVida = retiradosConKm.length
+    ? retiradosConKm.reduce(function(s,r){ return s+r.km_recorridos; },0) / retiradosConKm.length
+    : 0;
+
+  document.getElementById('transp-indicadores').innerHTML =
+    '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr)">'
+    + kpi('Neumáticos activos', activos.length, 'instalados hoy', '#378add')
+    + kpi('Neumáticos retirados', retirados.length, 'ciclo completo', '#7B3F00')
+    + kpi('Costo promedio/km', avgCostoKm > 0 ? fmt$(avgCostoKm)+'/km' : '—', retiradosConKm.length+' cubierta'+(retiradosConKm.length===1?'':'s')+' con datos', '#0f6e56')
+    + kpi('Km promedio de vida', avgKmVida > 0 ? fmtN(avgKmVida,0)+' km' : '—', 'por cubierta retirada', '#854f0b')
+    + '</div>';
+
+  var matriculas = (window._transpFlotaArr || []).map(function(f){ return String(f['matrícula']||f['matricula']||'').trim(); }).filter(Boolean);
+  if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
+  var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+  var posiciones = ['Delantero izq.','Delantero der.','Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo','Auxilio'];
+  var posOpts = posiciones.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
+
+  var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
+    + '<h3 style="margin:0 0 16px;font-size:15px">+ Instalar neumático</h3>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MATRÍCULA</label>'
+    + '<select id="nn-matricula" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+matOpts+'</select></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">POSICIÓN</label>'
+    + '<select id="nn-posicion" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+posOpts+'</select></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA INSTALACIÓN</label>'
+    + '<input type="date" id="nn-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">KM DEL CAMIÓN</label>'
+    + '<input type="number" id="nn-km" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">COSTO ($)</label>'
+    + '<input type="number" id="nn-costo" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>'
+    + '<input type="text" id="nn-proveedor" placeholder="Ej: Gomería Central" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '</div>'
+    + '<button onclick="guardarNeumatico()" style="padding:10px 20px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Guardar</button>'
+    + ' <span id="nn-msg" style="font-size:13px;margin-left:10px"></span>'
+    + '</div>';
+
+  var rowsHtml = rows.slice().sort(function(a,b){ return (b.fecha_instalacion||'').localeCompare(a.fecha_instalacion||''); }).map(function(r) {
+    var estadoBadge = r.activo
+      ? '<span class="badge b-activo">Activo</span>'
+      : '<span class="badge b-inactivo">Retirado</span>';
+    var retiroTxt = r.activo ? '—' : (r.fecha_retiro+' · '+fmtN(r.km_retiro,0)+' km');
+    var kmRecTxt  = r.km_recorridos > 0 ? fmtN(r.km_recorridos,0)+' km' : '—';
+    var costoKmTxt = r.costo_por_km > 0 ? fmt$(r.costo_por_km)+'/km' : '—';
+    var accion = r.activo
+      ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button>'
+      : '—';
+    return '<tr>'
+      + '<td>'+r.matricula+'</td>'
+      + '<td>'+r.posicion+'</td>'
+      + '<td>'+r.fecha_instalacion+' · '+fmtN(r.km_instalacion,0)+' km</td>'
+      + '<td>'+fmt$(r.costo)+'</td>'
+      + '<td>'+estadoBadge+'</td>'
+      + '<td>'+retiroTxt+'</td>'
+      + '<td>'+kmRecTxt+'</td>'
+      + '<td>'+costoKmTxt+'</td>'
+      + '<td>'+accion+'</td>'
+      + '</tr>';
+  }).join('');
+
+  var tableHtml = '<div class="card" style="overflow-x:auto">'
+    + '<table><thead><tr><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="9" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
+
+  document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
+}
+
+function guardarNeumatico() {
+  var matricula = document.getElementById('nn-matricula').value;
+  var posicion  = document.getElementById('nn-posicion').value;
+  var fecha     = document.getElementById('nn-fecha').value;
+  var km        = document.getElementById('nn-km').value;
+  var costo     = document.getElementById('nn-costo').value;
+  var proveedor = document.getElementById('nn-proveedor').value;
+  var msg       = document.getElementById('nn-msg');
+
+  if (!matricula || !fecha || !km || !costo) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá matrícula, fecha, km y costo.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'saveNeumatico', matricula: matricula, posicion: posicion,
+    fecha_instalacion: fecha, km_instalacion: km, costo: costo, proveedor: proveedor
+  }, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Neumático instalado');
+      loadTransporte('neumaticos');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error de conexión.';
+  });
+}
+
+var _neuRetiroId = null;
+function openRetiroNeumatico(id) {
+  _neuRetiroId = id;
+  document.getElementById('nr-fecha').value = new Date().toISOString().substring(0,10);
+  document.getElementById('nr-km').value = '';
+  document.getElementById('nr-motivo').value = 'Desgaste normal';
+  document.getElementById('nr-msg').textContent = '';
+  document.getElementById('ov-neu-retiro').classList.add('open');
+}
+function closeRetiroNeumatico() {
+  document.getElementById('ov-neu-retiro').classList.remove('open');
+  _neuRetiroId = null;
+}
+function guardarRetiroNeumatico() {
+  var fecha  = document.getElementById('nr-fecha').value;
+  var km     = document.getElementById('nr-km').value;
+  var motivo = document.getElementById('nr-motivo').value;
+  var msg    = document.getElementById('nr-msg');
+
+  if (!fecha || !km) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá fecha y km.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'retirarNeumatico', id: _neuRetiroId,
+    fecha_retiro: fecha, km_retiro: km, motivo_retiro: motivo
+  }, function(resp) {
+    if (resp && resp.ok) {
+      closeRetiroNeumatico();
+      toast('✓ Neumático retirado');
+      loadTransporte('neumaticos');
     } else {
       msg.style.color = '#c0392b';
       msg.textContent = 'Error al guardar. Intentá de nuevo.';
@@ -3081,6 +3261,7 @@ function renderTranspTabla(data, tipo) {
 }
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
+document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
 // Precargar config al abrir la página
 loadConfig();
 </script>
