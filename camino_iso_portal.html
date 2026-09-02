@@ -2006,6 +2006,7 @@ function renderOrdenesCompra(data) {
     } else {
       acciones = '—';
     }
+    acciones += ' <button class="edit-btn" onclick="imprimirOrdenCompra(\''+r.id+'\')">⬇️ Descargar</button>';
     return '<tr>'
       + '<td>'+r.fecha+'</td>'
       + '<td>'+r.rubro+'</td>'
@@ -2073,6 +2074,60 @@ function avanzarOrdenCompra(id, nuevoEstado) {
 function cancelarOrdenCompra(id) {
   if (!confirm('¿Cancelar esta orden de compra?')) return;
   avanzarOrdenCompra(id, 'Cancelada');
+}
+
+function imprimirOrdenCompra(id) {
+  var r = (window._transpOrdenes || []).find(function(o){ return o.id === id; });
+  if (!r) { toast('No se encontró la orden.', true); return; }
+
+  var clienteNombre = (session && (session.nombre || session.clienteid)) || 'Cliente';
+  var numOC = 'OC-' + (r.fecha||'').replace(/-/g,'') + '-' + r.id.substring(0,4).toUpperCase();
+  var estadoColor = {'Pendiente':'#b97c0a','Aprobada':'#378add','Recibida':'#0f6e56','Cancelada':'#a32d2d'}[r.estado] || '#888';
+
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+    + '<title>Orden de Compra ' + numOC + '</title>'
+    + '<style>'
+    + 'body{font-family:Arial,Helvetica,sans-serif;color:#222;max-width:720px;margin:40px auto;padding:0 20px}'
+    + '.letterhead{border-top:4px solid #1E6B2E;padding-top:16px;margin-bottom:28px}'
+    + '.letterhead .word{font-size:26px;font-weight:700}'
+    + '.letterhead .g{color:#1E6B2E}.letterhead .o{color:#F07820}'
+    + '.letterhead .sub{font-size:12px;color:#888;margin-top:2px}'
+    + 'h1{font-size:19px;margin:0 0 4px}'
+    + '.meta{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;gap:10px}'
+    + '.meta .num{font-size:13px;color:#555}'
+    + '.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:'+estadoColor+'}'
+    + 'table{border-collapse:collapse;width:100%;margin-bottom:24px}'
+    + 'th{text-align:left;width:150px;vertical-align:top;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;padding:10px 0;border-bottom:1px solid #eee}'
+    + 'td{padding:10px 0;border-bottom:1px solid #eee;font-size:14px}'
+    + '.monto{font-size:22px;font-weight:700;color:#1E6B2E;text-align:right;margin-bottom:40px}'
+    + '.firma{display:flex;gap:60px}'
+    + '.firma div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:11px;color:#888;text-align:center}'
+    + '.foot{margin-top:40px;font-size:11px;color:#aaa;text-align:center}'
+    + '@media print{body{margin:0;padding:24px}}'
+    + '</style></head><body>'
+    + '<div class="letterhead"><div class="word"><span class="g">Camino </span><span class="o">ISO</span></div>'
+    + '<div class="sub">Portal de Gestión — Orden de Compra</div></div>'
+    + '<div class="meta">'
+    + '<div><h1>Orden de Compra</h1><div class="num">N° ' + numOC + ' · Fecha: ' + r.fecha + '</div></div>'
+    + '<span class="badge">' + r.estado + '</span>'
+    + '</div>'
+    + '<table><tbody>'
+    + '<tr><th>Cliente</th><td>' + clienteNombre + '</td></tr>'
+    + '<tr><th>Proveedor</th><td>' + r.proveedor + '</td></tr>'
+    + '<tr><th>Rubro</th><td>' + r.rubro + '</td></tr>'
+    + (r.matricula ? '<tr><th>Matrícula</th><td>' + r.matricula + '</td></tr>' : '')
+    + '<tr><th>Descripción</th><td>' + r.descripcion + '</td></tr>'
+    + '</tbody></table>'
+    + '<div class="monto">Total: ' + fmt$(r.monto) + '</div>'
+    + '<div class="firma"><div>Autoriza</div><div>Recibe</div></div>'
+    + '<div class="foot">Generado por el Portal Camino ISO</div>'
+    + '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (!w) { toast('El navegador bloqueó la ventana. Habilitá pop-ups para descargar.', true); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){ w.print(); }, 300);
 }
 
 function renderTranspKPIs(data, viajes) {
