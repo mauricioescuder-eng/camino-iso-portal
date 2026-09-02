@@ -311,6 +311,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
             <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
             <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
+            <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>💱 USD =</span>
@@ -509,6 +510,8 @@ function startApp(){
     document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
     var tabNeu = document.getElementById('tab-neumaticos');
     if (tabNeu) tabNeu.style.display = '';
+    var tabOrd = document.getElementById('tab-ordenes');
+    if (tabOrd) tabOrd.style.display = '';
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
   }
   loadAll();
@@ -1523,6 +1526,7 @@ function loadTransporte(vista, btn) {
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
         else if (vista === 'neumaticos')      renderNeumaticos(data);
+        else if (vista === 'ordenesCompra')   renderOrdenesCompra(data);
       });
     }
   }
@@ -1939,6 +1943,136 @@ function guardarRetiroNeumatico() {
     msg.style.color = '#c0392b';
     msg.textContent = 'Error de conexión.';
   });
+}
+
+var ORDEN_RUBROS = ['Repuestos', 'Neumáticos', 'Combustible', 'Otro'];
+var ORDEN_ESTADO_BADGE = {
+  'Pendiente': 'b-pendiente', 'Aprobada': 'b-en-curso', 'Recibida': 'b-activo', 'Cancelada': 'b-vencido'
+};
+
+function renderOrdenesCompra(data) {
+  var rows = Array.isArray(data) ? data : [];
+  window._transpOrdenes = rows;
+
+  var porEstado = {Pendiente:{n:0,monto:0}, Aprobada:{n:0,monto:0}, Recibida:{n:0,monto:0}, Cancelada:{n:0,monto:0}};
+  rows.forEach(function(r) {
+    var e = porEstado[r.estado] ? r.estado : 'Pendiente';
+    porEstado[e].n++;
+    porEstado[e].monto += parseFloat(r.monto) || 0;
+  });
+
+  document.getElementById('transp-indicadores').innerHTML =
+    '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr)">'
+    + kpi('Pendientes', porEstado.Pendiente.n, fmt$(porEstado.Pendiente.monto), '#b97c0a')
+    + kpi('Aprobadas', porEstado.Aprobada.n, fmt$(porEstado.Aprobada.monto), '#378add')
+    + kpi('Recibidas', porEstado.Recibida.n, fmt$(porEstado.Recibida.monto), '#0f6e56')
+    + kpi('Total', rows.length, fmt$(porEstado.Pendiente.monto + porEstado.Aprobada.monto + porEstado.Recibida.monto) + ' (sin canceladas)', '#185fa5')
+    + '</div>';
+
+  var matriculas = (window._transpFlotaArr || []).map(function(f){ return String(f['matrícula']||f['matricula']||'').trim(); }).filter(Boolean);
+  var matOpts = '<option value="">— (sin matrícula)</option>' + matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+  var rubOpts = ORDEN_RUBROS.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+
+  var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
+    + '<h3 style="margin:0 0 16px;font-size:15px">+ Nueva orden de compra</h3>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA</label>'
+    + '<input type="date" id="oc-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">RUBRO</label>'
+    + '<select id="oc-rubro" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+rubOpts+'</select></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MATRÍCULA (opcional)</label>'
+    + '<select id="oc-matricula" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+matOpts+'</select></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONTO ($)</label>'
+    + '<input type="number" id="oc-monto" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>'
+    + '<input type="text" id="oc-proveedor" placeholder="Ej: Gomería Central" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">DESCRIPCIÓN</label>'
+    + '<input type="text" id="oc-descripcion" placeholder="Ej: 2 cubiertas 295/80 R22.5" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '</div>'
+    + '<button onclick="guardarOrdenCompra()" style="padding:10px 20px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Crear orden</button>'
+    + ' <span id="oc-msg" style="font-size:13px;margin-left:10px"></span>'
+    + '</div>';
+
+  var rowsHtml = rows.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); }).map(function(r) {
+    var badge = '<span class="badge '+(ORDEN_ESTADO_BADGE[r.estado]||'b-pendiente')+'">'+r.estado+'</span>';
+    var acciones = '';
+    if (r.estado === 'Pendiente') {
+      acciones = '<button class="edit-btn" onclick="avanzarOrdenCompra(\''+r.id+'\',\'Aprobada\')">Aprobar</button> '
+        + '<button class="edit-btn" onclick="cancelarOrdenCompra(\''+r.id+'\')">Cancelar</button>';
+    } else if (r.estado === 'Aprobada') {
+      acciones = '<button class="edit-btn" onclick="avanzarOrdenCompra(\''+r.id+'\',\'Recibida\')">Marcar recibida</button>';
+    } else {
+      acciones = '—';
+    }
+    return '<tr>'
+      + '<td>'+r.fecha+'</td>'
+      + '<td>'+r.rubro+'</td>'
+      + '<td>'+(r.matricula||'—')+'</td>'
+      + '<td>'+r.proveedor+'</td>'
+      + '<td>'+r.descripcion+'</td>'
+      + '<td>'+fmt$(r.monto)+'</td>'
+      + '<td>'+badge+'</td>'
+      + '<td>'+acciones+'</td>'
+      + '</tr>';
+  }).join('');
+
+  var tableHtml = '<div class="card" style="overflow-x:auto">'
+    + '<table><thead><tr><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Estado</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="8" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
+
+  document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
+}
+
+function guardarOrdenCompra() {
+  var fecha       = document.getElementById('oc-fecha').value;
+  var rubro       = document.getElementById('oc-rubro').value;
+  var matricula   = document.getElementById('oc-matricula').value;
+  var monto       = document.getElementById('oc-monto').value;
+  var proveedor   = document.getElementById('oc-proveedor').value;
+  var descripcion = document.getElementById('oc-descripcion').value;
+  var msg         = document.getElementById('oc-msg');
+
+  if (!fecha || !rubro || !proveedor || !monto) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá fecha, rubro, proveedor y monto.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'saveOrdenCompra', fecha: fecha, rubro: rubro, matricula: matricula,
+    proveedor: proveedor, descripcion: descripcion, monto: monto
+  }, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Orden de compra creada');
+      loadTransporte('ordenesCompra');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error de conexión.';
+  });
+}
+
+function avanzarOrdenCompra(id, nuevoEstado) {
+  callTranspAPI({action: 'actualizarEstadoOrdenCompra', id: id, estado: nuevoEstado}, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Orden ' + nuevoEstado.toLowerCase());
+      loadTransporte('ordenesCompra');
+    } else {
+      toast('Error al actualizar la orden.', true);
+    }
+  }, function() { toast('Error de conexión.', true); });
+}
+
+function cancelarOrdenCompra(id) {
+  if (!confirm('¿Cancelar esta orden de compra?')) return;
+  avanzarOrdenCompra(id, 'Cancelada');
 }
 
 function renderTranspKPIs(data, viajes) {
