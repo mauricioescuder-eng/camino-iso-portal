@@ -289,7 +289,15 @@ tr:hover td{background:#faf9f6}
       </div>
 
       <div class="page" id="page-registros">
-        <div class="page-header"><h2>Registros de Ganadería</h2></div>
+        <div class="page-header">
+          <h2>Registros de Ganadería</h2>
+          <div id="reg-cliente-wrap" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span>👁️ Viendo:</span>
+            <select id="reg-cliente-id" onchange="loadRegistros(_tipoActivo||'todos')" style="padding:5px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;color:var(--text)">
+              <option value="">Seleccioná un cliente</option>
+            </select>
+          </div>
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px" id="reg-tabs">
           <button class="fb" onclick="loadRegistros('todos',this)">Todos</button>
           <button class="fb active" onclick="loadRegistros('aliment',this)">🌾 Alimentación</button>
@@ -464,7 +472,8 @@ var _USUARIOS = {
 // Clientes de Transporte que el admin puede ver desde el selector "Viendo: ...".
 // Para agregar un cliente nuevo: sumá una fila acá con su nombre y la URL de su Apps Script.
 var _TRANSP_CLIENTES = [
-  { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec' }
+  { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec' },
+  { nombre: 'PRUEBA', clienteId: 'prueba', apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec' }
 ];
 
 function toggleAdminLogin(e) {
@@ -718,6 +727,14 @@ function renderArchivos(){
       sel.innerHTML = '<option value="">Seleccioná un cliente</option>' +
         cache.Clientes.map(function(c){ return '<option value="'+c.id+'">'+c.id+' - '+c.empresa+'</option>'; }).join('');
     }
+    // Mismo selector para Registros de Ganadería (los registros son por cliente, admin no tiene uno propio)
+    var regWrap = document.getElementById('reg-cliente-wrap');
+    if(regWrap) regWrap.style.display='flex';
+    var regSel = document.getElementById('reg-cliente-id');
+    if(regSel && cache.Clientes.length && regSel.options.length <= 1){
+      regSel.innerHTML = '<option value="">Seleccioná un cliente</option>' +
+        cache.Clientes.map(function(c){ return '<option value="'+c.id+'">'+c.id+' - '+c.empresa+'</option>'; }).join('');
+    }
   }
   filterArchivos('todas');
 }
@@ -951,6 +968,17 @@ function loadRegistros(tipo, btn){
     btn.classList.add('active');
   }
   var clienteId = session ? (session.clienteid || session.clienteId || '') : '';
+  if (session && session.rol === 'admin') {
+    var regSelEl = document.getElementById('reg-cliente-id');
+    clienteId = regSelEl ? regSelEl.value : '';
+    if (!clienteId) {
+      document.getElementById('reg-indicadores').innerHTML = '';
+      document.getElementById('reg-grafico').innerHTML = '';
+      document.getElementById('reg-filtros').innerHTML = '';
+      document.getElementById('reg-body').innerHTML = '<tr><td colspan="9" class="loading">Elegí un cliente arriba para ver sus registros.</td></tr>';
+      return;
+    }
+  }
   var apiTipo = tipo === 'todos' ? 'todos' : tipo;
   document.getElementById('reg-indicadores').innerHTML = '<div style="padding:16px;color:var(--muted);font-size:13px">Cargando indicadores...</div>';
   document.getElementById('reg-grafico').innerHTML = '';
