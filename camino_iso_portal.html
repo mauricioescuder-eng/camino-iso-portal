@@ -1432,6 +1432,18 @@ function badgeMon(moneda) {
   return '<span style="background:#0f6e56;color:#fff;font-size:10px;padding:1px 5px;border-radius:4px;font-weight:600">UYU</span>';
 }
 
+// Trae la Flota a memoria si todavía no se cargó en esta sesión (no depende de haber visitado el Dashboard antes)
+function ensureFlotaLoaded(cb) {
+  if (window._transpFlotaArr && window._transpFlotaArr.length) { cb(); return; }
+  callTranspAPI({action: 'flota'}, function(flota) {
+    window._transpFlotaArr = Array.isArray(flota) ? flota : [];
+    cb();
+  }, function() {
+    window._transpFlotaArr = window._transpFlotaArr || [];
+    cb();
+  });
+}
+
 function loadTransporte(vista, btn) {
   _transpVista = vista || 'kpis';
   if (btn) {
@@ -1505,7 +1517,7 @@ function loadTransporte(vista, btn) {
     });
   } else {
     if (vista === 'costos-fijos') {
-      renderFormCostosFijos();
+      ensureFlotaLoaded(renderFormCostosFijos);
     } else if (vista === 'documentacion') {
       renderDocumentacion();
     } else {
@@ -1525,8 +1537,8 @@ function loadTransporte(vista, btn) {
         else if (vista === 'mantenimientos')  renderTranspTabla(data, 'mantenimientos');
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
-        else if (vista === 'neumaticos')      renderNeumaticos(data);
-        else if (vista === 'ordenesCompra')   renderOrdenesCompra(data);
+        else if (vista === 'neumaticos')      ensureFlotaLoaded(function(){ renderNeumaticos(data); });
+        else if (vista === 'ordenesCompra')   ensureFlotaLoaded(function(){ renderOrdenesCompra(data); });
       });
     }
   }
@@ -1707,13 +1719,14 @@ function renderFormCostosFijos() {
       if (m) matriculas.push(m);
     });
   }
-  if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
 
   // Rubros FIJOS (sueldo base, cargas sociales, costos estructurales del camión)
   // Rubros VARIABLE: Comisión por viaje → clasificado como variable al guardar
   var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Comisión por viaje','Seguro','Patente','VTV','Amortización','Otro'];
   var rubrosVariable = ['Comisión por viaje'];
-  var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+  var matOpts = matriculas.length
+    ? matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('')
+    : '<option value="">— Sin camiones cargados en Flota —</option>';
   var rubOpts = rubros.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
 
   cont.innerHTML =
@@ -1809,8 +1822,9 @@ function renderNeumaticos(data) {
     + '</div>';
 
   var matriculas = (window._transpFlotaArr || []).map(function(f){ return String(f['matrícula']||f['matricula']||'').trim(); }).filter(Boolean);
-  if (!matriculas.length) matriculas = ['KTP2083','KTP6258'];
-  var matOpts = matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+  var matOpts = matriculas.length
+    ? matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('')
+    : '<option value="">— Sin camiones cargados en Flota —</option>';
   var posiciones = ['Delantero izq.','Delantero der.','Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo','Auxilio'];
   var posOpts = posiciones.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
 
