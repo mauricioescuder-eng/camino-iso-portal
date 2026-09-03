@@ -102,6 +102,13 @@ tr:hover td{background:#faf9f6}
 .alert-dot.red{background:#a32d2d}.alert-dot.orange{background:var(--orange)}.alert-dot.green{background:var(--green)}
 .kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .kpi-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+.kanban-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.kanban-col{background:var(--gray);border-radius:12px;padding:12px;min-height:80px;transition:background .12s}
+.kanban-col.drag-over{background:var(--green-light)}
+.kanban-col-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.kanban-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:grab}
+.kanban-card:active{cursor:grabbing}
+.kanban-card.dragging{opacity:.4}
 .kpi-bar{height:4px;background:var(--gray);border-radius:2px;overflow:hidden;margin-top:8px}
 .kpi-fill{height:100%;border-radius:2px}
 .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;margin-bottom:16px}
@@ -228,7 +235,7 @@ tr:hover td{background:#faf9f6}
         <div class="page-header"><h2>Proyectos y Tareas</h2><button class="add-btn primary" onclick="openModal('Proyectos')"><i class="ti ti-plus"></i> Nueva tarea</button></div>
         <div class="stats" id="proy-stats"></div>
         <div class="toolbar"><div class="filter-row" id="proy-filters"></div></div>
-        <div class="card"><table><thead><tr><th>Tarea</th><th>Área</th><th>Responsable</th><th>Vence</th><th>Prioridad</th><th>Estado</th><th></th></tr></thead><tbody id="proy-body"><tr><td colspan="7" class="loading">Cargando...</td></tr></tbody></table></div>
+        <div id="proy-kanban" class="kanban-board"><div class="loading">Cargando...</div></div>
       </div>
 
       <div class="page" id="page-documentos">
@@ -621,12 +628,66 @@ function renderCRM(){
   document.getElementById('crm-body').innerHTML = filtered('Clientes').map(function(r){ return '<tr><td>'+r.empresa+'</td><td><span class="badge b-'+(r.area||'')+'">'+( AL[r.area]||r.area||'')+'</span></td><td>'+r.contacto+'</td><td style="font-size:12px;color:var(--muted)">'+r.email+'</td><td><span class="badge b-'+r.estado+'">'+cap(r.estado)+'</span></td><td><button class="edit-btn" onclick="openEdit(\'Clientes\',\''+r.id+'\')">Editar</button></td></tr>'; }).join('') || '<tr><td colspan="6" class="loading">Sin clientes</td></tr>';
 }
 
+var KANBAN_ESTADOS = [
+  {key:'pendiente',   label:'📋 Pendiente', color:'#5f5e5a'},
+  {key:'en-curso',    label:'🔄 En curso',  color:'#185fa5'},
+  {key:'completado',  label:'✅ Completado', color:'#0f6e56'}
+];
+
 function renderProy(){
   renderFilters('Proyectos','proy');
   var s={pendiente:0,'en-curso':0,completado:0};
   cache.Proyectos.forEach(function(r){ s[r.estado]=(s[r.estado]||0)+1; });
   document.getElementById('proy-stats').innerHTML='<div class="stat"><div class="stat-label">Total</div><div class="stat-value">'+cache.Proyectos.length+'</div></div><div class="stat"><div class="stat-label">Pendientes</div><div class="stat-value">'+(s.pendiente||0)+'</div></div><div class="stat"><div class="stat-label">En curso</div><div class="stat-value">'+(s['en-curso']||0)+'</div></div><div class="stat"><div class="stat-label">Completados</div><div class="stat-value">'+(s.completado||0)+'</div></div>';
-  document.getElementById('proy-body').innerHTML = filtered('Proyectos').map(function(r){ return '<tr><td>'+r.tarea+'</td><td><span class="badge b-'+(r.area||'')+'">'+( AL[r.area]||r.area||'')+'</span></td><td>'+r.responsable+'</td><td style="font-size:12px">'+r.vence+'</td><td><span class="pri-'+r.prioridad+'">'+cap(r.prioridad)+'</span></td><td><span class="badge b-'+r.estado+'">'+cap(r.estado)+'</span></td><td><button class="edit-btn" onclick="openEdit(\'Proyectos\',\''+r.id+'\')">Editar</button></td></tr>'; }).join('') || '<tr><td colspan="7" class="loading">Sin tareas</td></tr>';
+
+  var rows = filtered('Proyectos');
+  document.getElementById('proy-kanban').innerHTML = KANBAN_ESTADOS.map(function(e){
+    var tareas = rows.filter(function(r){ return r.estado === e.key; });
+    var cards = tareas.map(function(r){
+      return '<div class="kanban-card" draggable="true" data-id="'+r.id+'" ondragstart="kanbanDragStart(event)" ondragend="kanbanDragEnd(event)" onclick="openEdit(\'Proyectos\',\''+r.id+'\')">'
+        + '<div style="font-weight:600;font-size:13px;margin-bottom:6px">'+r.tarea+'</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">'
+        + '<span class="badge b-'+(r.area||'')+'" style="font-size:10px">'+(AL[r.area]||r.area||'')+'</span>'
+        + '<span class="pri-'+r.prioridad+'" style="font-size:11px">'+cap(r.prioridad)+'</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">'+(r.responsable||'—')+(r.vence?' · vence '+r.vence:'')+'</div>'
+        + '</div>';
+    }).join('') || '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">Sin tareas</div>';
+    return '<div class="kanban-col" data-estado="'+e.key+'" ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event)">'
+      + '<div class="kanban-col-head" style="color:'+e.color+'">'+e.label+' <span style="opacity:.6">('+tareas.length+')</span></div>'
+      + cards
+      + '</div>';
+  }).join('');
+}
+
+var _kanbanDragId = null;
+function kanbanDragStart(ev){
+  _kanbanDragId = ev.currentTarget.getAttribute('data-id');
+  ev.currentTarget.classList.add('dragging');
+  ev.dataTransfer.effectAllowed = 'move';
+}
+function kanbanDragEnd(ev){ ev.currentTarget.classList.remove('dragging'); }
+function kanbanDragOver(ev){ ev.preventDefault(); ev.currentTarget.classList.add('drag-over'); }
+function kanbanDragLeave(ev){ ev.currentTarget.classList.remove('drag-over'); }
+function kanbanDrop(ev){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('drag-over');
+  var nuevoEstado = ev.currentTarget.getAttribute('data-estado');
+  if (_kanbanDragId) moverTarea(_kanbanDragId, nuevoEstado);
+  _kanbanDragId = null;
+}
+
+async function moverTarea(id, nuevoEstado){
+  var rec = cache.Proyectos.find(function(r){ return String(r.id) === String(id); });
+  if (!rec || rec.estado === nuevoEstado) return;
+  var rec2 = {};
+  Object.keys(rec).forEach(function(k){ rec2[k] = rec[k]; });
+  rec2.estado = nuevoEstado;
+  try {
+    await fetch(API,{method:'POST',body:JSON.stringify({mod:'Proyectos',action:'save',record:rec2,rol:session.rol,clienteId:session.clienteid||''})});
+    toast('✓ Tarea movida a ' + cap(nuevoEstado));
+    await loadAll();
+  } catch(e){ toast('Error al mover la tarea.', true); }
 }
 
 function renderDocs(){
