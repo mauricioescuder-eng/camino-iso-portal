@@ -299,7 +299,13 @@ tr:hover td{background:#faf9f6}
       </div>
 
       <div class="page" id="page-transporte">
-        <div class="page-header"><h2>Gestión de Transporte</h2></div>
+        <div class="page-header">
+          <h2>Gestión de Transporte</h2>
+          <div id="transp-cliente-wrap" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span>👁️ Viendo:</span>
+            <select id="transp-cliente-sel" onchange="cambiarClienteTransporte(this.value)" style="padding:5px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;color:var(--text)"></select>
+          </div>
+        </div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
           <div id="transp-filtros" style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="fb active" onclick="loadTransporte('kpis',this)">📊 Dashboard</button>
@@ -448,6 +454,12 @@ var _USUARIOS = {
   }
 };
 
+// Clientes de Transporte que el admin puede ver desde el selector "Viendo: ...".
+// Para agregar un cliente nuevo: sumá una fila acá con su nombre y la URL de su Apps Script.
+var _TRANSP_CLIENTES = [
+  { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec' }
+];
+
 function toggleAdminLogin(e) {
   e.preventDefault();
   var fields = document.getElementById('admin-login-fields');
@@ -499,6 +511,13 @@ function startApp(){
   document.getElementById('dash-title').textContent = session.rol==='admin' ? 'Panel de Administración' : 'Bienvenido, ' + nombreMostrar;
   if(session.rol==='admin'){
     document.querySelectorAll('.admin-only').forEach(function(el){ el.style.display=''; });
+    var selWrap = document.getElementById('transp-cliente-wrap');
+    var sel = document.getElementById('transp-cliente-sel');
+    if (selWrap && sel && _TRANSP_CLIENTES.length) {
+      selWrap.style.display = 'flex';
+      sel.innerHTML = _TRANSP_CLIENTES.map(function(c){ return '<option value="'+c.apiUrl+'">'+c.nombre+'</option>'; }).join('');
+      cambiarClienteTransporte(_TRANSP_CLIENTES[0].apiUrl);
+    }
   } else if(session.clienteid === 'jorajuria'){
     // Cliente transporte: ocultar secciones ISO, mostrar solo Transporte
     var ocultarTextos = ['Dashboard','Proyectos','Documentos ISO','Indicadores','Archivos','Ganadería'];
@@ -508,13 +527,34 @@ function startApp(){
       if(esOcultar) btn.style.display='none';
     });
     document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
-    var tabNeu = document.getElementById('tab-neumaticos');
-    if (tabNeu) tabNeu.style.display = '';
-    var tabOrd = document.getElementById('tab-ordenes');
-    if (tabOrd) tabOrd.style.display = '';
+    actualizarTabsTransporteEspecificos();
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
   }
   loadAll();
+}
+
+// Muestra/oculta las pestañas propias de un cliente (hoy: Jorajuria) según a quién esté viendo la sesión
+function actualizarTabsTransporteEspecificos() {
+  var esJorajuria = session.clienteid === 'jorajuria' || session._viendoClienteId === 'jorajuria';
+  var tabNeu = document.getElementById('tab-neumaticos');
+  if (tabNeu) tabNeu.style.display = esJorajuria ? '' : 'none';
+  var tabOrd = document.getElementById('tab-ordenes');
+  if (tabOrd) tabOrd.style.display = esJorajuria ? '' : 'none';
+}
+
+// Admin: cambia a qué cliente de Transporte está viendo el portal
+function cambiarClienteTransporte(apiUrl) {
+  session.apiUrl = apiUrl;
+  var cli = _TRANSP_CLIENTES.find(function(c){ return c.apiUrl === apiUrl; });
+  session._viendoClienteId = cli ? cli.clienteId : '';
+  // Limpiar todo lo que quedó en memoria del cliente anterior
+  window._transpViajesRaw = window._transpCombArr = window._transpMantArr = window._transpFlotaArr = window._transpFijosArr = null;
+  window._transpCostosPorMat = {}; window._transpCostosTotal = 0;
+  window._transpNeumaticos = window._transpOrdenes = null;
+  actualizarTabsTransporteEspecificos();
+  if (document.getElementById('page-transporte').classList.contains('active')) {
+    loadTransporte('kpis', document.querySelector('#transp-filtros .fb'));
+  }
 }
 
 async function loadAll(){
@@ -2094,7 +2134,8 @@ function imprimirOrdenCompra(id) {
   var r = (window._transpOrdenes || []).find(function(o){ return o.id === id; });
   if (!r) { toast('No se encontró la orden.', true); return; }
 
-  var clienteNombre = (session && (session.nombre || session.clienteid)) || 'Cliente';
+  var _clienteViendo = session && _TRANSP_CLIENTES.find(function(c){ return c.clienteId === (session.clienteid || session._viendoClienteId); });
+  var clienteNombre = (_clienteViendo && _clienteViendo.nombre) || (session && (session.nombre || session.clienteid)) || 'Cliente';
   var numOC = 'OC-' + (r.fecha||'').replace(/-/g,'') + '-' + r.id.substring(0,4).toUpperCase();
   var estadoColor = {'Pendiente':'#b97c0a','Aprobada':'#378add','Recibida':'#0f6e56','Cancelada':'#a32d2d'}[r.estado] || '#888';
 
