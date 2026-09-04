@@ -542,7 +542,7 @@ function startApp(){
     }
   } else if(session.clienteid === 'jorajuria'){
     // Cliente transporte: ocultar secciones ISO, mostrar solo Transporte
-    var ocultarTextos = ['Dashboard','Proyectos','Documentos ISO','Indicadores','Archivos','Ganadería'];
+    var ocultarTextos = ['Dashboard','Documentos ISO','Indicadores','Archivos','Ganadería'];
     document.querySelectorAll('.sidebar-btn').forEach(function(btn){
       var txt = btn.textContent.trim();
       var esOcultar = ocultarTextos.some(function(t){ return txt.indexOf(t) >= 0; });
@@ -1542,7 +1542,7 @@ async function uploadFile(input){
   reader.readAsDataURL(file);
 }
 
-function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); }); document.getElementById('page-'+page).classList.add('active'); if(page==='registros') loadRegistros('aliment'); if(page==='transporte') loadTransporte('kpis'); }
+function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); }); document.getElementById('page-'+page).classList.add('active'); if(page==='registros') loadRegistros('aliment'); if(page==='transporte'){ var tb=document.querySelector('#transp-filtros .fb'); loadTransporte('kpis', tb); } }
 
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
