@@ -235,7 +235,14 @@ tr:hover td{background:#faf9f6}
         <div class="page-header"><h2>Proyectos y Tareas</h2><button class="add-btn primary" onclick="openModal('Proyectos')"><i class="ti ti-plus"></i> Nueva tarea</button></div>
         <div class="stats" id="proy-stats"></div>
         <div class="toolbar"><div class="filter-row" id="proy-filters"></div></div>
+        <div style="display:flex;gap:6px;margin-bottom:16px" id="proy-vista-tabs">
+          <button class="fb active" onclick="cambiarVistaProy('kanban',this)">📋 Tablero</button>
+          <button class="fb" onclick="cambiarVistaProy('grafico',this)">📊 Gráfico</button>
+          <button class="fb" onclick="cambiarVistaProy('calendario',this)">📅 Calendario</button>
+        </div>
         <div id="proy-kanban" class="kanban-board"><div class="loading">Cargando...</div></div>
+        <div id="proy-grafico" style="display:none"></div>
+        <div id="proy-calendario" style="display:none"></div>
       </div>
 
       <div class="page" id="page-documentos">
@@ -672,6 +679,127 @@ function renderProy(){
       + cards
       + '</div>';
   }).join('');
+
+  renderProyGrafico(rows);
+  renderProyCalendario(rows);
+}
+
+function cambiarVistaProy(vista, btn){
+  document.querySelectorAll('#proy-vista-tabs .fb').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('proy-kanban').style.display = vista==='kanban' ? '' : 'none';
+  document.getElementById('proy-grafico').style.display = vista==='grafico' ? '' : 'none';
+  document.getElementById('proy-calendario').style.display = vista==='calendario' ? '' : 'none';
+}
+
+// ── Vista Gráfico: tareas por prioridad, coloreadas por estado ──
+var PRIORIDADES = ['alta','media','baja'];
+var PRI_LABEL = {alta:'Alta', media:'Media', baja:'Baja'};
+var ESTADO_COMP = {
+  'no-iniciado': {label:'No iniciado', color:'#9b8ee8'},
+  'en-curso':    {label:'En curso',    color:'#185fa5'},
+  'retraso':     {label:'Con retraso', color:'#a32d2d'},
+  'completado':  {label:'Completado',  color:'#0f6e56'}
+};
+function estadoComputado(r){
+  if (r.estado === 'completado') return 'completado';
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var v = r.vence ? new Date(String(r.vence).slice(0,10)) : null;
+  if (v && !isNaN(v.getTime()) && v < hoy) return 'retraso';
+  return r.estado === 'en-curso' ? 'en-curso' : 'no-iniciado';
+}
+function renderProyGrafico(rows){
+  var el = document.getElementById('proy-grafico');
+  if (!el) return;
+  var data = {};
+  PRIORIDADES.forEach(function(p){ data[p] = {'no-iniciado':0,'en-curso':0,'retraso':0,'completado':0}; });
+  rows.forEach(function(r){
+    var p = PRIORIDADES.indexOf(r.prioridad) >= 0 ? r.prioridad : 'media';
+    data[p][estadoComputado(r)]++;
+  });
+  var max = 1;
+  PRIORIDADES.forEach(function(p){
+    var total = Object.keys(data[p]).reduce(function(s,k){ return s+data[p][k]; }, 0);
+    if (total > max) max = total;
+  });
+  var chartH = 220;
+  var bars = PRIORIDADES.map(function(p){
+    var col = data[p];
+    var total = Object.keys(col).reduce(function(s,k){ return s+col[k]; }, 0);
+    var segs = Object.keys(ESTADO_COMP).map(function(k){
+      var n = col[k]; if(!n) return '';
+      var h = Math.max(2, Math.round((n/max)*chartH));
+      return '<div title="'+ESTADO_COMP[k].label+': '+n+'" style="height:'+h+'px;background:'+ESTADO_COMP[k].color+';width:100%"></div>';
+    }).join('');
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1">'
+      + '<div style="display:flex;flex-direction:column-reverse;width:44px;height:'+chartH+'px;border-radius:6px 6px 0 0;overflow:hidden;background:var(--gray)">'+segs+'</div>'
+      + '<div style="font-size:12px;color:var(--text);font-weight:600">'+PRI_LABEL[p]+'</div>'
+      + '<div style="font-size:11px;color:var(--muted)">'+total+' tarea'+(total===1?'':'s')+'</div>'
+      + '</div>';
+  }).join('');
+  var legend = Object.keys(ESTADO_COMP).map(function(k){
+    return '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:'+ESTADO_COMP[k].color+';display:inline-block"></span>'+ESTADO_COMP[k].label+'</div>';
+  }).join('');
+  el.innerHTML = '<div class="card" style="padding:24px">'
+    + '<div style="font-weight:700;margin-bottom:20px">Tareas por prioridad</div>'
+    + '<div style="display:flex;align-items:flex-end;gap:24px;padding:0 12px">'+bars+'</div>'
+    + '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">'+legend+'</div>'
+    + '</div>';
+}
+
+// ── Vista Calendario: tareas ubicadas en su fecha de vencimiento ──
+var _calMes = new Date(); _calMes.setDate(1); _calMes.setHours(0,0,0,0);
+var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var DIAS_SEM = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+function fmtISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function cambiarMesCal(delta){ _calMes.setMonth(_calMes.getMonth()+delta); renderProyCalendario(filtered('Proyectos')); }
+function irHoyCal(){ _calMes = new Date(); _calMes.setDate(1); _calMes.setHours(0,0,0,0); renderProyCalendario(filtered('Proyectos')); }
+function renderProyCalendario(rows){
+  var el = document.getElementById('proy-calendario');
+  if (!el) return;
+  var year = _calMes.getFullYear(), month = _calMes.getMonth();
+  var porDia = {};
+  rows.forEach(function(r){
+    if (!r.vence) return;
+    var key = String(r.vence).slice(0,10);
+    (porDia[key] = porDia[key] || []).push(r);
+  });
+  var primerDia = new Date(year, month, 1);
+  var ultimoDia = new Date(year, month+1, 0);
+  var offsetInicio = (primerDia.getDay()+6)%7;
+  var totalCeldas = Math.ceil((offsetInicio+ultimoDia.getDate())/7)*7;
+  var hoyStr = fmtISO(new Date());
+  var celdas = '';
+  for (var i=0;i<totalCeldas;i++){
+    var diaNum = i - offsetInicio + 1;
+    var enMes = diaNum>=1 && diaNum<=ultimoDia.getDate();
+    var key = enMes ? fmtISO(new Date(year, month, diaNum)) : '';
+    var tareasDia = enMes ? (porDia[key]||[]) : [];
+    var esHoy = enMes && key===hoyStr;
+    var pills = tareasDia.slice(0,3).map(function(r){
+      var color = r.prioridad==='alta' ? '#a32d2d' : r.prioridad==='media' ? '#b97c0a' : '#3b6d11';
+      return '<div onclick="openEdit(\'Proyectos\',\''+r.id+'\')" title="'+r.tarea+'" style="font-size:10px;padding:2px 6px;margin-bottom:2px;border-radius:4px;background:'+color+'1a;color:'+color+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;border-left:3px solid '+color+'">'+r.tarea+'</div>';
+    }).join('');
+    var mas = tareasDia.length>3 ? '<div style="font-size:10px;color:var(--muted)">+'+(tareasDia.length-3)+' más</div>' : '';
+    celdas += '<div style="min-height:84px;padding:6px;border:1px solid var(--border);'+(enMes?'':'background:var(--gray);opacity:.5;')+(esHoy?'background:var(--green-light);':'')+'">'
+      + '<div style="font-size:11px;font-weight:'+(esHoy?'700':'400')+';color:'+(esHoy?'var(--green)':'var(--muted)')+';margin-bottom:4px">'+(enMes?diaNum:'')+'</div>'
+      + pills + mas
+      + '</div>';
+  }
+  el.innerHTML = '<div class="card" style="padding:0">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">'
+    + '<button class="fb" onclick="irHoyCal()">Hoy</button>'
+    + '<div style="display:flex;align-items:center;gap:10px">'
+    + '<button class="edit-btn" onclick="cambiarMesCal(-1)">‹</button>'
+    + '<div style="font-weight:700;font-size:14px;text-transform:capitalize">'+MESES[month]+' '+year+'</div>'
+    + '<button class="edit-btn" onclick="cambiarMesCal(1)">›</button>'
+    + '</div><div style="width:56px"></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border)">'
+    + DIAS_SEM.map(function(d){ return '<div style="padding:8px;text-align:center;font-size:11px;font-weight:600;color:var(--muted)">'+d+'</div>'; }).join('')
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(7,1fr)">'+celdas+'</div>'
+    + '</div>';
 }
 
 var _kanbanDragId = null;
