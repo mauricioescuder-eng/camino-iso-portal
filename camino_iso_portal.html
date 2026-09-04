@@ -415,7 +415,6 @@ function callAPI(params){
 var AREAS = ['agro','transporte','ganaderia','construccion'];
 var AL = {agro:'Agro',transporte:'Transporte',ganaderia:'Ganadería',construccion:'Construcción'};
 var COLORS = {agro:'#639922',transporte:'#378add',ganaderia:'#ba7517',construccion:'#d85a30'};
-var PREFIX_MAP = {Clientes:'C',Proyectos:'P',Documentos:'D',KPIs:'K',Usuarios:'U'};
 var session = null;
 var cache = {Clientes:[],Proyectos:[],Documentos:[],KPIs:[],Usuarios:[],Archivos:[]};
 var cf = {Clientes:'todas',Proyectos:'todas',Documentos:'todas'};
@@ -1476,8 +1475,6 @@ var FIELDS = {
   Usuarios:[{id:'usuario',label:'Usuario',type:'text'},{id:'password',label:'Contraseña',type:'text'},{id:'clienteid',label:'ID Cliente',type:'text'},{id:'rol',label:'Rol',type:'select',opts:['admin','cliente'].map(function(v){ return {v:v,l:cap(v)}; })}]
 };
 
-function genId(mod){ var p=PREFIX_MAP[mod]||'X'; var existing=(cache[mod]||[]).map(function(r){ return r.id; }).filter(function(id){ return String(id).indexOf(p)===0; }); var nums=existing.map(function(id){ return parseInt(String(id).replace(p,''))||0; }); var next=nums.length?Math.max.apply(null,nums)+1:1; return p+String(next).padStart(3,'0'); }
-
 function openModal(mod){ editingId=null; editingMod=mod; document.getElementById('modal-title').textContent='Nuevo registro'; document.getElementById('btn-del').style.display='none'; renderFields(mod,null); document.getElementById('overlay').classList.add('open'); }
 function openEdit(mod,id){ editingId=id; editingMod=mod; var rec=cache[mod].find(function(x){ return String(x.id)===String(id); }); document.getElementById('modal-title').textContent='Editar registro'; document.getElementById('btn-del').style.display='block'; renderFields(mod,rec); document.getElementById('overlay').classList.add('open'); }
 
@@ -1492,7 +1489,7 @@ function renderFields(mod,rec){
 
 async function saveRecord(){
   var mod=editingMod; var fields=FIELDS[mod]; if(!fields) return;
-  var rec={id:editingId||genId(mod)};
+  var rec={id:editingId||''};
   for(var i=0;i<fields.length;i++){ var f=fields[i]; var el=document.getElementById('mf-'+f.id); if(!el) continue; rec[f.id]=f.type==='number'?parseFloat(el.value)||0:el.value.trim(); }
   if(session.rol!=='admin'&&rec.clienteid!==undefined) rec.clienteid=session.clienteid||session.clienteId||'';
   document.getElementById('btn-save').textContent='Guardando...';
