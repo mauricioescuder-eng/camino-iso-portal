@@ -694,7 +694,7 @@ async function moverTarea(id, nuevoEstado){
   Object.keys(rec).forEach(function(k){ rec2[k] = rec[k]; });
   rec2.estado = nuevoEstado;
   try {
-    await fetch(API,{method:'POST',body:JSON.stringify({mod:'Proyectos',action:'save',record:rec2,rol:session.rol,clienteId:session.clienteid||''})});
+    await callAPI({mod:'Proyectos',action:'save',record:JSON.stringify(rec2),rol:session.rol,clienteId:session.clienteid||''});
     toast('✓ Tarea movida a ' + cap(nuevoEstado));
     await loadAll();
   } catch(e){ toast('Error al mover la tarea.', true); }
@@ -1492,8 +1492,9 @@ async function saveRecord(){
   if(session.rol!=='admin'&&rec.clienteid!==undefined) rec.clienteid=session.clienteid||session.clienteId||'';
   document.getElementById('btn-save').textContent='Guardando...';
   try{
-    await fetch(API,{method:'POST',body:JSON.stringify({mod:mod,action:'save',record:rec,rol:session.rol,clienteId:session.clienteid||''})});
-    if(mod==='Clientes'&&session.rol==='admin'&&!editingId) await fetch(API,{method:'POST',body:JSON.stringify({mod:'',action:'createClientFolder',record:{clienteId:rec.id,empresa:rec.empresa}})});
+    var r = await callAPI({mod:mod,action:'save',record:JSON.stringify(rec),rol:session.rol,clienteId:session.clienteid||''});
+    if(r && r.error) throw new Error(r.error);
+    if(mod==='Clientes'&&session.rol==='admin'&&!editingId) await callAPI({mod:'',action:'createClientFolder',record:JSON.stringify({clienteId:rec.id,empresa:rec.empresa})});
     closeModal(); toast('Guardado ✓'); await loadAll();
   } catch(e){ toast('Error al guardar',true); }
   document.getElementById('btn-save').textContent='Guardar';
@@ -1501,7 +1502,11 @@ async function saveRecord(){
 
 async function deleteRecord(){
   if(!confirm('¿Eliminar?')) return;
-  try{ await fetch(API,{method:'POST',body:JSON.stringify({mod:editingMod,action:'delete',record:{id:editingId}})}); closeModal(); toast('Eliminado'); await loadAll(); } catch(e){ toast('Error',true); }
+  try{
+    var r = await callAPI({mod:editingMod,action:'delete',record:JSON.stringify({id:editingId})});
+    if(r && r.error) throw new Error(r.error);
+    closeModal(); toast('Eliminado'); await loadAll();
+  } catch(e){ toast('Error',true); }
 }
 
 async function uploadFile(input){
