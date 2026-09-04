@@ -429,6 +429,11 @@ var _tipoActivo = 'aliment';
 var _totalIngresados = 0;
 
 function cap(s){ return s ? String(s).charAt(0).toUpperCase()+String(s).slice(1) : ''; }
+function fmtFecha(v){
+  if(!v) return '';
+  var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : String(v);
+}
 function toast(msg, err){
   var t = document.getElementById('toast');
   t.style.background = err ? '#a32d2d' : '#1E6B2E';
@@ -609,7 +614,7 @@ function renderDashboard(){
     {l:'Tareas completadas',p:compPct},{l:'Documentos vigentes',p:docPct},{l:'KPIs en verde',p:kpiPct}
   ].map(function(b){ return '<div class="cert-bar"><div class="cert-bar-label"><span>'+b.l+'</span><span>'+b.p+'%</span></div><div class="bar-track"><div class="bar-fill" style="width:'+b.p+'%"></div></div></div>'; }).join('');
   var alerts = [];
-  docs.filter(function(d){ if(!d.vence) return false; var diff=(new Date(d.vence)-hoy)/86400000; return diff>=0&&diff<=30; }).forEach(function(d){ alerts.push({dot:'orange',msg:'Documento por vencer: '+d.nombre+' ('+d.vence+')'}); });
+  docs.filter(function(d){ if(!d.vence) return false; var diff=(new Date(d.vence)-hoy)/86400000; return diff>=0&&diff<=30; }).forEach(function(d){ alerts.push({dot:'orange',msg:'Documento por vencer: '+d.nombre+' ('+fmtFecha(d.vence)+')'}); });
   docs.filter(function(d){ return d.estado==='vencido'; }).forEach(function(d){ alerts.push({dot:'red',msg:'Documento vencido: '+d.nombre}); });
   document.getElementById('alert-list').innerHTML = alerts.length ? alerts.map(function(a){ return '<div class="alert-item"><div class="alert-dot '+a.dot+'"></div><span>'+a.msg+'</span></div>'; }).join('') : '<div class="alert-item"><div class="alert-dot green"></div><span>Sin alertas pendientes ✓</span></div>';
 }
@@ -660,7 +665,7 @@ function renderProy(){
         + '<span class="badge b-'+(r.area||'')+'" style="font-size:10px">'+(AL[r.area]||r.area||'')+'</span>'
         + '<span class="pri-'+r.prioridad+'" style="font-size:11px">'+cap(r.prioridad)+'</span>'
         + '</div>'
-        + '<div style="font-size:11px;color:var(--muted)">'+(r.responsable||'—')+(r.vence?' · vence '+r.vence:'')+'</div>'
+        + '<div style="font-size:11px;color:var(--muted)">'+(r.responsable||'—')+(r.vence?' · vence '+fmtFecha(r.vence):'')+'</div>'
         + '</div>';
     }).join('') || '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px 0">Sin tareas</div>';
     return '<div class="kanban-col" data-estado="'+e.key+'" ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event)">'
@@ -705,7 +710,7 @@ function renderDocs(){
   var s={vigente:0,revision:0,vencido:0};
   cache.Documentos.forEach(function(r){ s[r.estado]=(s[r.estado]||0)+1; });
   document.getElementById('docs-stats').innerHTML='<div class="stat"><div class="stat-label">Total</div><div class="stat-value">'+cache.Documentos.length+'</div></div><div class="stat"><div class="stat-label">Vigentes</div><div class="stat-value">'+(s.vigente||0)+'</div></div><div class="stat"><div class="stat-label">En revisión</div><div class="stat-value">'+(s.revision||0)+'</div></div><div class="stat"><div class="stat-label">Vencidos</div><div class="stat-value">'+(s.vencido||0)+'</div></div>';
-  document.getElementById('docs-body').innerHTML = filtered('Documentos').map(function(r){ return '<tr><td>'+r.nombre+'</td><td style="font-size:12px">'+r.norma+'</td><td><span class="badge b-'+(r.area||'')+'">'+( AL[r.area]||r.area||'')+'</span></td><td style="font-size:12px">'+r.version+'</td><td style="font-size:12px">'+r.vence+'</td><td><span class="badge b-'+r.estado+'">'+cap(r.estado)+'</span></td><td><button class="edit-btn" onclick="openEdit(\'Documentos\',\''+r.id+'\')">Editar</button></td></tr>'; }).join('') || '<tr><td colspan="7" class="loading">Sin documentos</td></tr>';
+  document.getElementById('docs-body').innerHTML = filtered('Documentos').map(function(r){ return '<tr><td>'+r.nombre+'</td><td style="font-size:12px">'+r.norma+'</td><td><span class="badge b-'+(r.area||'')+'">'+( AL[r.area]||r.area||'')+'</span></td><td style="font-size:12px">'+r.version+'</td><td style="font-size:12px">'+fmtFecha(r.vence)+'</td><td><span class="badge b-'+r.estado+'">'+cap(r.estado)+'</span></td><td><button class="edit-btn" onclick="openEdit(\'Documentos\',\''+r.id+'\')">Editar</button></td></tr>'; }).join('') || '<tr><td colspan="7" class="loading">Sin documentos</td></tr>';
 }
 
 function renderKPI(){
