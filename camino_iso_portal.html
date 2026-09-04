@@ -409,7 +409,7 @@ function callAPI(params){
     script.onerror = function(){ reject(new Error('JSONP error')); };
     script.src = url;
     document.body.appendChild(script);
-    setTimeout(function(){ if(window[cbName]){ delete window[cbName]; reject(new Error('Timeout')); } }, 10000);
+    setTimeout(function(){ if(window[cbName]){ delete window[cbName]; reject(new Error('Timeout')); } }, 25000);
   });
 }
 var AREAS = ['agro','transporte','ganaderia','construccion'];
@@ -1501,7 +1501,7 @@ async function saveRecord(){
     if(r && r.error) throw new Error(r.error);
     if(mod==='Clientes'&&session.rol==='admin'&&!editingId) await callAPI({mod:'',action:'createClientFolder',record:JSON.stringify({clienteId:rec.id,empresa:rec.empresa})});
     closeModal(); toast('Guardado ✓'); await loadAll();
-  } catch(e){ toast('Error al guardar',true); }
+  } catch(e){ toast('Error al guardar',true); closeModal(); await loadAll(); }
   document.getElementById('btn-save').textContent='Guardar';
 }
 
