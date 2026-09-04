@@ -395,9 +395,10 @@ tr:hover td{background:#faf9f6}
 var API = 'https://script.google.com/macros/s/AKfycbzGUUU5jtY7GVkh92KV31nqlxk3bPFMfPIkOlyAkJmG2NzzddFDca7y5Z40pW3-n78Ykg/exec';
 function loadConfig(){ return Promise.resolve(); }
 
+var _cbIdx = 0;
 function callAPI(params){
   return new Promise(function(resolve, reject){
-    var cbName = 'cb_' + Date.now();
+    var cbName = 'cb_' + (++_cbIdx) + '_' + Date.now();
     var script = document.createElement('script');
     var url = API + '?' + Object.keys(params).map(function(k){ return k+'='+encodeURIComponent(params[k]); }).join('&') + '&callback=' + cbName;
     window[cbName] = function(data){
