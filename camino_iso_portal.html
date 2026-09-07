@@ -930,8 +930,9 @@ function renderArchivos(){
     if(regWrap) regWrap.style.display='flex';
     var regSel = document.getElementById('reg-cliente-id');
     if(regSel && cache.Clientes.length && regSel.options.length <= 1){
+      var clientesGanaderia = cache.Clientes.filter(function(c){ return c.area === 'ganaderia'; });
       regSel.innerHTML = '<option value="">Seleccioná un cliente</option>' +
-        cache.Clientes.map(function(c){ return '<option value="'+c.id+'">'+c.id+' - '+c.empresa+'</option>'; }).join('');
+        clientesGanaderia.map(function(c){ return '<option value="'+c.id+'">'+c.id+' - '+c.empresa+'</option>'; }).join('');
     }
   }
   filterArchivos('todas');
