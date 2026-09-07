@@ -259,7 +259,12 @@ tr:hover td{background:#faf9f6}
       </div>
 
       <div class="page" id="page-presupuesto">
-        <div class="page-header"><h2>Presupuesto de Obra</h2><button class="add-btn primary" onclick="openModal('Presupuesto')"><i class="ti ti-plus"></i> Nueva partida</button></div>
+        <div class="page-header"><h2>Presupuesto de Obra</h2>
+          <div style="display:flex;gap:8px">
+            <button class="add-btn" onclick="openModal('Rubros')"><i class="ti ti-plus"></i> Nuevo ítem</button>
+            <button class="add-btn primary" onclick="openModal('Gastos')"><i class="ti ti-plus"></i> Nuevo gasto</button>
+          </div>
+        </div>
         <div id="presupuesto-cont"><div class="loading">Cargando...</div></div>
       </div>
 
@@ -429,7 +434,7 @@ var AREAS = ['agro','transporte','ganaderia','construccion'];
 var AL = {agro:'Agro',transporte:'Transporte',ganaderia:'Ganadería',construccion:'Construcción'};
 var COLORS = {agro:'#639922',transporte:'#378add',ganaderia:'#ba7517',construccion:'#d85a30'};
 var session = null;
-var cache = {Clientes:[],Proyectos:[],Documentos:[],KPIs:[],Usuarios:[],Archivos:[],Presupuesto:[]};
+var cache = {Clientes:[],Proyectos:[],Documentos:[],KPIs:[],Usuarios:[],Archivos:[],Rubros:[],Gastos:[]};
 var cf = {Clientes:'todas',Proyectos:'todas',Documentos:'todas'};
 var editingId = null, editingMod = null;
 var _filtroLote = 'todos';
@@ -608,7 +613,7 @@ function cambiarClienteTransporte(apiUrl) {
 }
 
 async function loadAll(){
-  var mods = session.rol==='admin' ? ['Clientes','Proyectos','Documentos','KPIs','Usuarios','Archivos','Presupuesto'] : ['Proyectos','Documentos','KPIs','Archivos','Presupuesto'];
+  var mods = session.rol==='admin' ? ['Clientes','Proyectos','Documentos','KPIs','Usuarios','Archivos','Rubros','Gastos'] : ['Proyectos','Documentos','KPIs','Archivos','Rubros','Gastos'];
   var clienteId = session.clienteid || session.clienteId || '';
   var rol = session.rol;
   await Promise.all(mods.map(async function(mod){
@@ -875,29 +880,38 @@ function renderKPI(){
 function renderPresupuesto(){
   var el = document.getElementById('presupuesto-cont');
   if (!el) return;
-  var rows = Array.isArray(cache.Presupuesto) ? cache.Presupuesto : [];
-  if (!rows.length) { el.innerHTML = '<div class="loading">Sin partidas cargadas.</div>'; return; }
-  var porObra = {};
-  rows.forEach(function(r){ var obra = r.obra || 'Sin obra'; (porObra[obra] = porObra[obra] || []).push(r); });
+  var rubros = Array.isArray(cache.Rubros) ? cache.Rubros : [];
+  var gastos = Array.isArray(cache.Gastos) ? cache.Gastos : [];
+  if (!rubros.length) { el.innerHTML = '<div class="loading">Sin ítems cargados. Creá uno con "+ Nuevo ítem".</div>'; return; }
   var fmt = function(n){ return '$'+(parseFloat(n)||0).toLocaleString('es-UY'); };
-  el.innerHTML = Object.keys(porObra).map(function(obra){
-    var items = porObra[obra];
-    var totalPres = items.reduce(function(s,r){ return s+(parseFloat(r.presupuestado)||0); }, 0);
-    var totalGast = items.reduce(function(s,r){ return s+(parseFloat(r.gastado)||0); }, 0);
-    var pct = totalPres>0 ? Math.round((totalGast/totalPres)*100) : 0;
-    var color = pct>100 ? '#a32d2d' : pct>=80 ? '#b97c0a' : '#3b6d11';
-    var filas = items.map(function(r){
-      return '<tr><td>'+cap(r.rubro)+'</td><td>'+(r.descripcion||'—')+'</td><td>'+fmt(r.presupuestado)+'</td><td>'+fmt(r.gastado)+'</td><td>'+(r.fecha?fmtFecha(r.fecha):'—')+'</td><td><button class="edit-btn" onclick="openEdit(\'Presupuesto\',\''+r.id+'\')">Editar</button></td></tr>';
+  var esAdmin = session.rol==='admin';
+  var porCliente = {};
+  rubros.forEach(function(r){ var c = r.clienteid || '—'; (porCliente[c] = porCliente[c] || []).push(r); });
+  el.innerHTML = Object.keys(porCliente).map(function(cid){
+    var titulo = esAdmin ? '<div style="font-weight:700;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 10px">'+cid+'</div>' : '';
+    var cards = porCliente[cid].map(function(r){
+      var gastosRubro = gastos.filter(function(g){ return String(g.rubro)===String(r.id); });
+      var totalGastado = gastosRubro.reduce(function(s,g){ return s+(parseFloat(g.monto)||0); }, 0);
+      var presupuesto = parseFloat(r.presupuesto)||0;
+      var saldo = presupuesto - totalGastado;
+      var pct = presupuesto>0 ? Math.round((totalGastado/presupuesto)*100) : 0;
+      var color = pct>100 ? '#a32d2d' : pct>=80 ? '#b97c0a' : '#3b6d11';
+      var filasGasto = gastosRubro.map(function(g){
+        return '<tr><td>'+(g.descripcion||'—')+'</td><td>'+fmt(g.monto)+'</td><td>'+(g.fecha?fmtFecha(g.fecha):'—')+'</td><td><button class="edit-btn" onclick="openEdit(\'Gastos\',\''+g.id+'\')">Editar</button></td></tr>';
+      }).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:10px">Sin gastos cargados</td></tr>';
+      return '<div class="card" style="margin-bottom:16px;padding:18px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
+        + '<div style="font-weight:700;font-size:15px">'+r.nombre+(r.estado==='cerrado'?' <span style="font-size:11px;color:var(--muted);font-weight:400">(cerrado)</span>':'')+'</div>'
+        + '<div style="display:flex;align-items:center;gap:10px">'
+        + '<div style="font-size:13px;color:'+color+';font-weight:700">'+pct+'% usado</div>'
+        + '<button class="edit-btn" onclick="openEdit(\'Rubros\',\''+r.id+'\')">Editar ítem</button>'
+        + '</div></div>'
+        + '<div class="bar-track" style="margin-bottom:8px"><div class="bar-fill" style="width:'+Math.min(100,pct)+'%;background:'+color+'"></div></div>'
+        + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Presupuestado: '+fmt(presupuesto)+' · Gastado: '+fmt(totalGastado)+' · Saldo: <b style="color:'+(saldo<0?'#a32d2d':'var(--text)')+'">'+fmt(saldo)+'</b></div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap"><thead><tr style="text-align:left;color:var(--muted)"><th style="padding:6px 8px 6px 0">Descripción</th><th style="padding:6px 8px">Monto</th><th style="padding:6px 8px">Fecha</th><th></th></tr></thead><tbody>'+filasGasto+'</tbody></table></div>'
+        + '</div>';
     }).join('');
-    return '<div class="card" style="margin-bottom:16px;padding:18px">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
-      + '<div style="font-weight:700;font-size:15px">'+obra+'</div>'
-      + '<div style="font-size:13px;color:'+color+';font-weight:700">'+pct+'% usado</div>'
-      + '</div>'
-      + '<div class="bar-track" style="margin-bottom:8px"><div class="bar-fill" style="width:'+Math.min(100,pct)+'%;background:'+color+'"></div></div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Presupuestado: '+fmt(totalPres)+' · Gastado: '+fmt(totalGast)+' · Disponible: '+fmt(totalPres-totalGast)+'</div>'
-      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap"><thead><tr style="text-align:left;color:var(--muted)"><th style="padding:6px 8px 6px 0">Rubro</th><th style="padding:6px 8px">Descripción</th><th style="padding:6px 8px">Presupuestado</th><th style="padding:6px 8px">Gastado</th><th style="padding:6px 8px">Fecha</th><th></th></tr></thead><tbody>'+filas+'</tbody></table></div>'
-      + '</div>';
+    return titulo + cards;
   }).join('');
 }
 
@@ -1652,7 +1666,8 @@ var FIELDS = {
   Documentos:[{id:'nombre',label:'Documento',type:'text'},{id:'norma',label:'Norma ISO',type:'text'},{id:'area',label:'Área',type:'select',opts:AREAS.map(function(a){ return {v:a,l:AL[a]}; })},{id:'version',label:'Versión',type:'text'},{id:'vence',label:'Vencimiento',type:'date'},{id:'estado',label:'Estado',type:'select',opts:['vigente','revision','vencido'].map(function(v){ return {v:v,l:cap(v)}; })},{id:'clienteid',label:'ID Cliente',type:'text'}],
   KPIs:[{id:'nombre',label:'Indicador',type:'text'},{id:'area',label:'Área',type:'select',opts:AREAS.map(function(a){ return {v:a,l:AL[a]}; })},{id:'valor',label:'Valor actual',type:'number'},{id:'meta',label:'Meta',type:'number'},{id:'unidad',label:'Unidad',type:'text'},{id:'clienteid',label:'ID Cliente',type:'text'}],
   Usuarios:[{id:'usuario',label:'Usuario',type:'text'},{id:'password',label:'Contraseña',type:'text'},{id:'clienteid',label:'ID Cliente',type:'text'},{id:'rol',label:'Rol',type:'select',opts:['admin','cliente'].map(function(v){ return {v:v,l:cap(v)}; })}],
-  Presupuesto:[{id:'obra',label:'Obra / Proyecto',type:'text'},{id:'rubro',label:'Rubro',type:'select',opts:['materiales','mano de obra','equipos','subcontratos','otros'].map(function(v){ return {v:v,l:cap(v)}; })},{id:'descripcion',label:'Descripción',type:'text'},{id:'presupuestado',label:'Presupuestado ($)',type:'number'},{id:'gastado',label:'Gastado ($)',type:'number'},{id:'fecha',label:'Fecha',type:'date'},{id:'clienteid',label:'ID Cliente',type:'text'}]
+  Rubros:[{id:'nombre',label:'Ítem / Rubro',type:'text'},{id:'presupuesto',label:'Monto presupuestado ($)',type:'number'},{id:'estado',label:'Estado',type:'select',opts:[{v:'activo',l:'Activo'},{v:'cerrado',l:'Cerrado'}]},{id:'clienteid',label:'ID Cliente',type:'text'}],
+  Gastos:[{id:'rubro',label:'Ítem / Rubro',type:'select',opts:[]},{id:'descripcion',label:'Descripción',type:'text'},{id:'monto',label:'Monto ($)',type:'number'},{id:'fecha',label:'Fecha',type:'date'},{id:'clienteid',label:'ID Cliente',type:'text'}]
 };
 
 function openModal(mod){ editingId=null; editingMod=mod; document.getElementById('modal-title').textContent='Nuevo registro'; document.getElementById('btn-del').style.display='none'; renderFields(mod,null); document.getElementById('overlay').classList.add('open'); }
@@ -1662,6 +1677,15 @@ function renderFields(mod,rec){
   var fields=FIELDS[mod]; if(!fields){ document.getElementById('modal-fields').innerHTML=''; return; }
   document.getElementById('modal-fields').innerHTML=fields.map(function(f){
     var val = rec ? (rec[f.id]!==undefined ? rec[f.id] : (rec[f.id.toLowerCase()]!==undefined ? rec[f.id.toLowerCase()] : '')) : '';
+    if(mod==='Gastos' && f.id==='rubro'){
+      var propioClienteId = String(session.clienteid||session.clienteId||'').toLowerCase();
+      var rubrosDisp = (cache.Rubros||[]).filter(function(r){ return session.rol==='admin' || String(r.clienteid||'').toLowerCase()===propioClienteId; });
+      var optsRubro = rubrosDisp.map(function(r){
+        var etiqueta = r.nombre + (session.rol==='admin' && r.clienteid ? ' — '+r.clienteid : '');
+        return '<option value="'+r.id+'"'+(String(val)===String(r.id)?' selected':'')+'>'+etiqueta+'</option>';
+      }).join('') || '<option value="">— Creá un ítem primero —</option>';
+      return '<div class="fg"><label>'+f.label+'</label><select id="mf-'+f.id+'">'+optsRubro+'</select></div>';
+    }
     if(f.type==='select') return '<div class="fg"><label>'+f.label+'</label><select id="mf-'+f.id+'">'+f.opts.map(function(o){ return '<option value="'+o.v+'"'+(String(val)===o.v?' selected':'')+'>'+o.l+'</option>'; }).join('')+'</select></div>';
     return '<div class="fg"><label>'+f.label+'</label><input type="'+f.type+'" id="mf-'+f.id+'" value="'+val+'"></div>';
   }).join('');
