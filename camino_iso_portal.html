@@ -210,7 +210,7 @@ tr:hover td{background:#faf9f6}
       <button class="sidebar-btn" onclick="showPage('proyectos',this)"><i class="ti ti-checklist"></i> Proyectos</button>
       <button class="sidebar-btn" onclick="showPage('documentos',this)"><i class="ti ti-file-certificate"></i> Documentos ISO</button>
       <button class="sidebar-btn" onclick="showPage('kpis',this)"><i class="ti ti-chart-bar"></i> Indicadores</button>
-      <button class="sidebar-btn" onclick="showPage('presupuesto',this)"><i class="ti ti-report-money"></i> Presupuesto</button>
+      <button class="sidebar-btn" onclick="showPage('presupuesto',this)"><i class="ti ti-building"></i> Construcción</button>
       <button class="sidebar-btn" onclick="showPage('archivos',this)"><i class="ti ti-folder"></i> Archivos</button>
       <button class="sidebar-btn" onclick="showPage('registros',this)"><i class="ti ti-clipboard-list"></i> Ganadería</button>
       <button class="sidebar-btn" onclick="showPage('transporte',this)"><i class="ti ti-truck"></i> Transporte</button>
@@ -571,7 +571,7 @@ function startApp(){
     }
   } else if(session.clienteid === 'jorajuria'){
     // Cliente transporte: ocultar secciones ISO, mostrar solo Transporte
-    var ocultarTextos = ['Dashboard','Documentos ISO','Indicadores','Archivos','Ganadería','Presupuesto'];
+    var ocultarTextos = ['Dashboard','Documentos ISO','Indicadores','Archivos','Ganadería','Construcción'];
     document.querySelectorAll('.sidebar-btn').forEach(function(btn){
       var txt = btn.textContent.trim();
       var esOcultar = ocultarTextos.some(function(t){ return txt.indexOf(t) >= 0; });
