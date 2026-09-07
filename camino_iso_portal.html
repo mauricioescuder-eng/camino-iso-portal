@@ -569,6 +569,16 @@ function startApp(){
     document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
     actualizarTabsTransporteEspecificos();
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
+  } else if(session.clienteid === 'peralta'){
+    // Cliente construcción: ocultar secciones que no le corresponden, mostrar solo Proyectos y Presupuesto
+    var ocultarTextosConst = ['Dashboard','Documentos ISO','Indicadores','Archivos','Ganadería','Transporte'];
+    document.querySelectorAll('.sidebar-btn').forEach(function(btn){
+      var txt = btn.textContent.trim();
+      var esOcultar = ocultarTextosConst.some(function(t){ return txt.indexOf(t) >= 0; });
+      if(esOcultar) btn.style.display='none';
+    });
+    document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
+    setTimeout(function(){ showPage('proyectos', document.querySelector('[onclick*="proyectos"]')); }, 100);
   }
   loadAll();
 }
