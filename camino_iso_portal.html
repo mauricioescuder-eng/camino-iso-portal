@@ -475,6 +475,14 @@ var _CLIENTES = {
   // Para agregar cliente: ,'9999': { nombre:'Nuevo', clienteId:'nuevo', apiUrl:'https://script.google.com/.../exec' }
 };
 
+// PENDIENTE (seguridad): este archivo se publica público en GitHub
+// Pages, así que cualquiera que mire el código fuente de la página
+// puede ver estos usuarios y contraseñas en texto plano. Mientras
+// sean pocos clientes de prueba no es grave, pero antes de escalar
+// con más clientes reales conviene mover esta validación al lado del
+// servidor (Apps Script), para que las contraseñas no viajen visibles
+// en el HTML público. (Pedido explícito de Mauricio: dejar esto
+// anotado como pendiente.)
 // Usuarios admin: { usuario → {password, rol, clienteid, apiUrl} }
 var _USUARIOS = {
   'admin': {
