@@ -69,6 +69,7 @@ tr:hover td{background:#faf9f6}
 .b-transporte{background:#e6f1fb;color:#185fa5}
 .b-ganaderia{background:#faeeda;color:#854f0b}
 .b-construccion{background:#faece7;color:#993c1d}
+.b-contable{background:#ece9fa;color:#4a3d99}
 .b-activo,.b-vigente,.b-completado{background:#e1f5ee;color:#0f6e56}
 .b-inactivo,.b-pendiente{background:#f1efe8;color:#5f5e5a}
 .b-prospecto{background:#eeedfe;color:#534ab7}
@@ -436,9 +437,9 @@ function callAPI(params){
     setTimeout(function(){ if(window[cbName]){ delete window[cbName]; reject(new Error('Timeout')); } }, 25000);
   });
 }
-var AREAS = ['agro','transporte','ganaderia','construccion'];
-var AL = {agro:'Agro',transporte:'Transporte',ganaderia:'Ganadería',construccion:'Construcción'};
-var COLORS = {agro:'#639922',transporte:'#378add',ganaderia:'#ba7517',construccion:'#d85a30'};
+var AREAS = ['agro','transporte','ganaderia','construccion','contable'];
+var AL = {agro:'Agro',transporte:'Transporte',ganaderia:'Ganadería',construccion:'Construcción',contable:'Contable'};
+var COLORS = {agro:'#639922',transporte:'#378add',ganaderia:'#ba7517',construccion:'#d85a30',contable:'#6b5ecd'};
 var session = null;
 var cache = {Clientes:[],Proyectos:[],Documentos:[],KPIs:[],Usuarios:[],Archivos:[],Rubros:[],Gastos:[]};
 var cf = {Clientes:'todas',Proyectos:'todas',Documentos:'todas'};
@@ -501,6 +502,12 @@ var _USUARIOS = {
     rol: 'cliente',
     clienteid: 'peralta',
     nombre: 'Pablo Peralta'
+  },
+  'gadea': {
+    password: 'Contable2026',
+    rol: 'cliente',
+    clienteid: 'gadea',
+    nombre: 'NG Servicios Contables'
   }
 };
 
