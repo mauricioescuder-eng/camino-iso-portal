@@ -425,7 +425,14 @@ function callAPI(params){
   return new Promise(function(resolve, reject){
     var cbName = 'cb_' + (++_cbIdx) + '_' + Date.now();
     var script = document.createElement('script');
-    var url = API + '?' + Object.keys(params).map(function(k){ return k+'='+encodeURIComponent(params[k]); }).join('&') + '&callback=' + cbName;
+    // El token de sesión se manda automáticamente en cada pedido (salvo
+    // en el login mismo, que todavía no tiene uno) — así el servidor
+    // sabe quién sos sin que el navegador tenga que decirle su rol o
+    // su clienteId (eso ya no se confía del lado del cliente).
+    var allParams = {};
+    Object.keys(params).forEach(function(k){ allParams[k] = params[k]; });
+    if (session && session.token && !allParams.token) allParams.token = session.token;
+    var url = API + '?' + Object.keys(allParams).map(function(k){ return k+'='+encodeURIComponent(allParams[k]); }).join('&') + '&callback=' + cbName;
     window[cbName] = function(data){
       delete window[cbName];
       document.body.removeChild(script);
@@ -465,59 +472,14 @@ function toast(msg, err){
   setTimeout(function(){ t.classList.remove('show'); }, 2800);
 }
 
-// Clientes: { pin → {nombre, clienteId, apiUrl} }
-var _CLIENTES = {
-  '1611': {
-    nombre: 'PRUEBA',
-    clienteId: 'prueba',
-    apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec'
-  }
-  // Para agregar cliente: ,'9999': { nombre:'Nuevo', clienteId:'nuevo', apiUrl:'https://script.google.com/.../exec' }
-};
-
-// PENDIENTE (seguridad): este archivo se publica público en GitHub
-// Pages, así que cualquiera que mire el código fuente de la página
-// puede ver estos usuarios y contraseñas en texto plano. Mientras
-// sean pocos clientes de prueba no es grave, pero antes de escalar
-// con más clientes reales conviene mover esta validación al lado del
-// servidor (Apps Script), para que las contraseñas no viajen visibles
-// en el HTML público. (Pedido explícito de Mauricio: dejar esto
-// anotado como pendiente.)
-// Usuarios admin: { usuario → {password, rol, clienteid, apiUrl} }
-var _USUARIOS = {
-  'admin': {
-    password: 'elodia',
-    rol: 'admin',
-    clienteid: '',
-    apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec'
-  },
-  'jorajuria': {
-    password: 'Manuel',
-    rol: 'cliente',
-    clienteid: 'jorajuria',
-    nombre: 'Transporte Jorajuria',
-    apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec'
-  },
-  'prueba': {
-    password: '1611',
-    rol: 'cliente',
-    clienteid: 'prueba',
-    nombre: 'PRUEBA',
-    apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec'
-  },
-  'peralta': {
-    password: 'Obra2026',
-    rol: 'cliente',
-    clienteid: 'peralta',
-    nombre: 'Pablo Peralta'
-  },
-  'gadea': {
-    password: 'Contable2026',
-    rol: 'cliente',
-    clienteid: 'gadea',
-    nombre: 'NG Servicios Contables'
-  }
-};
+// SEGURIDAD: las contraseñas y usuarios YA NO viven acá. El login se
+// valida en el servidor (Apps Script), contra la hoja "Usuarios" de la
+// planilla, donde las contraseñas están hasheadas (no en texto plano).
+// Cualquiera que mire el código fuente de esta página ya no puede ver
+// ninguna contraseña, y aunque encuentre la URL del backend, no puede
+// pedir datos de otro cliente sin un token válido (que el servidor
+// entrega recién después de validar usuario+contraseña o PIN).
+// Ver doLogin() más abajo.
 
 // Clientes de Transporte que el admin puede ver desde el selector "Viendo: ...".
 // Para agregar un cliente nuevo: sumá una fila acá con su nombre y la URL de su Apps Script.
@@ -538,31 +500,38 @@ async function doLogin(){
   var password= (document.getElementById('l-pass') ? document.getElementById('l-pass').value.trim() : '');
   var btn = document.getElementById('login-btn');
 
-  // Login por PIN (cliente)
-  if (pin && !usuario) {
-    var cliente = _CLIENTES[pin];
-    if (cliente) {
-      session = {nombre: cliente.nombre, clienteId: cliente.clienteId, rol: 'cliente', apiUrl: cliente.apiUrl};
-      startApp();
-    } else {
-      showError('PIN incorrecto');
-    }
-    return;
-  }
+  if (!pin && (!usuario || !password)) { showError('Ingresá tu PIN, o usuario y contraseña'); return; }
 
-  // Login admin (usuario + contraseña)
-  if (!usuario || !password) { showError('Ingresá usuario y contraseña'); return; }
-  var u = _USUARIOS[usuario.toLowerCase()];
-  if (u && u.password === password) {
-    session = { usuario: usuario, rol: u.rol, clienteid: u.clienteid || '', apiUrl: u.apiUrl || '' };
+  if (btn) btn.disabled = true;
+  try {
+    var params = pin ? {action: 'login', pin: pin} : {action: 'login', usuario: usuario, password: password};
+    var resp = await callAPI(params);
+    if (!resp || !resp.ok) {
+      showError((resp && resp.error) || 'Usuario o contraseña incorrectos');
+      return;
+    }
+    session = {
+      usuario: usuario || resp.nombre || '',
+      nombre: resp.nombre || usuario || '',
+      rol: resp.rol,
+      clienteid: resp.clienteid || '',
+      clienteId: resp.clienteid || '',
+      apiUrl: resp.apiUrl || '',
+      token: resp.token
+    };
     startApp();
-  } else {
-    showError('Usuario o contraseña incorrectos');
+  } catch (err) {
+    showError('No se pudo conectar. Probá de nuevo.');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 function showError(msg){ var el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
-function logout(){ session=null; document.getElementById('app').style.display='none'; document.getElementById('login-wrap').style.display='flex'; document.getElementById('l-pass').value=''; document.getElementById('login-error').style.display='none'; }
+function logout(){
+  if (session && session.token) { try { callAPI({action:'logout', token: session.token}); } catch(e){} }
+  session=null; document.getElementById('app').style.display='none'; document.getElementById('login-wrap').style.display='flex'; document.getElementById('l-pass').value=''; document.getElementById('login-error').style.display='none';
+}
 
 function startApp(){
   document.getElementById('login-wrap').style.display='none';
