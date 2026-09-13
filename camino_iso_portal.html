@@ -3381,23 +3381,58 @@ function td(txt, align, color) {
   return '<td style="padding:8px;' + (align==='r'?'text-align:right;':'') + (color?'color:'+color+';':'') + '">' + txt + '</td>';
 }
 
+// Mismo calendario de anticipación que en los avisos por mail
+// (revisarVencimientosDocumentacion en el Apps Script de Jorajuria):
+// ITV entra "próximo a vencer" a los 90 días, PNC a los 15. Cualquier
+// otro tipo de documento usa el umbral genérico de 30 días.
+var UMBRALES_DOC_TIPO = {'ITV': 90, 'PNC': 15};
+var UMBRAL_DOC_DEFAULT = 30;
+function umbralDoc(tipo){
+  var t = String(tipo||'').trim().toUpperCase();
+  return UMBRALES_DOC_TIPO[t] || UMBRAL_DOC_DEFAULT;
+}
+
+var _docCamiones = [];
+var _docChoferes = [];
+var _docFiltro = 'todos'; // 'todos' | 'proximos'
+
+function cambiarFiltroDoc(f, btn){
+  _docFiltro = f;
+  document.querySelectorAll('#doc-filtro-tabs .fb').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  pintarDocumentacion();
+}
+
 function renderDocumentacion() {
   var cont = document.getElementById('transp-contenido');
   var ind  = document.getElementById('transp-indicadores');
   ind.innerHTML = '';
   cont.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando documentación...</div>';
 
+  callTranspAPI({action:'docCamiones'}, function(dc) {
+    callTranspAPI({action:'docChoferes'}, function(dch) {
+      _docCamiones = Array.isArray(dc) ? dc : [];
+      _docChoferes = Array.isArray(dch) ? dch : [];
+      pintarDocumentacion();
+    }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
+  }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
+}
+
+function pintarDocumentacion() {
+  var cont = document.getElementById('transp-contenido');
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   function diasHasta(fechaStr) {
     if (!fechaStr) return null;
     var d = new Date(fechaStr); if (isNaN(d)) return null;
     return Math.round((d - hoy) / 86400000);
   }
-  function estadoBadge(dias) {
+  function proximoOVencido(dias, tipo) {
+    return dias !== null && dias <= umbralDoc(tipo);
+  }
+  function estadoBadge(dias, tipo) {
     if (dias === null) return '<span style="color:var(--muted);font-size:11px">—</span>';
-    if (dias < 0)   return '<span style="background:#a32d2d;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Vencido</span>';
-    if (dias <= 30) return '<span style="background:#c77700;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Vence en '+dias+'d</span>';
-    if (dias <= 60) return '<span style="background:#d4a017;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">'+dias+'d</span>';
+    if (dias < 0) return '<span style="background:#a32d2d;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Vencido</span>';
+    if (dias <= umbralDoc(tipo)) return '<span style="background:#a32d2d;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">Próximo a vencer ('+dias+'d)</span>';
     return '<span style="background:#1a6b2e;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">'+dias+'d</span>';
   }
   function buildTable(title, rows, cols, icon) {
@@ -3411,50 +3446,33 @@ function renderDocumentacion() {
       var dias = diasHasta(r.vto);
       h += '<tr style="'+bg+'">';
       r.vals.forEach(function(v){ h += '<td style="padding:7px 8px">'+v+'</td>'; });
-      h += '<td style="padding:7px 8px;text-align:center">'+estadoBadge(dias)+'</td></tr>';
+      h += '<td style="padding:7px 8px;text-align:center">'+estadoBadge(dias, r.tipo)+'</td></tr>';
     });
     return h + '</tbody></table></div>';
   }
 
-  callTranspAPI({action:'docCamiones'}, function(dc) {
-    callTranspAPI({action:'docChoferes'}, function(dch) {
-      // Alertas de vencimiento próximo (≤60 días)
-      var alertas = [];
-      (Array.isArray(dc)?dc:[]).concat(Array.isArray(dch)?dch:[]).forEach(function(r) {
-        var dias = diasHasta(r['fecha_vencimiento']);
-        if (dias !== null && dias <= 60) {
-          var quien = r['matricula'] || r['chofer'] || '';
-          alertas.push({quien:quien, tipo:r['tipo'], dias:dias});
-        }
-      });
-      var alertHtml = '';
-      if (alertas.length > 0) {
-        alertas.sort(function(a,b){ return a.dias - b.dias; });
-        alertHtml = '<div class="card" style="margin-bottom:16px;padding:16px;border-left:4px solid #c77700">'
-          +'<div style="font-weight:700;margin-bottom:10px">⚠️ Vencimientos próximos (60 días)</div>';
-        alertas.forEach(function(a) {
-          var color = a.dias < 0 ? '#a32d2d' : a.dias <= 30 ? '#c77700' : '#856b00';
-          alertHtml += '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">'
-            +'<span><b>'+a.quien+'</b> — '+a.tipo+'</span>'
-            +'<span style="color:'+color+';font-weight:600">'+(a.dias<0?'Vencido hace '+Math.abs(a.dias)+'d':'En '+a.dias+'d')+'</span></div>';
-        });
-        alertHtml += '</div>';
-      }
+  var dcRows = _docCamiones.map(function(r){
+    return {vto: r['fecha_vencimiento'], tipo: r['tipo'], vals: [r['matricula'],r['tipo'],r['numero']||'—',r['proveedor']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
+  });
+  var dchRows = _docChoferes.map(function(r){
+    return {vto: r['fecha_vencimiento'], tipo: r['tipo'], vals: [r['chofer'],r['tipo'],r['numero']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
+  });
 
-      var dcRows = (Array.isArray(dc)?dc:[]).map(function(r){
-        return {vto: r['fecha_vencimiento'], vals: [r['matricula'],r['tipo'],r['numero']||'—',r['proveedor']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
-      });
-      var dchRows = (Array.isArray(dch)?dch:[]).map(function(r){
-        return {vto: r['fecha_vencimiento'], vals: [r['chofer'],r['tipo'],r['numero']||'—',r['fecha_emision']||'—',r['fecha_vencimiento']||'—']};
-      });
+  if (_docFiltro === 'proximos') {
+    dcRows  = dcRows.filter(function(r){ return proximoOVencido(diasHasta(r.vto), r.tipo); });
+    dchRows = dchRows.filter(function(r){ return proximoOVencido(diasHasta(r.vto), r.tipo); });
+  }
 
-      var html = alertHtml
-        + buildTable('Documentación de Camiones', dcRows, ['Matrícula','Tipo','N° Documento','Proveedor / Aseg.','Emisión','Vencimiento'], '🚛')
-        + buildTable('Documentación de Choferes', dchRows, ['Chofer','Tipo','N° Documento','Emisión','Vencimiento'], '👤');
+  var tabsHtml = '<div id="doc-filtro-tabs" style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button class="fb'+(_docFiltro==='todos'?' active':'')+'" onclick="cambiarFiltroDoc(\'todos\',this)">Todos</button>'
+    + '<button class="fb'+(_docFiltro==='proximos'?' active':'')+'" onclick="cambiarFiltroDoc(\'proximos\',this)">⚠️ Próximos a vencer</button>'
+    + '</div>';
 
-      cont.innerHTML = html;
-    }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
-  }, function(){ cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Error al cargar documentación.</div>'; });
+  var html = tabsHtml
+    + buildTable('Documentación de Camiones', dcRows, ['Matrícula','Tipo','N° Documento','Proveedor / Aseg.','Emisión','Vencimiento'], '🚛')
+    + buildTable('Documentación de Choferes', dchRows, ['Chofer','Tipo','N° Documento','Emisión','Vencimiento'], '👤');
+
+  cont.innerHTML = html;
 }
 
 function renderTranspTabla(data, tipo) {
