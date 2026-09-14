@@ -367,6 +367,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
             <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
             <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
+            <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>💱 USD =</span>
@@ -1836,6 +1837,14 @@ function ensureFlotaLoaded(cb) {
   });
 }
 
+// Fuerza a releer todo de la planilla (en vez del caché de 10 min) y
+// vuelve a cargar la pestaña actual. El caché ya se limpia solo cuando
+// entra un formulario nuevo (onFormSubmit en Apps Script) — este botón
+// es solo para el caso de que alguien necesite ver un cambio ya mismo.
+function refrescarTransporte() {
+  callTranspAPI({action:'clearCache'}, function(){ loadTransporte(_transpVista); }, function(){ loadTransporte(_transpVista); });
+}
+
 function loadTransporte(vista, btn) {
   _transpVista = vista || 'kpis';
   if (btn) {
@@ -1844,8 +1853,6 @@ function loadTransporte(vista, btn) {
   }
   document.getElementById('transp-contenido').innerHTML = '<div class="loading" style="padding:40px;text-align:center">Cargando...</div>';
   document.getElementById('transp-indicadores').innerHTML = '';
-  // Limpiar caché del GAS antes de cargar para garantizar datos frescos
-  callTranspAPI({action:'clearCache'}, function(){}, function(){});
 
   if (vista === 'kpis') {
     document.getElementById('transp-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando datos...</div>';
