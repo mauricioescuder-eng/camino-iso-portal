@@ -1926,7 +1926,19 @@ function loadTransporte(vista, btn) {
             }, function() { renderTranspTabla(data, 'combustible'); });
           }
         }
-        else if (vista === 'mantenimientos')  renderTranspTabla(data, 'mantenimientos');
+        else if (vista === 'mantenimientos') {
+          // Para calcular "cuánto falta para el próximo mantenimiento" con
+          // el km más al día posible, también se necesita el km cargado en
+          // Combustible (se carga más seguido que un mantenimiento).
+          if (window._transpCombArr && window._transpCombArr.length > 0) {
+            renderTranspTabla(data, 'mantenimientos');
+          } else {
+            callTranspAPI({action:'combustible'}, function(cData) {
+              window._transpCombArr = Array.isArray(cData) ? cData : [];
+              renderTranspTabla(data, 'mantenimientos');
+            }, function(){ renderTranspTabla(data, 'mantenimientos'); });
+          }
+        }
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
         else if (vista === 'neumaticos')      ensureFlotaLoaded(function(){ renderNeumaticos(data); });
@@ -3778,42 +3790,75 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _tRows + '</tbody></table></div></div>';
       }
 
-      // ── Próximo mantenimiento por camión — según el último registro de
-      // cada matrícula que tenga cargado el km objetivo. Se actualiza
-      // solo cuando entra un mantenimiento nuevo con ese dato.
-      var _proxPorCamion = {};
+      // ── Próximo mantenimiento por camión ──────────────────────────
+      // El objetivo (a qué km le toca el próximo service) sale del último
+      // mantenimiento de cada camión que tenga ese dato cargado. Para
+      // calcular cuánto falta, en cambio, se usa el km más reciente entre
+      // Mantenimientos Y Combustible (lo que se haya cargado último para
+      // ese camión) — Combustible suele cargarse con más frecuencia, así
+      // que da un número más al día que quedarse solo con el mantenimiento.
+      var _proxObjetivo = {}; // matricula -> {fechaObj, proximoKm}
       rows.forEach(function(r){
         if (r['proximo_km'] === null || r['proximo_km'] === undefined) return;
         var mat = r['matricula']; if (!mat) return;
         var f = new Date(r['fecha'] || r['timestamp'] || '');
         if (isNaN(f.getTime())) return;
-        if (!_proxPorCamion[mat] || f > _proxPorCamion[mat].fechaObj) {
-          _proxPorCamion[mat] = {fechaObj: f, kmEquipo: parseFloat(r['km equipo'])||0, proximoKm: r['proximo_km']};
+        if (!_proxObjetivo[mat] || f > _proxObjetivo[mat].fechaObj) {
+          _proxObjetivo[mat] = {fechaObj: f, proximoKm: r['proximo_km']};
         }
       });
-      var _proxArr = Object.keys(_proxPorCamion).map(function(mat){
-        var d = _proxPorCamion[mat];
-        return {matricula: mat, kmEquipo: d.kmEquipo, proximoKm: d.proximoKm, faltan: d.proximoKm - d.kmEquipo};
-      }).sort(function(a,b){ return a.faltan - b.faltan; });
+      var _kmMasReciente = {}; // matricula -> {fechaObj, km}
+      function _consKmReciente(lista, campoFecha, campoKm){
+        (lista||[]).forEach(function(r){
+          var mat = r['matricula']; if (!mat) return;
+          var km = parseFloat(r[campoKm]); if (!km) return;
+          var f = new Date(r[campoFecha] || r['timestamp'] || '');
+          if (isNaN(f.getTime())) return;
+          if (!_kmMasReciente[mat] || f > _kmMasReciente[mat].fechaObj) {
+            _kmMasReciente[mat] = {fechaObj: f, km: km};
+          }
+        });
+      }
+      _consKmReciente(rows, 'fecha', 'km equipo');
+      _consKmReciente(window._transpCombArr || [], 'fecha factura', 'km actuales');
+
+      var _proxArr = Object.keys(_proxObjetivo).map(function(mat){
+        var obj = _proxObjetivo[mat];
+        var ref = _kmMasReciente[mat];
+        var kmActual = ref ? ref.km : null;
+        return {matricula: mat, kmActual: kmActual, proximoKm: obj.proximoKm, faltan: kmActual !== null ? obj.proximoKm - kmActual : null};
+      }).sort(function(a,b){
+        if (a.faltan === null) return 1;
+        if (b.faltan === null) return -1;
+        return a.faltan - b.faltan;
+      });
       var _proxMantHtml = '';
       if (_proxArr.length > 0) {
         var _proxRows = _proxArr.map(function(p){
+          if (p.faltan === null) {
+            return '<tr style="border-bottom:1px solid var(--border)">'
+              + '<td style="padding:6px 8px;font-size:12px;font-weight:600">'+p.matricula+'</td>'
+              + '<td style="padding:6px 8px;font-size:12px;text-align:right">—</td>'
+              + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtN(p.proximoKm,0)+' km</td>'
+              + '<td style="padding:6px 8px;font-size:12px;text-align:right;color:var(--muted)">Sin km reciente cargado</td>'
+              + '</tr>';
+          }
           var col = p.faltan <= 0 ? '#a32d2d' : p.faltan <= 1000 ? '#b97c0a' : '#0f6e56';
           var texto = p.faltan <= 0 ? 'Vencido (' + fmtN(Math.abs(p.faltan),0) + ' km pasado)' : 'Faltan ' + fmtN(p.faltan,0) + ' km';
           return '<tr style="border-bottom:1px solid var(--border)">'
             + '<td style="padding:6px 8px;font-size:12px;font-weight:600">'+p.matricula+'</td>'
-            + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtN(p.kmEquipo,0)+' km</td>'
+            + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtN(p.kmActual,0)+' km</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtN(p.proximoKm,0)+' km</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700;color:'+col+'">'+texto+'</td>'
             + '</tr>';
         }).join('');
         _proxMantHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<h4 style="margin:0 0 10px;font-size:13px">🔧 Próximo mantenimiento por camión</h4>'
-          + '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Según el kilometraje cargado en el último mantenimiento de cada camión — se actualiza al cargar uno nuevo.</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Km más reciente entre Mantenimientos y Combustible de cada camión, contra el próximo km objetivo cargado.</div>'
           + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
           + '<thead><tr style="background:var(--gray)">'
           + '<th style="padding:5px 8px;text-align:left;font-size:11px">Camión</th>'
-          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Km último registro</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Km más reciente</th>'
           + '<th style="padding:5px 8px;text-align:right;font-size:11px">Próximo mant.</th>'
           + '<th style="padding:5px 8px;text-align:right;font-size:11px">Estado</th>'
           + '</tr></thead><tbody>' + _proxRows + '</tbody></table></div></div>';
