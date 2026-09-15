@@ -2431,7 +2431,8 @@ function renderOrdenesCompra(data) {
     } else {
       acciones = '—';
     }
-    acciones += ' <button class="edit-btn" onclick="imprimirOrdenCompra(\''+r.id+'\')">⬇️ Descargar</button>';
+    acciones += ' <button class="edit-btn" onclick="imprimirOrdenCompra(\''+r.id+'\')">⬇️ Descargar</button>'
+      + ' <button class="edit-btn" onclick="enviarOrdenCompraPorCorreo(\''+r.id+'\')">📧 Enviar por correo</button>';
     return '<tr>'
       + '<td>'+r.fecha+'</td>'
       + '<td>'+r.rubro+'</td>'
@@ -2470,7 +2471,8 @@ function guardarOrdenCompra() {
 
   callTranspAPI({
     action: 'saveOrdenCompra', fecha: fecha, rubro: rubro, matricula: matricula,
-    proveedor: proveedor, descripcion: descripcion, monto: monto
+    proveedor: proveedor, descripcion: descripcion, monto: monto,
+    emisor: (session && (session.nombre || session.usuario)) || ''
   }, function(resp) {
     if (resp && resp.ok) {
       toast('✓ Orden de compra creada');
@@ -2499,6 +2501,24 @@ function avanzarOrdenCompra(id, nuevoEstado) {
 function cancelarOrdenCompra(id) {
   if (!confirm('¿Cancelar esta orden de compra?')) return;
   avanzarOrdenCompra(id, 'Cancelada');
+}
+
+function enviarOrdenCompraPorCorreo(id) {
+  var destinatario = prompt('¿A qué correo enviamos esta orden de compra?');
+  if (!destinatario) return;
+  destinatario = destinatario.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+    toast('Ese correo no parece válido.', true);
+    return;
+  }
+  toast('Enviando...');
+  callTranspAPI({action:'enviarOrdenCompra', id:id, destinatario:destinatario}, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Orden enviada a ' + destinatario);
+    } else {
+      toast((resp && resp.error) || 'Error al enviar el correo.', true);
+    }
+  }, function(){ toast('Error de conexión.', true); });
 }
 
 function imprimirOrdenCompra(id) {
@@ -2543,6 +2563,7 @@ function imprimirOrdenCompra(id) {
     + '<tr><th>Rubro</th><td>' + r.rubro + '</td></tr>'
     + (r.matricula ? '<tr><th>Matrícula</th><td>' + r.matricula + '</td></tr>' : '')
     + '<tr><th>Descripción</th><td>' + r.descripcion + '</td></tr>'
+    + (r.emisor ? '<tr><th>Emitida por</th><td>' + r.emisor + '</td></tr>' : '')
     + '</tbody></table>'
     + '<div class="monto">Total: ' + fmt$(r.monto) + '</div>'
     + '<div class="firma"><div>Autoriza</div><div>Recibe</div></div>'
