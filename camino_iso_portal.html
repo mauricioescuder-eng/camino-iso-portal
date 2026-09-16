@@ -2462,6 +2462,7 @@ function renderOrdenesCompra(data) {
     if (r.estado === 'Aprobada' || r.estado === 'Recibida') {
       acciones += ' <button class="edit-btn" onclick="enviarOrdenCompraPorCorreo(\''+r.id+'\')">📧 Enviar por correo</button>';
     }
+    acciones += ' <button class="edit-btn" style="color:#a32d2d" onclick="eliminarOrdenCompra(\''+r.id+'\')">🗑️ Eliminar</button>';
     return '<tr>'
       + '<td>'+r.fecha+'</td>'
       + '<td>'+r.rubro+'</td>'
@@ -2570,6 +2571,18 @@ function avanzarOrdenCompra(id, nuevoEstado) {
 function cancelarOrdenCompra(id) {
   if (!confirm('¿Cancelar esta orden de compra?')) return;
   avanzarOrdenCompra(id, 'Cancelada');
+}
+
+function eliminarOrdenCompra(id) {
+  if (!confirm('¿Eliminar esta orden de compra? Esta acción no se puede deshacer.')) return;
+  callTranspAPI({action:'eliminarOrdenCompra', id:id}, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Orden eliminada');
+      loadTransporte('ordenesCompra');
+    } else {
+      toast((resp && resp.error) || 'Error al eliminar la orden.', true);
+    }
+  }, function(data){ toast((data && data.error) || 'Error de conexión.', true); });
 }
 
 function enviarOrdenCompraPorCorreo(id) {
