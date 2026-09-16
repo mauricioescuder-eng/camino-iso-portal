@@ -479,7 +479,17 @@ function toast(msg, err){
   var t = document.getElementById('toast');
   t.style.background = err ? '#a32d2d' : '#1E6B2E';
   t.textContent = msg; t.classList.add('show');
-  setTimeout(function(){ t.classList.remove('show'); }, 2800);
+  t.style.cursor = 'pointer';
+  t.title = 'Tocar para mantener en pantalla';
+  if (window._toastTimer) clearTimeout(window._toastTimer);
+  // Los errores quedan más tiempo (y se puede tocar para que no se cierren
+  // solos) porque suelen desaparecer antes de que se llegue a leerlos o
+  // sacarles una captura.
+  var dur = err ? 9000 : 2800;
+  window._toastTimer = setTimeout(function(){ t.classList.remove('show'); }, dur);
+  t.onclick = function(){
+    if (window._toastTimer) clearTimeout(window._toastTimer);
+  };
 }
 
 // SEGURIDAD: las contraseñas y usuarios YA NO viven acá. El login se
@@ -2448,10 +2458,39 @@ function renderOrdenesCompra(data) {
   }).join('');
 
   var tableHtml = '<div class="card" style="overflow-x:auto">'
+    + '<div style="display:flex;justify-content:flex-end;padding:12px 12px 0">'
+    + '<button class="edit-btn" onclick="exportarOrdenesCompraExcel()">📊 Exportar a Excel</button>'
+    + '</div>'
     + '<table><thead><tr><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Estado</th><th></th></tr></thead>'
     + '<tbody>' + (rowsHtml || '<tr><td colspan="8" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
+}
+
+function exportarOrdenesCompraExcel() {
+  var rows = window._transpOrdenes || [];
+  if (!rows.length) { toast('No hay órdenes de compra para exportar.', true); return; }
+
+  var headers = ['Fecha','Rubro','Matrícula','Proveedor','Descripción','Monto','Estado','Emitida por'];
+  function csvCell(v) {
+    var s = (v === undefined || v === null) ? '' : String(v);
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  var lineas = [headers.map(csvCell).join(';')];
+  rows.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); }).forEach(function(r) {
+    lineas.push([r.fecha, r.rubro, r.matricula||'', r.proveedor, r.descripcion, r.monto, r.estado, r.emisor||''].map(csvCell).join(';'));
+  });
+  // BOM al inicio para que Excel detecte UTF-8 y no rompa las tildes/ñ.
+  var csv = '﻿' + lineas.join('\r\n');
+  var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'ordenes_compra_' + new Date().toISOString().substring(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function guardarOrdenCompra() {
