@@ -1969,7 +1969,7 @@ function callTranspAPI(params, cb, onTimeout) {
     clearTimeout(timeout);
     delete window[cbName];
     if (data && data.error) {
-      if (onTimeout) { onTimeout(); }
+      if (onTimeout) { onTimeout(data); }
       else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error API: ' + data.error + '</div>'; }
       return;
     }
@@ -2520,7 +2520,7 @@ function enviarOrdenCompraPorCorreo(id) {
     } else {
       toast((resp && resp.error) || 'Error al enviar el correo.', true);
     }
-  }, function(){ toast('Error de conexión.', true); });
+  }, function(data){ toast((data && data.error) || 'Error de conexión.', true); });
 }
 
 function imprimirOrdenCompra(id) {
