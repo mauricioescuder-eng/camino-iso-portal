@@ -604,7 +604,10 @@ function actualizarTabsTransporteEspecificos() {
   var tabNeu = document.getElementById('tab-neumaticos');
   if (tabNeu) tabNeu.style.display = esJorajuria ? '' : 'none';
   var tabOrd = document.getElementById('tab-ordenes');
-  if (tabOrd) tabOrd.style.display = esJorajuria ? '' : 'none';
+  // El admin puede emitir órdenes de compra sin depender de qué cliente de
+  // Transporte esté viendo en el selector (antes solo aparecía con Jorajuria
+  // seleccionada).
+  if (tabOrd) tabOrd.style.display = (esJorajuria || session.rol === 'admin') ? '' : 'none';
 }
 
 // Admin: cambia a qué cliente de Transporte está viendo el portal
