@@ -2573,7 +2573,9 @@ function cancelarOrdenCompra(id) {
 }
 
 function enviarOrdenCompraPorCorreo(id) {
-  var entrada = prompt('¿A qué correo(s) enviamos esta orden de compra?\nPara varios destinatarios, separalos con coma o espacio.');
+  var recordados = [];
+  try { recordados = JSON.parse(localStorage.getItem('oc_correos_recientes') || '[]'); } catch (e) {}
+  var entrada = prompt('¿A qué correo(s) enviamos esta orden de compra?\nPara varios destinatarios, separalos con coma o espacio.', recordados.join(', '));
   if (!entrada) return;
   var correos = entrada.split(/[\s,;]+/).map(function(c){ return c.trim(); }).filter(Boolean);
   if (!correos.length) return;
@@ -2582,6 +2584,11 @@ function enviarOrdenCompraPorCorreo(id) {
     toast('"' + invalido + '" no parece un correo válido.', true);
     return;
   }
+  // Se recuerdan en este navegador para no tener que volver a tipearlos la próxima vez.
+  try {
+    correos.forEach(function(c){ if (recordados.indexOf(c) === -1) recordados.push(c); });
+    localStorage.setItem('oc_correos_recientes', JSON.stringify(recordados.slice(-10)));
+  } catch (e) {}
   var destinatario = correos.join(',');
   toast('Enviando...');
   callTranspAPI({action:'enviarOrdenCompra', id:id, destinatario:destinatario}, function(resp) {
