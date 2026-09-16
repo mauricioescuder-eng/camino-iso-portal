@@ -3582,9 +3582,12 @@ function pintarDocumentacion() {
     dchRows = dchRows.filter(function(r){ return proximoOVencido(diasHasta(r.vto), r.tipo); });
   }
 
-  var tabsHtml = '<div id="doc-filtro-tabs" style="display:flex;gap:8px;margin-bottom:14px">'
+  var tabsHtml = '<div id="doc-filtro-tabs" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    + '<div style="display:flex;gap:8px">'
     + '<button class="fb'+(_docFiltro==='todos'?' active':'')+'" onclick="cambiarFiltroDoc(\'todos\',this)">Todos</button>'
     + '<button class="fb'+(_docFiltro==='proximos'?' active':'')+'" onclick="cambiarFiltroDoc(\'proximos\',this)">⚠️ Próximos a vencer</button>'
+    + '</div>'
+    + '<button class="edit-btn" onclick="exportarDocumentacionExcel()">📊 Exportar a Excel</button>'
     + '</div>';
 
   var html = tabsHtml
@@ -3592,6 +3595,59 @@ function pintarDocumentacion() {
     + buildTable('Documentación de Choferes', dchRows, ['Chofer','Tipo','N° Documento','Emisión','Vencimiento'], '👤');
 
   cont.innerHTML = html;
+
+  // Guardamos las filas ya filtradas (según "Todos"/"Próximos a vencer") para
+  // que el botón de exportar saque exactamente lo que se está viendo.
+  window._docExportCamiones = dcRows;
+  window._docExportChoferes = dchRows;
+}
+
+function exportarDocumentacionExcel() {
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  function diasHasta(fechaStr) {
+    if (!fechaStr) return null;
+    var d = new Date(fechaStr); if (isNaN(d)) return null;
+    return Math.round((d - hoy) / 86400000);
+  }
+  function estadoTexto(dias, tipo) {
+    if (dias === null) return '—';
+    if (dias < 0) return 'Vencido';
+    if (dias <= umbralDoc(tipo)) return 'Próximo a vencer';
+    return 'Vigente';
+  }
+  function csvCell(v) {
+    var s = (v === undefined || v === null) ? '' : String(v);
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  var dc = window._docExportCamiones || [];
+  var dch = window._docExportChoferes || [];
+  if (!dc.length && !dch.length) { toast('No hay documentación para exportar.', true); return; }
+
+  var lineas = [];
+  lineas.push(['DOCUMENTACIÓN DE CAMIONES'].map(csvCell).join(';'));
+  lineas.push(['Matrícula','Tipo','N° Documento','Proveedor / Aseg.','Emisión','Vencimiento','Días','Estado'].map(csvCell).join(';'));
+  dc.forEach(function(r){
+    var d = diasHasta(r.vto);
+    lineas.push(r.vals.concat([d===null?'':d, estadoTexto(d, r.tipo)]).map(csvCell).join(';'));
+  });
+  lineas.push('');
+  lineas.push(['DOCUMENTACIÓN DE CHOFERES'].map(csvCell).join(';'));
+  lineas.push(['Chofer','Tipo','N° Documento','Emisión','Vencimiento','Días','Estado'].map(csvCell).join(';'));
+  dch.forEach(function(r){
+    var d = diasHasta(r.vto);
+    lineas.push(r.vals.concat([d===null?'':d, estadoTexto(d, r.tipo)]).map(csvCell).join(';'));
+  });
+
+  var csv = '﻿' + lineas.join('\r\n');
+  var blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'documentacion_transporte_' + new Date().toISOString().substring(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function renderTranspTabla(data, tipo) {
