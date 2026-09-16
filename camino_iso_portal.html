@@ -2573,17 +2573,20 @@ function cancelarOrdenCompra(id) {
 }
 
 function enviarOrdenCompraPorCorreo(id) {
-  var destinatario = prompt('¿A qué correo enviamos esta orden de compra?');
-  if (!destinatario) return;
-  destinatario = destinatario.trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
-    toast('Ese correo no parece válido.', true);
+  var entrada = prompt('¿A qué correo(s) enviamos esta orden de compra?\nPara varios destinatarios, separalos con coma o espacio.');
+  if (!entrada) return;
+  var correos = entrada.split(/[\s,;]+/).map(function(c){ return c.trim(); }).filter(Boolean);
+  if (!correos.length) return;
+  var invalido = correos.find(function(c){ return !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c); });
+  if (invalido) {
+    toast('"' + invalido + '" no parece un correo válido.', true);
     return;
   }
+  var destinatario = correos.join(',');
   toast('Enviando...');
   callTranspAPI({action:'enviarOrdenCompra', id:id, destinatario:destinatario}, function(resp) {
     if (resp && resp.ok) {
-      toast('✓ Orden enviada a ' + destinatario);
+      toast('✓ Orden enviada a ' + correos.join(', '));
     } else {
       toast((resp && resp.error) || 'Error al enviar el correo.', true);
     }
