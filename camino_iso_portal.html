@@ -2411,8 +2411,22 @@ function renderOrdenesCompra(data) {
   var matOpts = '<option value="">— (sin matrícula)</option>' + matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
   var rubOpts = ORDEN_RUBROS.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
 
+  // Para el admin: elegir a qué cliente de Transporte se le crea la orden,
+  // sin depender de qué cliente esté seleccionado en "Viendo" arriba.
+  var clienteFieldHtml = '';
+  if (session.rol === 'admin') {
+    var clienteOpts = _TRANSP_CLIENTES.map(function(c){
+      var sel = c.apiUrl === session.apiUrl ? ' selected' : '';
+      return '<option value="'+c.apiUrl+'"'+sel+'>'+c.nombre+'</option>';
+    }).join('');
+    clienteFieldHtml = '<div style="margin-bottom:12px;max-width:280px">'
+      + '<label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">CLIENTE</label>'
+      + '<select id="oc-cliente" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+clienteOpts+'</select></div>';
+  }
+
   var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
     + '<h3 style="margin:0 0 16px;font-size:15px">+ Nueva orden de compra</h3>'
+    + clienteFieldHtml
     + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA</label>'
     + '<input type="date" id="oc-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>'
@@ -2504,12 +2518,23 @@ function guardarOrdenCompra() {
   var proveedor   = document.getElementById('oc-proveedor').value;
   var descripcion = document.getElementById('oc-descripcion').value;
   var msg         = document.getElementById('oc-msg');
+  var clienteSel  = document.getElementById('oc-cliente');
 
   if (!fecha || !rubro || !proveedor || !monto) {
     msg.style.color = '#c0392b';
     msg.textContent = 'Completá fecha, rubro, proveedor y monto.';
     return;
   }
+
+  // Si el admin eligió un cliente distinto al que está "viendo" arriba,
+  // cambiamos el contexto para que la orden se guarde en el backend
+  // correcto (cada cliente de Transporte tiene su propia planilla).
+  if (clienteSel && clienteSel.value && clienteSel.value !== session.apiUrl) {
+    var selTop = document.getElementById('transp-cliente-sel');
+    if (selTop) selTop.value = clienteSel.value;
+    cambiarClienteTransporte(clienteSel.value);
+  }
+
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Guardando...';
 
