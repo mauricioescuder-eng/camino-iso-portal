@@ -2431,8 +2431,10 @@ function renderOrdenesCompra(data) {
     } else {
       acciones = '—';
     }
-    acciones += ' <button class="edit-btn" onclick="imprimirOrdenCompra(\''+r.id+'\')">⬇️ Descargar</button>'
-      + ' <button class="edit-btn" onclick="enviarOrdenCompraPorCorreo(\''+r.id+'\')">📧 Enviar por correo</button>';
+    acciones += ' <button class="edit-btn" onclick="imprimirOrdenCompra(\''+r.id+'\')">⬇️ Descargar</button>';
+    if (r.estado === 'Aprobada' || r.estado === 'Recibida') {
+      acciones += ' <button class="edit-btn" onclick="enviarOrdenCompraPorCorreo(\''+r.id+'\')">📧 Enviar por correo</button>';
+    }
     return '<tr>'
       + '<td>'+r.fecha+'</td>'
       + '<td>'+r.rubro+'</td>'
