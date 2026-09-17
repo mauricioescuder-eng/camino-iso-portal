@@ -2463,7 +2463,9 @@ function renderOrdenesCompra(data) {
       acciones += ' <button class="edit-btn" onclick="enviarOrdenCompraPorCorreo(\''+r.id+'\')">📧 Enviar por correo</button>';
     }
     acciones += ' <button class="edit-btn" style="color:#a32d2d" onclick="eliminarOrdenCompra(\''+r.id+'\')">🗑️ Eliminar</button>';
+    var numOCTabla = r.numero ? ('OC-' + String(r.numero).padStart(4,'0')) : '—';
     return '<tr>'
+      + '<td>'+numOCTabla+'</td>'
       + '<td>'+r.fecha+'</td>'
       + '<td>'+r.rubro+'</td>'
       + '<td>'+(r.matricula||'—')+'</td>'
@@ -2479,8 +2481,8 @@ function renderOrdenesCompra(data) {
     + '<div style="display:flex;justify-content:flex-end;padding:12px 12px 0">'
     + '<button class="edit-btn" onclick="exportarOrdenesCompraExcel()">📊 Exportar a Excel</button>'
     + '</div>'
-    + '<table><thead><tr><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Estado</th><th></th></tr></thead>'
-    + '<tbody>' + (rowsHtml || '<tr><td colspan="8" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
+    + '<table><thead><tr><th>N°</th><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Estado</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="9" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
 }
@@ -2489,14 +2491,15 @@ function exportarOrdenesCompraExcel() {
   var rows = window._transpOrdenes || [];
   if (!rows.length) { toast('No hay órdenes de compra para exportar.', true); return; }
 
-  var headers = ['Fecha','Rubro','Matrícula','Proveedor','Descripción','Monto','Estado','Emitida por'];
+  var headers = ['N°','Fecha','Rubro','Matrícula','Proveedor','Descripción','Monto','Estado','Emitida por'];
   function csvCell(v) {
     var s = (v === undefined || v === null) ? '' : String(v);
     return '"' + s.replace(/"/g, '""') + '"';
   }
   var lineas = [headers.map(csvCell).join(';')];
   rows.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); }).forEach(function(r) {
-    lineas.push([r.fecha, r.rubro, r.matricula||'', r.proveedor, r.descripcion, r.monto, r.estado, r.emisor||''].map(csvCell).join(';'));
+    var numOC = r.numero ? ('OC-' + String(r.numero).padStart(4,'0')) : '';
+    lineas.push([numOC, r.fecha, r.rubro, r.matricula||'', r.proveedor, r.descripcion, r.monto, r.estado, r.emisor||''].map(csvCell).join(';'));
   });
   // BOM al inicio para que Excel detecte UTF-8 y no rompa las tildes/ñ.
   var csv = '﻿' + lineas.join('\r\n');
@@ -2619,7 +2622,7 @@ function imprimirOrdenCompra(id) {
 
   var _clienteViendo = session && _TRANSP_CLIENTES.find(function(c){ return c.clienteId === (session.clienteid || session._viendoClienteId); });
   var clienteNombre = (_clienteViendo && _clienteViendo.nombre) || (session && (session.nombre || session.clienteid)) || 'Cliente';
-  var numOC = 'OC-' + (r.fecha||'').replace(/-/g,'') + '-' + r.id.substring(0,4).toUpperCase();
+  var numOC = r.numero ? ('OC-' + String(r.numero).padStart(4,'0')) : ('OC-' + (r.fecha||'').replace(/-/g,'') + '-' + r.id.substring(0,4).toUpperCase());
   var estadoColor = {'Pendiente':'#b97c0a','Aprobada':'#378add','Recibida':'#0f6e56','Cancelada':'#a32d2d'}[r.estado] || '#888';
 
   var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
