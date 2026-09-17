@@ -750,6 +750,36 @@ function estadoComputado(r){
 }
 var _graficoSel = null; // {p, k} de la barra/segmento clickeado, o null si no hay nada desplegado
 var _graficoRows = [];
+function toggleParetoArea(slug, area) {
+  var row = document.getElementById(slug);
+  if (!row) return;
+  var abierto = row.style.display !== 'none';
+  if (abierto) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  var body = document.getElementById(slug + '-body');
+  var items = (window._mantParetoRows || []).filter(function(r){ return (r['area']||'Sin área') === area; });
+  if (!items.length) { body.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Sin registros.</div>'; return; }
+  var html = '<table style="width:100%;border-collapse:collapse">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;font-size:11px;padding:4px 6px">Fecha</th>'
+    + '<th style="text-align:left;font-size:11px;padding:4px 6px">Matrícula</th>'
+    + '<th style="text-align:left;font-size:11px;padding:4px 6px">Detalle</th>'
+    + '<th style="text-align:left;font-size:11px;padding:4px 6px">Taller</th>'
+    + '<th style="text-align:right;font-size:11px;padding:4px 6px">Costo</th>'
+    + '</tr></thead><tbody>'
+    + items.map(function(r) {
+        return '<tr style="border-bottom:1px solid var(--border)">'
+          + '<td style="font-size:12px;padding:4px 6px">' + (r['fecha']||'—') + '</td>'
+          + '<td style="font-size:12px;padding:4px 6px">' + (r['matricula']||'—') + '</td>'
+          + '<td style="font-size:12px;padding:4px 6px">' + (r['detalle']||'—') + '</td>'
+          + '<td style="font-size:12px;padding:4px 6px">' + (r['taller']||'—') + '</td>'
+          + '<td style="font-size:12px;padding:4px 6px;text-align:right">' + fmt$(toUYU(r['costo'], r['moneda'])) + '</td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table>';
+  body.innerHTML = html;
+}
+
 function toggleSegmentoGrafico(p, k){
   _graficoSel = (_graficoSel && _graficoSel.p === p && _graficoSel.k === k) ? null : {p:p, k:k};
   renderProyGrafico(_graficoRows);
@@ -3873,6 +3903,7 @@ function renderTranspTabla(data, tipo) {
       }
 
       // ── Pareto por área ──────────────────────────────────────────
+      window._mantParetoRows = rows;
       var _areaCostos = {};
       rows.forEach(function(r){
         var a = r['area'] || 'Sin área';
@@ -3885,11 +3916,13 @@ function renderTranspTabla(data, tipo) {
         var _maxA = _areaSorted[0].costo || 1;
         var _accum = 0, _totA = totCosto || 1;
         var _paretoRows = '';
-        _areaSorted.forEach(function(a) {
+        _areaSorted.forEach(function(a, _paretoIdx) {
           var pct2 = Math.round(a.costo / _maxA * 100);
           _accum += a.costo;
           var cumPct = Math.round(_accum / _totA * 100);
-          _paretoRows += '<tr style="border-bottom:1px solid var(--border)">'
+          var _slug = 'pareto-det-' + _paretoIdx;
+          var _areaEsc = a.area.replace(/'/g, "\\'");
+          _paretoRows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="toggleParetoArea(\''+_slug+'\',\''+_areaEsc+'\')" title="Click para ver el detalle">'
             + '<td style="padding:5px 8px;font-size:12px;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis" title="'+a.area+'">'+a.area+'</td>'
             + '<td style="padding:5px 8px;min-width:120px">'
             + '<div style="display:flex;align-items:center;gap:6px">'
@@ -3898,10 +3931,12 @@ function renderTranspTabla(data, tipo) {
             + '<span style="font-size:11px;font-weight:600;color:var(--text);min-width:52px;text-align:right">'+fmt$(a.costo)+'</span>'
             + '</div></td>'
             + '<td style="padding:5px 8px;font-size:11px;text-align:right;color:var(--muted)">'+cumPct+'%</td>'
-            + '</tr>';
+            + '</tr>'
+            + '<tr id="'+_slug+'" style="display:none"><td colspan="3" style="padding:0;background:var(--gray)"><div id="'+_slug+'-body" style="padding:8px 12px"></div></td></tr>';
         });
         _paretoHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<h4 style="margin:0 0 10px;font-size:13px">📊 Pareto de Costos por Área</h4>'
+          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tocá un área para ver el detalle de los registros que la componen.</div>'
           + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
           + '<thead><tr style="background:var(--gray)">'
           + '<th style="padding:5px 8px;text-align:left;font-size:11px">Área</th>'
