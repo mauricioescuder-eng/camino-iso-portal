@@ -3902,6 +3902,41 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _dispRows + '</tbody></table></div></div>';
       }
 
+      // ── Disponibilidad por camión, para el mismo período que la tabla de arriba ──
+      var _periodoDiasDisp = _dispMesesArr.reduce(function(s,m){ return s + m.diasDelMes; }, 0) || 30;
+      var _dispTallerPorCamion = {};
+      rows.forEach(function(r){
+        var mat = String(r['matricula']||'').trim();
+        if (!mat) return;
+        _dispTallerPorCamion[mat] = (_dispTallerPorCamion[mat]||0) + (parseFloat(r['dias_taller'])||0);
+      });
+      (window._transpFlotaArr || []).forEach(function(f){
+        var mat = String(f['matrícula']||f['matricula']||'').trim();
+        if (mat && !(mat in _dispTallerPorCamion)) _dispTallerPorCamion[mat] = 0;
+      });
+      var _dispCamionesArr = Object.keys(_dispTallerPorCamion).map(function(mat){
+        var dias = _dispTallerPorCamion[mat];
+        var pct = _periodoDiasDisp > 0 ? Math.max(0, Math.min(100, (_periodoDiasDisp - dias) / _periodoDiasDisp * 100)) : 100;
+        return {matricula: mat, diasTaller: dias, pct: pct};
+      }).sort(function(a,b){ return a.pct - b.pct; });
+      var _dispCamionesHtml = '';
+      if (_dispCamionesArr.length > 0) {
+        _dispCamionesHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 12px;font-size:13px">🚚 Disponibilidad por camión</h4>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:12px">'
+          + _dispCamionesArr.map(function(c) {
+              var col = c.pct >= 90 ? '#0f6e56' : c.pct >= 75 ? '#b97c0a' : '#a32d2d';
+              var bg  = c.pct >= 90 ? '#e8f5ee' : c.pct >= 75 ? '#fdf3e2' : '#fdecea';
+              return '<div style="flex:1 1 130px;min-width:130px;background:'+bg+';border:1px solid '+col+';border-radius:10px;padding:14px;text-align:center">'
+                + '<div style="font-size:26px;line-height:1">🚚</div>'
+                + '<div style="font-weight:700;font-size:13px;margin-top:6px">'+c.matricula+'</div>'
+                + '<div style="color:'+col+';font-weight:800;font-size:18px;margin-top:4px">'+c.pct.toFixed(0)+'%</div>'
+                + '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+(c.diasTaller>0 ? fmtN(c.diasTaller,0)+' día(s) en taller' : 'Sin incidencias')+'</div>'
+                + '</div>';
+            }).join('')
+          + '</div></div>';
+      }
+
       // ── Pareto por área ──────────────────────────────────────────
       window._mantParetoRows = rows;
       var _areaCostos = {};
@@ -4088,7 +4123,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Camiones sin correctivos', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
         + kpi('Disponibilidad operativa', _dispOperativaUltima ? _dispOperativaUltima.pct.toFixed(1)+'%' : '—', _dispOperativaUltima ? _dispOperativaUltima.label+' · '+fmtN(_dispOperativaUltima.diasTaller,0)+' días en taller' : 'Sin días en taller cargados', _dispOperativaUltima && _dispOperativaUltima.pct>=90 ? '#0f6e56' : '#a32d2d')
         + '</div>'
-        + _proxMantHtml + _paretoHtml + _evolHtml + _dispEvolHtml + _tallerHtml;
+        + _proxMantHtml + _paretoHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
