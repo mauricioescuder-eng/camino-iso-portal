@@ -4108,6 +4108,30 @@ function renderTranspTabla(data, tipo) {
           + '</svg></div></div>';
       }
 
+      // Litros consumidos por camión, para las tarjetas con dibujo de camión.
+      var _porCamionLt = {};
+      rows.forEach(function(r) {
+        var mat = String(r['matricula'] || '').trim() || '—';
+        _porCamionLt[mat] = (_porCamionLt[mat] || 0) + (parseFloat(r['litros']) || 0);
+      });
+      var _camionesLt = Object.keys(_porCamionLt)
+        .map(function(m){ return {matricula: m, litros: _porCamionLt[m]}; })
+        .sort(function(a,b){ return b.litros - a.litros; });
+      var _camionesHtml = '';
+      if (_camionesLt.length > 0) {
+        _camionesHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 12px;font-size:13px">🚚 Combustible por camión</h4>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:12px">'
+          + _camionesLt.map(function(c) {
+              return '<div style="flex:1 1 120px;min-width:120px;background:var(--gray);border-radius:10px;padding:16px;text-align:center">'
+                + '<div style="font-size:30px;line-height:1">🚚</div>'
+                + '<div style="font-weight:700;font-size:13px;margin-top:8px">' + c.matricula + '</div>'
+                + '<div style="color:#F07820;font-weight:700;font-size:16px;margin-top:2px">' + fmtN(c.litros,0) + ' L</div>'
+                + '</div>';
+            }).join('')
+          + '</div></div>';
+      }
+
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">'
         + kpi('Registros',       rows.length,               'cargas',          '#185fa5')
         + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
@@ -4115,7 +4139,8 @@ function renderTranspTabla(data, tipo) {
         + kpi('Consumo / km',    fmtN(_viajesKm>0?totLt/_viajesKm:0,2)+' L/km', fmtN(_lPor100km,1)+' L/100km · '+fmtN(_kmPorL,2)+' km/L', '#639922')
         + kpi('Costo comb. / km', fmt$(_combPorKm),          'Prom. '+fmt$(_precioProm)+'/L', '#854f0b')
         + '</div>'
-        + _combChartHtml;
+        + _combChartHtml
+        + _camionesHtml;
     }
   }
   document.getElementById('transp-indicadores').innerHTML = indicHtml;
