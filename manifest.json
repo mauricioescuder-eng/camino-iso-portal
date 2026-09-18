@@ -1,6 +1,6 @@
 {
-  "name": "Camino ISO",
-  "short_name": "Camino ISO",
+  "name": "CAMINO Gestión & Datos",
+  "short_name": "CAMINO G&D",
   "start_url": "./camino_iso_portal.html",
   "scope": "./",
   "display": "standalone",
