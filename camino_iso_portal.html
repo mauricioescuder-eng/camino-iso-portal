@@ -245,6 +245,10 @@ tr:hover td{background:#faf9f6}
         <div class="page-header"><h2>Proyectos y Tareas</h2><button class="add-btn primary" onclick="openModal('Proyectos')"><i class="ti ti-plus"></i> Nueva tarea</button></div>
         <div class="stats" id="proy-stats"></div>
         <div class="toolbar"><div class="filter-row" id="proy-filters"></div></div>
+        <div style="display:flex;gap:6px;margin-bottom:16px">
+          <button class="fb active" id="proy-mias-todas" onclick="toggleMisTareas(false)">Todas</button>
+          <button class="fb" id="proy-mias-solo" onclick="toggleMisTareas(true)">🧑 Mis tareas</button>
+        </div>
         <div style="display:flex;gap:6px;margin-bottom:16px" id="proy-vista-tabs">
           <button class="fb active" onclick="cambiarVistaProy('kanban',this)">📋 Tablero</button>
           <button class="fb" onclick="cambiarVistaProy('grafico',this)">📊 Gráfico</button>
@@ -694,13 +698,26 @@ var KANBAN_ESTADOS = [
   {key:'completado',  label:'✅ Completado', color:'#0f6e56'}
 ];
 
+var _proyMisTareas = false;
+function toggleMisTareas(soloMias){
+  _proyMisTareas = soloMias;
+  document.getElementById('proy-mias-todas').classList.toggle('active', !soloMias);
+  document.getElementById('proy-mias-solo').classList.toggle('active', soloMias);
+  renderProy();
+}
+
 function renderProy(){
   renderFilters('Proyectos','proy');
-  var s={pendiente:0,'en-curso':0,completado:0};
-  cache.Proyectos.forEach(function(r){ s[r.estado]=(s[r.estado]||0)+1; });
-  document.getElementById('proy-stats').innerHTML='<div class="stat"><div class="stat-label">Total</div><div class="stat-value">'+cache.Proyectos.length+'</div></div><div class="stat"><div class="stat-label">Pendientes</div><div class="stat-value">'+(s.pendiente||0)+'</div></div><div class="stat"><div class="stat-label">En curso</div><div class="stat-value">'+(s['en-curso']||0)+'</div></div><div class="stat"><div class="stat-label">Completados</div><div class="stat-value">'+(s.completado||0)+'</div></div>';
-
   var rows = filtered('Proyectos');
+  if (_proyMisTareas) rows = rows.filter(function(r){ return !String(r.clienteid||'').trim(); });
+
+  // Las estadísticas y las tres vistas (Tablero, Gráfico, Calendario) se
+  // calculan todas a partir de "rows", así que "Mis tareas" las afecta
+  // a todas por igual, no solo al tablero.
+  var s={pendiente:0,'en-curso':0,completado:0};
+  rows.forEach(function(r){ s[r.estado]=(s[r.estado]||0)+1; });
+  document.getElementById('proy-stats').innerHTML='<div class="stat"><div class="stat-label">Total</div><div class="stat-value">'+rows.length+'</div></div><div class="stat"><div class="stat-label">Pendientes</div><div class="stat-value">'+(s.pendiente||0)+'</div></div><div class="stat"><div class="stat-label">En curso</div><div class="stat-value">'+(s['en-curso']||0)+'</div></div><div class="stat"><div class="stat-label">Completados</div><div class="stat-value">'+(s.completado||0)+'</div></div>';
+
   document.getElementById('proy-kanban').innerHTML = KANBAN_ESTADOS.map(function(e){
     var tareas = rows.filter(function(r){ return r.estado === e.key; });
     var cards = tareas.map(function(r){
