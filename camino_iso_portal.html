@@ -1996,14 +1996,19 @@ function loadTransporte(vista, btn) {
           // Para calcular "cuánto falta para el próximo mantenimiento" con
           // el km más al día posible, también se necesita el km cargado en
           // Combustible (se carga más seguido que un mantenimiento).
-          if (window._transpCombArr && window._transpCombArr.length > 0) {
-            renderTranspTabla(data, 'mantenimientos');
-          } else {
-            callTranspAPI({action:'combustible'}, function(cData) {
-              window._transpCombArr = Array.isArray(cData) ? cData : [];
+          // Y para listar la flota completa (y diferenciar iconos por tipo)
+          // hace falta window._transpFlotaArr, que no depende de haber
+          // visitado antes el Dashboard.
+          ensureFlotaLoaded(function() {
+            if (window._transpCombArr && window._transpCombArr.length > 0) {
               renderTranspTabla(data, 'mantenimientos');
-            }, function(){ renderTranspTabla(data, 'mantenimientos'); });
-          }
+            } else {
+              callTranspAPI({action:'combustible'}, function(cData) {
+                window._transpCombArr = Array.isArray(cData) ? cData : [];
+                renderTranspTabla(data, 'mantenimientos');
+              }, function(){ renderTranspTabla(data, 'mantenimientos'); });
+            }
+          });
         }
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
