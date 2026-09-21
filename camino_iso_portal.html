@@ -3949,7 +3949,16 @@ function renderTranspTabla(data, tipo) {
       });
       function _iconoEquipo(mat) {
         var t = _flotaTipoPorMat[mat] || '';
-        return t.indexOf('remolque') >= 0 ? '🚛' : '🚚';
+        return t.indexOf('remolque') >= 0 ? '🔗' : '🚚';
+      }
+      // Etiqueta de texto con el tipo (no depender solo del ícono: en
+      // muchas pantallas 🚛 y 🚚 se ven casi iguales y se prestan a confusión).
+      function _tipoLabel(mat) {
+        var t = _flotaTipoPorMat[mat] || '';
+        if (t.indexOf('semirremolque') >= 0) return 'Semirremolque';
+        if (t.indexOf('remolque') >= 0)      return 'Remolque';
+        if (t)                                return 'Camión';
+        return '';
       }
       var _dispCamionesHtml = '';
       if (_dispCamionesArr.length > 0) {
@@ -3959,9 +3968,11 @@ function renderTranspTabla(data, tipo) {
           + _dispCamionesArr.map(function(c) {
               var col = c.pct >= 90 ? '#0f6e56' : c.pct >= 75 ? '#b97c0a' : '#a32d2d';
               var bg  = c.pct >= 90 ? '#e8f5ee' : c.pct >= 75 ? '#fdf3e2' : '#fdecea';
+              var tipoLbl = _tipoLabel(c.matricula);
               return '<div style="flex:1 1 130px;min-width:130px;background:'+bg+';border:1px solid '+col+';border-radius:10px;padding:14px;text-align:center">'
                 + '<div style="font-size:26px;line-height:1">'+_iconoEquipo(c.matricula)+'</div>'
                 + '<div style="font-weight:700;font-size:13px;margin-top:6px">'+c.matricula+'</div>'
+                + (tipoLbl ? '<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-top:1px">'+tipoLbl+'</div>' : '')
                 + '<div style="color:'+col+';font-weight:800;font-size:18px;margin-top:4px">'+c.pct.toFixed(0)+'%</div>'
                 + '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+(c.diasTaller>0 ? fmtN(c.diasTaller,0)+' día(s) en taller' : 'Sin incidencias')+'</div>'
                 + '</div>';
