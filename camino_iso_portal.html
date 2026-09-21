@@ -4156,7 +4156,51 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _proxRows + '</tbody></table></div></div>';
       }
 
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
+      // ── Formulario "+ Nuevo mantenimiento" (con repuestos) ─────────
+      var _MN_LBL = 'font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px';
+      var _MN_INP = 'width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box';
+      var _mantMatOpts = (window._transpFlotaArr || []).map(function(f){
+        return String(f['matrícula']||f['matricula']||'').trim();
+      }).filter(Boolean).map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+      window._mantRepuestosDraft = [{nombre:'',cantidad:1,costo_unitario:'',proveedor:''}];
+      var _mantFormHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
+        + '<h3 style="margin:0 0 16px;font-size:15px">+ Nuevo mantenimiento</h3>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+        + '<div><label style="'+_MN_LBL+'">FECHA</label><input type="date" id="mn-fecha" style="'+_MN_INP+'" value="'+new Date().toISOString().substring(0,10)+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">MATRÍCULA</label><select id="mn-matricula" style="'+_MN_INP+'">'+_mantMatOpts+'</select></div>'
+        + '<div><label style="'+_MN_LBL+'">INCLUYE TRABAJO EN ACOPLADO</label><select id="mn-acoplado" style="'+_MN_INP+'"><option value="No">No</option><option value="Sí">Sí</option></select></div>'
+        + '<div><label style="'+_MN_LBL+'">TIPO DE INTERVENCIÓN</label><select id="mn-tipo" style="'+_MN_INP+'"><option value="Preventivo">Preventivo</option><option value="Correctivo">Correctivo</option></select></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'
+        + '<div><label style="'+_MN_LBL+'">ÁREA DE MANTENIMIENTO</label><input type="text" id="mn-area" placeholder="Ej: Motor, Suspensión, Frenos" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">KM ACTUALES DEL EQUIPO</label><input type="number" id="mn-km" placeholder="0" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">PROVEEDOR / TALLER</label><input type="text" id="mn-taller" placeholder="Ej: Rafa" style="'+_MN_INP+'"></div>'
+        + '</div>'
+        + '<div style="margin-bottom:12px"><label style="'+_MN_LBL+'">DETALLE DEL TRABAJO REALIZADO</label>'
+        + '<textarea id="mn-detalle" rows="2" style="'+_MN_INP+';resize:vertical"></textarea></div>'
+        + '<div style="border-top:1px solid var(--border);margin-bottom:14px;padding-top:14px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+        + '<label style="'+_MN_LBL+';margin-bottom:0">REPUESTOS USADOS</label>'
+        + '<button type="button" class="edit-btn" onclick="agregarRepuestoForm()">+ Agregar repuesto</button>'
+        + '</div>'
+        + '<div id="mn-repuestos-list"></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+        + '<div><label style="'+_MN_LBL+'">N° DE FACTURA</label><input type="text" id="mn-factura" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">DÍAS EN EL TALLER</label><input type="number" id="mn-dias-taller" placeholder="0" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">MANO DE OBRA / OTROS COSTOS ($)</label><input type="number" id="mn-manoobra" placeholder="0" oninput="actualizarTotalMant()" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">COSTO TOTAL ($)</label><input type="number" id="mn-costo-total" readonly style="'+_MN_INP+';background:var(--gray);font-weight:700"></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+        + '<div><label style="'+_MN_LBL+'">PRÓXIMO MANTENIMIENTO (KM, opcional)</label><input type="number" id="mn-proximo-km" placeholder="Ej: 150000" style="'+_MN_INP+'"></div>'
+        + '<div><label style="'+_MN_LBL+'">OBSERVACIONES</label><input type="text" id="mn-observaciones" style="'+_MN_INP+'"></div>'
+        + '</div>'
+        + '<button onclick="guardarMantenimiento()" style="padding:10px 20px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Crear mantenimiento</button>'
+        + ' <span id="mn-msg" style="font-size:13px;margin-left:10px"></span>'
+        + '</div>';
+
+      indicHtml = _mantFormHtml
+        + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
         + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
         + kpi('% Prev. / Corr.', pctPrev+'% / '+pctCorr+'%', nPrev+' prev. · '+nCorr+' corr.', nCorr > nPrev ? '#b97c0a' : '#0f6e56')
@@ -4260,6 +4304,7 @@ function renderTranspTabla(data, tipo) {
     }
   }
   document.getElementById('transp-indicadores').innerHTML = indicHtml;
+  if (tipo === 'mantenimientos') pintarRepuestosDraft();
 
   var colMap = {
     viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
@@ -4290,10 +4335,12 @@ function renderTranspTabla(data, tipo) {
     // Agregar columna ARS equivalente para viajes/mantenimientos
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
     html = '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
+    var isMant = (tipo === 'mantenimientos');
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
     if (showARS) html += th('UYU equiv.', 'r');
+    if (isMant) { html += th('Repuestos', 'r') + th(''); }
     html += '</tr></thead><tbody>';
-    rows.forEach(function(r){
+    rows.forEach(function(r, _mri){
       html += '<tr style="border-bottom:1px solid var(--border)">';
       cols.forEach(function(c){
         var v = r[c];
@@ -4313,12 +4360,180 @@ function renderTranspTabla(data, tipo) {
         var arsVal = tipo === 'viajes' ? toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']) : toUYU(r['costo'], r['moneda']);
         html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
       }
+      if (isMant) {
+        if (r.id) {
+          html += '<td style="padding:6px 8px;text-align:right">'
+            + '<a href="javascript:void(0)" onclick="toggleMantRepuestos(\''+r.id+'\')" style="color:#185fa5;text-decoration:none;font-weight:600">'
+            + (r.costo_repuestos > 0 ? fmt$(r.costo_repuestos) : 'Ver')
+            + '</a></td>'
+            + '<td style="padding:6px 8px;white-space:nowrap"><button class="edit-btn" style="color:#a32d2d" onclick="eliminarMantenimientoUI(\''+r.id+'\')">🗑️</button></td>';
+        } else {
+          html += '<td style="padding:6px 8px;text-align:right;color:var(--muted)">—</td><td></td>';
+        }
+      }
       html += '</tr>';
+      if (isMant && r.id) {
+        html += '<tr id="mant-rep-'+r.id+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 2)+'" style="padding:0;background:var(--gray)"><div id="mant-rep-'+r.id+'-body" style="padding:8px 12px"></div></td></tr>';
+      }
     });
     html += '</tbody></table></div>';
   }
   document.getElementById('transp-contenido').innerHTML = html;
 }
+
+// ── Repuestos de mantenimientos ──────────────────────────────────
+window._mantRepuestosDraft = window._mantRepuestosDraft || [{nombre:'',cantidad:1,costo_unitario:'',proveedor:''}];
+var _mantRepCache = {};
+
+function pintarRepuestosDraft() {
+  var cont = document.getElementById('mn-repuestos-list');
+  if (!cont) return;
+  var LBL2 = 'font-size:10px;font-weight:600;color:var(--muted);display:block;margin-bottom:3px';
+  var INP2 = 'width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box';
+  cont.innerHTML = window._mantRepuestosDraft.map(function(r, i){
+    return '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1.4fr auto;gap:8px;margin-bottom:8px;align-items:end">'
+      + '<div><label style="'+LBL2+'">Repuesto</label><input type="text" value="'+String(r.nombre||'').replace(/"/g,'&quot;')+'" placeholder="Ej: Filtro de aceite" oninput="actualizarRepuestoDraft('+i+',\'nombre\',this.value)" style="'+INP2+'"></div>'
+      + '<div><label style="'+LBL2+'">Cantidad</label><input type="number" value="'+(r.cantidad!==undefined&&r.cantidad!==null?r.cantidad:1)+'" min="0" oninput="actualizarRepuestoDraft('+i+',\'cantidad\',this.value)" style="'+INP2+'"></div>'
+      + '<div><label style="'+LBL2+'">Costo unit. ($)</label><input type="number" value="'+(r.costo_unitario||'')+'" placeholder="0" oninput="actualizarRepuestoDraft('+i+',\'costo_unitario\',this.value)" style="'+INP2+'"></div>'
+      + '<div><label style="'+LBL2+'">Proveedor</label><input type="text" value="'+String(r.proveedor||'').replace(/"/g,'&quot;')+'" placeholder="Opcional" oninput="actualizarRepuestoDraft('+i+',\'proveedor\',this.value)" style="'+INP2+'"></div>'
+      + '<button type="button" onclick="quitarRepuestoForm('+i+')" title="Quitar repuesto" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:#a32d2d">✕</button>'
+      + '</div>';
+  }).join('');
+}
+function actualizarRepuestoDraft(i, campo, valor) {
+  if (!window._mantRepuestosDraft[i]) return;
+  window._mantRepuestosDraft[i][campo] = valor;
+  actualizarTotalMant();
+}
+function agregarRepuestoForm() {
+  window._mantRepuestosDraft.push({nombre:'',cantidad:1,costo_unitario:'',proveedor:''});
+  pintarRepuestosDraft();
+}
+function quitarRepuestoForm(i) {
+  window._mantRepuestosDraft.splice(i, 1);
+  if (window._mantRepuestosDraft.length === 0) window._mantRepuestosDraft.push({nombre:'',cantidad:1,costo_unitario:'',proveedor:''});
+  pintarRepuestosDraft();
+  actualizarTotalMant();
+}
+function actualizarTotalMant() {
+  var totalRep = window._mantRepuestosDraft.reduce(function(s, r){
+    var c = parseFloat(r.cantidad) || 0, cu = parseFloat(r.costo_unitario) || 0;
+    return s + c * cu;
+  }, 0);
+  var manoObraEl = document.getElementById('mn-manoobra');
+  var manoObra = manoObraEl ? (parseFloat(manoObraEl.value) || 0) : 0;
+  var totalEl = document.getElementById('mn-costo-total');
+  if (totalEl) totalEl.value = (totalRep + manoObra).toFixed(2);
+}
+function guardarMantenimiento() {
+  var fecha   = document.getElementById('mn-fecha').value;
+  var mat     = document.getElementById('mn-matricula').value;
+  var acoplado= document.getElementById('mn-acoplado').value;
+  var tipoInt = document.getElementById('mn-tipo').value;
+  var area    = document.getElementById('mn-area').value;
+  var km      = document.getElementById('mn-km').value;
+  var taller  = document.getElementById('mn-taller').value;
+  var detalle = document.getElementById('mn-detalle').value;
+  var factura = document.getElementById('mn-factura').value;
+  var diasTaller = document.getElementById('mn-dias-taller').value;
+  var proximoKm  = document.getElementById('mn-proximo-km').value;
+  var observaciones = document.getElementById('mn-observaciones').value;
+  var manoObra = document.getElementById('mn-manoobra').value;
+  var msg = document.getElementById('mn-msg');
+
+  if (!fecha || !mat || !area || !detalle) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá fecha, matrícula, área y detalle del trabajo.';
+    return;
+  }
+
+  var repuestos = window._mantRepuestosDraft.filter(function(r){ return String(r.nombre||'').trim(); }).map(function(r){
+    return {
+      nombre: String(r.nombre).trim(),
+      cantidad: parseFloat(r.cantidad) || 0,
+      costo_unitario: parseFloat(r.costo_unitario) || 0,
+      proveedor: String(r.proveedor||'').trim()
+    };
+  });
+  var totalRep = repuestos.reduce(function(s, r){ return s + r.cantidad * r.costo_unitario; }, 0);
+  var costoTotal = totalRep + (parseFloat(manoObra) || 0);
+
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'saveMantenimiento',
+    fecha: fecha, matricula: mat, acoplado: acoplado, area: area, tipo: tipoInt,
+    detalle: detalle, km: km || 0, taller: taller, factura: factura,
+    observaciones: observaciones, dias_taller: diasTaller || 0,
+    proximo_km: proximoKm || '', costo: costoTotal,
+    repuestos: JSON.stringify(repuestos)
+  }, function(resp) {
+    if (resp && resp.error) { msg.style.color = '#c0392b'; msg.textContent = resp.error; return; }
+    toast('Mantenimiento registrado.');
+    window._mantRepuestosDraft = [{nombre:'',cantidad:1,costo_unitario:'',proveedor:''}];
+    loadTransporte('mantenimientos');
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error al guardar. Probá de nuevo.';
+  });
+}
+function toggleMantRepuestos(id) {
+  var row = document.getElementById('mant-rep-'+id);
+  if (!row) return;
+  var abierta = row.style.display !== 'none';
+  if (abierta) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  var body = document.getElementById('mant-rep-'+id+'-body');
+  if (_mantRepCache[id]) { body.innerHTML = _mantRepCache[id]; return; }
+  body.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">Cargando...</div>';
+  callTranspAPI({action: 'mantenimientoRepuestos', mantenimiento_id: id}, function(data) {
+    var reps = Array.isArray(data) ? data : [];
+    var html2;
+    if (reps.length === 0) {
+      html2 = '<div style="padding:4px 8px;color:var(--muted);font-size:12px">Sin repuestos cargados para este mantenimiento.</div>';
+    } else {
+      var totalRep2 = reps.reduce(function(s, r){ return s + (r.costo_total||0); }, 0);
+      html2 = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead><tr style="background:var(--border)">'
+        + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
+        + '<th style="padding:4px 8px;text-align:right">Cant.</th>'
+        + '<th style="padding:4px 8px;text-align:right">Costo unit.</th>'
+        + '<th style="padding:4px 8px;text-align:right">Total</th>'
+        + '<th style="padding:4px 8px;text-align:left">Proveedor</th>'
+        + '</tr></thead><tbody>'
+        + reps.map(function(r) {
+            return '<tr style="border-bottom:1px solid var(--border)">'
+              + '<td style="padding:4px 8px">'+r.nombre+'</td>'
+              + '<td style="padding:4px 8px;text-align:right">'+fmtN(r.cantidad,0)+'</td>'
+              + '<td style="padding:4px 8px;text-align:right">'+fmt$(r.costo_unitario)+'</td>'
+              + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmt$(r.costo_total)+'</td>'
+              + '<td style="padding:4px 8px">'+(r.proveedor||'—')+'</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody><tfoot><tr>'
+        + '<td colspan="3" style="padding:4px 8px;text-align:right;font-weight:700">Total repuestos</td>'
+        + '<td style="padding:4px 8px;text-align:right;font-weight:700">'+fmt$(totalRep2)+'</td><td></td>'
+        + '</tr></tfoot></table></div>';
+    }
+    _mantRepCache[id] = html2;
+    body.innerHTML = html2;
+  }, function() {
+    body.innerHTML = '<div style="padding:8px;color:#c0392b;font-size:12px">Error al cargar los repuestos.</div>';
+  });
+}
+function eliminarMantenimientoUI(id) {
+  if (!confirm('¿Eliminar este mantenimiento y los repuestos cargados en él? Esta acción no se puede deshacer.')) return;
+  callTranspAPI({action: 'eliminarMantenimiento', id: id}, function(resp) {
+    if (resp && resp.error) { toast(resp.error, true); return; }
+    toast('Mantenimiento eliminado.');
+    delete _mantRepCache[id];
+    loadTransporte('mantenimientos');
+  }, function() {
+    toast('Error al eliminar el mantenimiento.', true);
+  });
+}
+
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
