@@ -3935,6 +3935,17 @@ function renderTranspTabla(data, tipo) {
         var pct = _periodoDiasDisp > 0 ? Math.max(0, Math.min(100, (_periodoDiasDisp - dias) / _periodoDiasDisp * 100)) : 100;
         return {matricula: mat, diasTaller: dias, pct: pct};
       }).sort(function(a,b){ return a.pct - b.pct; });
+      // Ícono según el tipo de equipo (Flota) — un remolque/semirremolque
+      // no tiene motor propio, así que usar el mismo camión confundía.
+      var _flotaTipoPorMat = {};
+      (window._transpFlotaArr || []).forEach(function(f){
+        var mat = String(f['matrícula']||f['matricula']||'').trim();
+        if (mat) _flotaTipoPorMat[mat] = String(f['tipo']||'').trim().toLowerCase();
+      });
+      function _iconoEquipo(mat) {
+        var t = _flotaTipoPorMat[mat] || '';
+        return t.indexOf('remolque') >= 0 ? '🚛' : '🚚';
+      }
       var _dispCamionesHtml = '';
       if (_dispCamionesArr.length > 0) {
         _dispCamionesHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
@@ -3944,7 +3955,7 @@ function renderTranspTabla(data, tipo) {
               var col = c.pct >= 90 ? '#0f6e56' : c.pct >= 75 ? '#b97c0a' : '#a32d2d';
               var bg  = c.pct >= 90 ? '#e8f5ee' : c.pct >= 75 ? '#fdf3e2' : '#fdecea';
               return '<div style="flex:1 1 130px;min-width:130px;background:'+bg+';border:1px solid '+col+';border-radius:10px;padding:14px;text-align:center">'
-                + '<div style="font-size:26px;line-height:1">🚚</div>'
+                + '<div style="font-size:26px;line-height:1">'+_iconoEquipo(c.matricula)+'</div>'
                 + '<div style="font-weight:700;font-size:13px;margin-top:6px">'+c.matricula+'</div>'
                 + '<div style="color:'+col+';font-weight:800;font-size:18px;margin-top:4px">'+c.pct.toFixed(0)+'%</div>'
                 + '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+(c.diasTaller>0 ? fmtN(c.diasTaller,0)+' día(s) en taller' : 'Sin incidencias')+'</div>'
