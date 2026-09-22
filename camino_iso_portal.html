@@ -4135,7 +4135,7 @@ function renderTranspTabla(data, tipo) {
               + '<td style="padding:6px 8px;font-size:12px;text-align:right;color:var(--muted)">Sin km reciente cargado</td>'
               + '</tr>';
           }
-          var col = p.faltan <= 0 ? '#a32d2d' : p.faltan <= 1000 ? '#b97c0a' : '#0f6e56';
+          var col = p.faltan <= 0 ? '#a32d2d' : p.faltan <= 1500 ? '#b97c0a' : '#0f6e56';
           var texto = p.faltan <= 0 ? 'Vencido (' + fmtN(Math.abs(p.faltan),0) + ' km pasado)' : 'Faltan ' + fmtN(p.faltan,0) + ' km';
           return '<tr style="border-bottom:1px solid var(--border)">'
             + '<td style="padding:6px 8px;font-size:12px;font-weight:600">'+p.matricula+'</td>'
