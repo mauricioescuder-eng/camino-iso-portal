@@ -4135,7 +4135,7 @@ function renderTranspTabla(data, tipo) {
               + '<td style="padding:6px 8px;font-size:12px;text-align:right;color:var(--muted)">Sin km reciente cargado</td>'
               + '</tr>';
           }
-          var col = p.faltan <= 0 ? '#a32d2d' : p.faltan <= 1000 ? '#b97c0a' : '#0f6e56';
+          var col = p.faltan <= 0 ? '#a32d2d' : p.faltan <= 1500 ? '#b97c0a' : '#0f6e56';
           var texto = p.faltan <= 0 ? 'Vencido (' + fmtN(Math.abs(p.faltan),0) + ' km pasado)' : 'Faltan ' + fmtN(p.faltan,0) + ' km';
           return '<tr style="border-bottom:1px solid var(--border)">'
             + '<td style="padding:6px 8px;font-size:12px;font-weight:600">'+p.matricula+'</td>'
@@ -4156,6 +4156,81 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _proxRows + '</tbody></table></div></div>';
       }
 
+      // ── Repuestos más usados (analiza los campos de repuesto que ya
+      // vienen cargados en el mismo formulario de mantenimiento) ──────
+      var _repXNombre = {};
+      rows.forEach(function(r){
+        (r.repuestos || []).forEach(function(rep){
+          var key = rep.nombre;
+          if (!_repXNombre[key]) _repXNombre[key] = {nombre: key, cantidad: 0, costo: 0, matriculas: {}};
+          _repXNombre[key].cantidad += rep.cantidad;
+          _repXNombre[key].costo    += rep.costo_total;
+          if (r.matricula) _repXNombre[key].matriculas[r.matricula] = 1;
+        });
+      });
+      var _repArr = Object.keys(_repXNombre).map(function(k){
+        var o = _repXNombre[k];
+        return {nombre: o.nombre, cantidad: o.cantidad, costo: o.costo, camiones: Object.keys(o.matriculas)};
+      }).sort(function(a,b){ return b.cantidad - a.cantidad; });
+      var _repuestosAnalisisHtml = '';
+      if (_repArr.length > 0) {
+        var _repRows = _repArr.map(function(x){
+          return '<tr style="border-bottom:1px solid var(--border)">'
+            + '<td style="padding:6px 8px;font-size:12px">'+x.nombre+'</td>'
+            + '<td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700">'+fmtN(x.cantidad,0)+'</td>'
+            + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmt$(x.costo)+'</td>'
+            + '<td style="padding:6px 8px;font-size:11px;color:var(--muted)">'+x.camiones.join(', ')+'</td>'
+            + '</tr>';
+        }).join('');
+        _repuestosAnalisisHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">🔩 Repuestos más usados</h4>'
+          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Según los campos de repuesto cargados en el formulario de mantenimiento.</div>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr style="background:var(--gray)">'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Repuesto</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Cantidad total</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Costo UYU</th>'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Camiones</th>'
+          + '</tr></thead><tbody>' + _repRows + '</tbody></table></div></div>';
+      }
+
+      // ── Repuestos por categoría (Frenos, Filtros, Lubricantes, etc.) ──
+      var _repXCategoria = {};
+      rows.forEach(function(r){
+        (r.repuestos || []).forEach(function(rep){
+          var key = rep.categoria || 'Otro';
+          if (!_repXCategoria[key]) _repXCategoria[key] = {categoria: key, cantidad: 0, costo: 0};
+          _repXCategoria[key].cantidad += rep.cantidad;
+          _repXCategoria[key].costo    += rep.costo_total;
+        });
+      });
+      var _repCatArr = Object.keys(_repXCategoria).map(function(k){ return _repXCategoria[k]; })
+                         .sort(function(a,b){ return b.costo - a.costo; });
+      var _repCategoriaHtml = '';
+      if (_repCatArr.length > 0) {
+        var _maxCat = _repCatArr[0].costo || 1;
+        var _repCatRows = _repCatArr.map(function(x){
+          var pct = Math.round(x.costo / _maxCat * 100);
+          return '<tr style="border-bottom:1px solid var(--border)">'
+            + '<td style="padding:5px 8px;font-size:12px">'+x.categoria+'</td>'
+            + '<td style="padding:5px 8px;min-width:120px"><div style="display:flex;align-items:center;gap:6px">'
+            + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden">'
+            + '<div style="width:'+pct+'%;height:100%;background:#0f6e56;border-radius:2px"></div></div>'
+            + '<span style="font-size:11px;font-weight:600;min-width:52px;text-align:right">'+fmt$(x.costo)+'</span>'
+            + '</div></td>'
+            + '<td style="padding:5px 8px;font-size:11px;text-align:right;color:var(--muted)">'+fmtN(x.cantidad,0)+' unid.</td>'
+            + '</tr>';
+        }).join('');
+        _repCategoriaHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">🗂️ Repuestos por categoría</h4>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr style="background:var(--gray)">'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Categoría</th>'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Costo UYU</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Cantidad</th>'
+          + '</tr></thead><tbody>' + _repCatRows + '</tbody></table></div></div>';
+      }
+
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
         + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
@@ -4166,7 +4241,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Camiones sin correctivos', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
         + kpi('Disponibilidad operativa', _dispOperativaUltima ? _dispOperativaUltima.pct.toFixed(1)+'%' : '—', _dispOperativaUltima ? _dispOperativaUltima.label+' · '+fmtN(_dispOperativaUltima.diasTaller,0)+' días en taller' : 'Sin días en taller cargados', _dispOperativaUltima && _dispOperativaUltima.pct>=90 ? '#0f6e56' : '#a32d2d')
         + '</div>'
-        + _proxMantHtml + _paretoHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
+        + _proxMantHtml + _paretoHtml + _repuestosAnalisisHtml + _repCategoriaHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
@@ -4290,10 +4365,13 @@ function renderTranspTabla(data, tipo) {
     // Agregar columna ARS equivalente para viajes/mantenimientos
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
     html = '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
+    var isMant = (tipo === 'mantenimientos');
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
     if (showARS) html += th('UYU equiv.', 'r');
+    if (isMant) html += th('Repuestos', 'r');
     html += '</tr></thead><tbody>';
-    rows.forEach(function(r){
+    rows.forEach(function(r, _mri){
+      var tieneRep = isMant && r.repuestos && r.repuestos.length > 0;
       html += '<tr style="border-bottom:1px solid var(--border)">';
       cols.forEach(function(c){
         var v = r[c];
@@ -4313,12 +4391,50 @@ function renderTranspTabla(data, tipo) {
         var arsVal = tipo === 'viajes' ? toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']) : toUYU(r['costo'], r['moneda']);
         html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
       }
+      if (isMant) {
+        html += '<td style="padding:6px 8px;text-align:right">'
+          + (tieneRep
+              ? '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:600">'+fmt$(r.costo_repuestos)+'</a>'
+              : '<span style="color:var(--muted)">—</span>')
+          + '</td>';
+      }
       html += '</tr>';
+      if (tieneRep) {
+        var _repDetalle = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+          + '<thead><tr style="background:var(--border)">'
+          + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
+          + '<th style="padding:4px 8px;text-align:left">Categoría</th>'
+          + '<th style="padding:4px 8px;text-align:right">Cant.</th>'
+          + '<th style="padding:4px 8px;text-align:right">Costo unit.</th>'
+          + '<th style="padding:4px 8px;text-align:right">Total</th>'
+          + '</tr></thead><tbody>'
+          + r.repuestos.map(function(rep){
+              return '<tr style="border-bottom:1px solid var(--border)">'
+                + '<td style="padding:4px 8px">'+rep.nombre+'</td>'
+                + '<td style="padding:4px 8px;color:var(--muted)">'+(rep.categoria||'—')+'</td>'
+                + '<td style="padding:4px 8px;text-align:right">'+fmtN(rep.cantidad,0)+'</td>'
+                + '<td style="padding:4px 8px;text-align:right">'+fmt$(rep.costo_unitario)+'</td>'
+                + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmt$(rep.costo_total)+'</td>'
+                + '</tr>';
+            }).join('')
+          + '</tbody></table></div>';
+        html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 1)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+'</div></td></tr>';
+      }
     });
     html += '</tbody></table></div>';
   }
   document.getElementById('transp-contenido').innerHTML = html;
 }
+
+// ── Repuestos de mantenimientos: el detalle ya viene cargado junto con
+// la fila (sale de los campos de repuesto del propio formulario), así
+// que mostrar/ocultar es solo un toggle, sin pedir nada al servidor.
+function toggleMantRepuestosFila(i) {
+  var row = document.getElementById('mant-rep-'+i);
+  if (!row) return;
+  row.style.display = (row.style.display === 'none') ? '' : 'none';
+}
+
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
