@@ -4194,6 +4194,43 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _repRows + '</tbody></table></div></div>';
       }
 
+      // ── Repuestos por categoría (Frenos, Filtros, Lubricantes, etc.) ──
+      var _repXCategoria = {};
+      rows.forEach(function(r){
+        (r.repuestos || []).forEach(function(rep){
+          var key = rep.categoria || 'Otro';
+          if (!_repXCategoria[key]) _repXCategoria[key] = {categoria: key, cantidad: 0, costo: 0};
+          _repXCategoria[key].cantidad += rep.cantidad;
+          _repXCategoria[key].costo    += rep.costo_total;
+        });
+      });
+      var _repCatArr = Object.keys(_repXCategoria).map(function(k){ return _repXCategoria[k]; })
+                         .sort(function(a,b){ return b.costo - a.costo; });
+      var _repCategoriaHtml = '';
+      if (_repCatArr.length > 0) {
+        var _maxCat = _repCatArr[0].costo || 1;
+        var _repCatRows = _repCatArr.map(function(x){
+          var pct = Math.round(x.costo / _maxCat * 100);
+          return '<tr style="border-bottom:1px solid var(--border)">'
+            + '<td style="padding:5px 8px;font-size:12px">'+x.categoria+'</td>'
+            + '<td style="padding:5px 8px;min-width:120px"><div style="display:flex;align-items:center;gap:6px">'
+            + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden">'
+            + '<div style="width:'+pct+'%;height:100%;background:#0f6e56;border-radius:2px"></div></div>'
+            + '<span style="font-size:11px;font-weight:600;min-width:52px;text-align:right">'+fmt$(x.costo)+'</span>'
+            + '</div></td>'
+            + '<td style="padding:5px 8px;font-size:11px;text-align:right;color:var(--muted)">'+fmtN(x.cantidad,0)+' unid.</td>'
+            + '</tr>';
+        }).join('');
+        _repCategoriaHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 10px;font-size:13px">🗂️ Repuestos por categoría</h4>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+          + '<thead><tr style="background:var(--gray)">'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Categoría</th>'
+          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Costo UYU</th>'
+          + '<th style="padding:5px 8px;text-align:right;font-size:11px">Cantidad</th>'
+          + '</tr></thead><tbody>' + _repCatRows + '</tbody></table></div></div>';
+      }
+
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
         + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
@@ -4204,7 +4241,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Camiones sin correctivos', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
         + kpi('Disponibilidad operativa', _dispOperativaUltima ? _dispOperativaUltima.pct.toFixed(1)+'%' : '—', _dispOperativaUltima ? _dispOperativaUltima.label+' · '+fmtN(_dispOperativaUltima.diasTaller,0)+' días en taller' : 'Sin días en taller cargados', _dispOperativaUltima && _dispOperativaUltima.pct>=90 ? '#0f6e56' : '#a32d2d')
         + '</div>'
-        + _proxMantHtml + _paretoHtml + _repuestosAnalisisHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
+        + _proxMantHtml + _paretoHtml + _repuestosAnalisisHtml + _repCategoriaHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
@@ -4366,6 +4403,7 @@ function renderTranspTabla(data, tipo) {
         var _repDetalle = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
           + '<thead><tr style="background:var(--border)">'
           + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
+          + '<th style="padding:4px 8px;text-align:left">Categoría</th>'
           + '<th style="padding:4px 8px;text-align:right">Cant.</th>'
           + '<th style="padding:4px 8px;text-align:right">Costo unit.</th>'
           + '<th style="padding:4px 8px;text-align:right">Total</th>'
@@ -4373,6 +4411,7 @@ function renderTranspTabla(data, tipo) {
           + r.repuestos.map(function(rep){
               return '<tr style="border-bottom:1px solid var(--border)">'
                 + '<td style="padding:4px 8px">'+rep.nombre+'</td>'
+                + '<td style="padding:4px 8px;color:var(--muted)">'+(rep.categoria||'—')+'</td>'
                 + '<td style="padding:4px 8px;text-align:right">'+fmtN(rep.cantidad,0)+'</td>'
                 + '<td style="padding:4px 8px;text-align:right">'+fmt$(rep.costo_unitario)+'</td>'
                 + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmt$(rep.costo_total)+'</td>'
