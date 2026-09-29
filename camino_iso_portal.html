@@ -3717,9 +3717,41 @@ function exportarDocumentacionExcel() {
   URL.revokeObjectURL(url);
 }
 
+var _MES_CAMPO_POR_TIPO = {viajes: 'fecha viaje', combustible: 'fecha factura', mantenimientos: 'fecha'};
+window._transpFiltroMes = window._transpFiltroMes || {};
+var _mesFiltroHtml = '';
+
 function renderTranspTabla(data, tipo) {
   var rows = Array.isArray(data) ? data : [];
   var tc = getTc();
+
+  // ── Filtro por mes (Viajes / Combustible / Mantenimientos) ──────
+  // Guardamos siempre los datos completos sin filtrar, para poder
+  // armar el desplegable con todos los meses disponibles y para poder
+  // re-filtrar sin tener que volver a pedirle los datos a la API.
+  _mesFiltroHtml = '';
+  var _campoMes = _MES_CAMPO_POR_TIPO[tipo];
+  if (_campoMes) {
+    window._transpTablaFull = window._transpTablaFull || {};
+    window._transpTablaFull[tipo] = rows;
+    var _mesesDisp = {};
+    rows.forEach(function(r){
+      var mk = getMesKey(r[_campoMes] || r['timestamp'] || '');
+      if (mk) _mesesDisp[mk.key] = mk.label;
+    });
+    var _mesSel = window._transpFiltroMes[tipo] || '';
+    var _mesOpts = '<option value="">Todos los meses</option>'
+      + Object.keys(_mesesDisp).sort().reverse().map(function(k){
+          return '<option value="'+k+'"'+(k===_mesSel?' selected':'')+'>'+_mesesDisp[k]+'</option>';
+        }).join('');
+    _mesFiltroHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Mes:</span>'
+      + '<select onchange="filtrarTranspPorMes(\''+tipo+'\', this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;cursor:pointer">'
+      + _mesOpts + '</select></div>';
+    if (_mesSel) {
+      rows = rows.filter(function(r){ var mk = getMesKey(r[_campoMes] || r['timestamp'] || ''); return mk && mk.key === _mesSel; });
+    }
+  }
 
   // Resumen rápido arriba
   var indicHtml = '';
@@ -4334,7 +4366,7 @@ function renderTranspTabla(data, tipo) {
         + _camionesHtml;
     }
   }
-  document.getElementById('transp-indicadores').innerHTML = indicHtml;
+  document.getElementById('transp-indicadores').innerHTML = _mesFiltroHtml + indicHtml;
 
   var colMap = {
     viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
@@ -4433,6 +4465,15 @@ function toggleMantRepuestosFila(i) {
   var row = document.getElementById('mant-rep-'+i);
   if (!row) return;
   row.style.display = (row.style.display === 'none') ? '' : 'none';
+}
+
+// Cambia el mes elegido para Viajes/Combustible/Mantenimientos y
+// vuelve a pintar con los datos ya cargados (sin pedirle nada de
+// nuevo a la API).
+function filtrarTranspPorMes(tipo, mes) {
+  window._transpFiltroMes[tipo] = mes;
+  var full = (window._transpTablaFull || {})[tipo] || [];
+  renderTranspTabla(full, tipo);
 }
 
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
