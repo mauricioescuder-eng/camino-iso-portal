@@ -3718,38 +3718,38 @@ function exportarDocumentacionExcel() {
 }
 
 var _MES_CAMPO_POR_TIPO = {viajes: 'fecha viaje', combustible: 'fecha factura', mantenimientos: 'fecha'};
-window._transpFiltroMes = window._transpFiltroMes || {};
+window._transpFiltroRango = window._transpFiltroRango || {};
 var _mesFiltroHtml = '';
 
 function renderTranspTabla(data, tipo) {
   var rows = Array.isArray(data) ? data : [];
   var tc = getTc();
 
-  // ── Filtro por mes (Viajes / Combustible / Mantenimientos) ──────
+  // ── Filtro por rango de fechas (Viajes / Combustible / Mantenimientos) ──
   // Guardamos siempre los datos completos sin filtrar, para poder
-  // armar el desplegable con todos los meses disponibles y para poder
   // re-filtrar sin tener que volver a pedirle los datos a la API.
   _mesFiltroHtml = '';
   var _campoMes = _MES_CAMPO_POR_TIPO[tipo];
   if (_campoMes) {
     window._transpTablaFull = window._transpTablaFull || {};
     window._transpTablaFull[tipo] = rows;
-    var _mesesDisp = {};
-    rows.forEach(function(r){
-      var mk = getMesKey(r[_campoMes] || r['timestamp'] || '');
-      if (mk) _mesesDisp[mk.key] = mk.label;
-    });
-    var _mesSel = window._transpFiltroMes[tipo] || '';
-    var _mesOpts = '<option value="">Todos los meses</option>'
-      + Object.keys(_mesesDisp).sort().reverse().map(function(k){
-          return '<option value="'+k+'"'+(k===_mesSel?' selected':'')+'>'+_mesesDisp[k]+'</option>';
-        }).join('');
-    _mesFiltroHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px">'
-      + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Mes:</span>'
-      + '<select onchange="filtrarTranspPorMes(\''+tipo+'\', this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;cursor:pointer">'
-      + _mesOpts + '</select></div>';
-    if (_mesSel) {
-      rows = rows.filter(function(r){ var mk = getMesKey(r[_campoMes] || r['timestamp'] || ''); return mk && mk.key === _mesSel; });
+    var _rango = window._transpFiltroRango[tipo] || {desde:'', hasta:''};
+    var _inpStyle = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px';
+    _mesFiltroHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px;flex-wrap:wrap">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Desde:</span>'
+      + '<input type="date" id="transp-rango-desde" value="'+_rango.desde+'" onchange="filtrarTranspPorRango(\''+tipo+'\')" style="'+_inpStyle+'">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Hasta:</span>'
+      + '<input type="date" id="transp-rango-hasta" value="'+_rango.hasta+'" onchange="filtrarTranspPorRango(\''+tipo+'\')" style="'+_inpStyle+'">'
+      + (_rango.desde || _rango.hasta ? '<button onclick="limpiarRangoTransp(\''+tipo+'\')" style="'+_inpStyle+';background:#f1f5f9;border-color:#cbd5e1;cursor:pointer">✕ Limpiar</button>' : '')
+      + '</div>';
+    if (_rango.desde || _rango.hasta) {
+      rows = rows.filter(function(r){
+        var f = String(r[_campoMes] || r['timestamp'] || '').substring(0,10);
+        if (!f) return false;
+        if (_rango.desde && f < _rango.desde) return false;
+        if (_rango.hasta && f > _rango.hasta) return false;
+        return true;
+      });
     }
   }
 
@@ -4521,11 +4521,18 @@ function toggleRepCamion(id) {
   row.style.display = (row.style.display === 'none') ? '' : 'none';
 }
 
-// Cambia el mes elegido para Viajes/Combustible/Mantenimientos y
-// vuelve a pintar con los datos ya cargados (sin pedirle nada de
+// Cambia el rango de fechas elegido para Viajes/Combustible/Mantenimientos
+// y vuelve a pintar con los datos ya cargados (sin pedirle nada de
 // nuevo a la API).
-function filtrarTranspPorMes(tipo, mes) {
-  window._transpFiltroMes[tipo] = mes;
+function filtrarTranspPorRango(tipo) {
+  var desde = document.getElementById('transp-rango-desde').value;
+  var hasta = document.getElementById('transp-rango-hasta').value;
+  window._transpFiltroRango[tipo] = {desde: desde, hasta: hasta};
+  var full = (window._transpTablaFull || {})[tipo] || [];
+  renderTranspTabla(full, tipo);
+}
+function limpiarRangoTransp(tipo) {
+  window._transpFiltroRango[tipo] = {desde:'', hasta:''};
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
 }
