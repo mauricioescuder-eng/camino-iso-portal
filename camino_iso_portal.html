@@ -3619,11 +3619,17 @@ function umbralDoc(tipo){
 var _docCamiones = [];
 var _docChoferes = [];
 var _docFiltro = 'todos'; // 'todos' | 'proximos'
+var _docTipoFiltro = ''; // '' = todos los tipos, o 'ITV'/'PNC'/etc.
 
 function cambiarFiltroDoc(f, btn){
   _docFiltro = f;
   document.querySelectorAll('#doc-filtro-tabs .fb').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
+  pintarDocumentacion();
+}
+
+function cambiarTipoFiltroDoc(sel){
+  _docTipoFiltro = sel.value;
   pintarDocumentacion();
 }
 
@@ -3687,10 +3693,29 @@ function pintarDocumentacion() {
     dchRows = dchRows.filter(function(r){ return proximoOVencido(diasHasta(r.vto), r.tipo); });
   }
 
+  // Tipos disponibles: unión de los tipos presentes en camiones y choferes
+  // (ITV, PNC, etc.), para que el desplegable solo muestre lo que existe.
+  var tiposDisponibles = Array.from(new Set(
+    _docCamiones.map(function(r){ return r['tipo']; })
+      .concat(_docChoferes.map(function(r){ return r['tipo']; }))
+  )).filter(Boolean).sort();
+
+  if (_docTipoFiltro) {
+    dcRows  = dcRows.filter(function(r){ return r.tipo === _docTipoFiltro; });
+    dchRows = dchRows.filter(function(r){ return r.tipo === _docTipoFiltro; });
+  }
+
+  var selStyleDoc = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;cursor:pointer';
+  var tipoSelectHtml = '<select id="doc-tipo-filtro" style="'+selStyleDoc+'" onchange="cambiarTipoFiltroDoc(this)">'
+    + '<option value=""'+(_docTipoFiltro===''?' selected':'')+'>Todos los tipos</option>'
+    + tiposDisponibles.map(function(t){ return '<option value="'+t+'"'+(_docTipoFiltro===t?' selected':'')+'>'+t+'</option>'; }).join('')
+    + '</select>';
+
   var tabsHtml = '<div id="doc-filtro-tabs" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
-    + '<div style="display:flex;gap:8px">'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
     + '<button class="fb'+(_docFiltro==='todos'?' active':'')+'" onclick="cambiarFiltroDoc(\'todos\',this)">Todos</button>'
     + '<button class="fb'+(_docFiltro==='proximos'?' active':'')+'" onclick="cambiarFiltroDoc(\'proximos\',this)">⚠️ Próximos a vencer</button>'
+    + tipoSelectHtml
     + '</div>'
     + '<button class="edit-btn" onclick="exportarDocumentacionExcel()">📊 Exportar a Excel</button>'
     + '</div>';
