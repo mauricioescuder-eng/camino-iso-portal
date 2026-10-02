@@ -1863,6 +1863,12 @@ function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(f
 var TRANSP_API = '';
 function getTranspApi() { return (session && session.apiUrl) ? session.apiUrl : TRANSP_API; }
 var _transpVista = 'kpis';
+var _transpOrdenCamiones = 'ingresos'; // 'ingresos' | 'margen' — orden de la tabla "Resultados por camión"
+
+function cambiarOrdenCamiones(orden) {
+  _transpOrdenCamiones = orden;
+  aplicarFiltrosTransp();
+}
 
 function getTc(){ return parseFloat(document.getElementById('transp-tc').value) || 1400; }
 
@@ -3147,17 +3153,39 @@ function renderTranspKPIs(data, viajes) {
     // Chequeo de control DAX: suma por camión debe = total global
     var sumIngCheck = camiones.reduce(function(s,c){ return s+c.ingresos; },0);
     var checkOk = Math.abs(sumIngCheck - totalIng) < 1;
-    html += '<div class="chart-wrap"><h4>📊 Resultados por camión</h4>';
+    // Mejor y peor camión por rentabilidad (margen %), solo entre los que
+    // tuvieron ingresos en el período — para no marcar como "peor" a un
+    // camión que simplemente no tuvo viajes.
+    var camionesConIng = camiones.filter(function(c){ return c.ingresos > 0; });
+    var mejorMat = null, peorMat = null;
+    if (camionesConIng.length > 1) {
+      mejorMat = camionesConIng.reduce(function(a,b){ return b.pct_margen > a.pct_margen ? b : a; }).matricula;
+      peorMat  = camionesConIng.reduce(function(a,b){ return b.pct_margen < a.pct_margen ? b : a; }).matricula;
+    }
+
+    html += '<div class="chart-wrap"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px">'
+      + '<h4 style="margin:0">📊 Resultados por camión</h4>'
+      + '<div style="display:flex;gap:6px">'
+      + '<button class="fb'+(_transpOrdenCamiones==='ingresos'?' active':'')+'" onclick="cambiarOrdenCamiones(\'ingresos\')">Ordenar por ingresos</button>'
+      + '<button class="fb'+(_transpOrdenCamiones==='margen'?' active':'')+'" onclick="cambiarOrdenCamiones(\'margen\')">🏆 Ordenar por rentabilidad</button>'
+      + '</div></div>';
     if (!checkOk) html += '<div style="color:#b97c0a;font-size:11px;margin-bottom:8px">⚠ Control: suma camiones ≠ total global (revisar datos)</div>';
     if (periodoDiasLabel) html += '<div style="color:var(--muted);font-size:11px;margin-bottom:8px">% de días activos calculado sobre ' + periodoDiasLabel + '</div>';
     html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
-      + th('Matrícula') + th('Viajes','r') + th('Km','r') + th('Ton','r') + th('Ingresos','r') + th('Costo directo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r') + th('Días activos','r') + th('% Días activos','r')
+      + th('#') + th('Matrícula') + th('Viajes','r') + th('Km','r') + th('Ton','r') + th('Ingresos','r') + th('Costo directo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r') + th('Días activos','r') + th('% Días activos','r')
       + '</tr></thead><tbody>';
-    camiones.sort(function(a,b){ return b.ingresos-a.ingresos; }).forEach(function(c){
+    var camionesOrden = _transpOrdenCamiones === 'margen'
+      ? camiones.sort(function(a,b){ return b.pct_margen - a.pct_margen; })
+      : camiones.sort(function(a,b){ return b.ingresos - a.ingresos; });
+    camionesOrden.forEach(function(c, idx){
       var col = c.pct_margen >= 20 ? '#0f6e56' : c.pct_margen >= 10 ? '#b97c0a' : '#a32d2d';
       var colDias = c.pct_dias_activos === null ? '#888' : c.pct_dias_activos >= 60 ? '#0f6e56' : c.pct_dias_activos >= 30 ? '#b97c0a' : '#a32d2d';
-      html += '<tr style="border-bottom:1px solid var(--border)">'
-        + td('<strong>' + c.matricula + '</strong>')
+      var esMejor = c.matricula === mejorMat, esPeor = c.matricula === peorMat;
+      var filaBg = esMejor ? 'background:#f0f9f2' : esPeor ? 'background:#fdf2f0' : '';
+      var badge = esMejor ? ' 🏆' : esPeor ? ' ⚠️' : '';
+      html += '<tr style="border-bottom:1px solid var(--border);'+filaBg+'">'
+        + td(String(idx+1))
+        + td('<strong>' + c.matricula + '</strong>' + badge)
         + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r') + td(fmtN(c.ton),'r')
         + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_directo),'r')
         + td(fmt$(c.costo_por_km),'r') + td(fmt$(c.margen),'r')
