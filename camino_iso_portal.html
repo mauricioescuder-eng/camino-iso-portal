@@ -2843,12 +2843,43 @@ function renderTranspKPIs(data, viajes) {
   var byTruck = {};
   viajes.forEach(function(v) {
     var m = v['matricula'] || 'Sin matrícula';
-    if (!byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0};
+    if (!byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0, _diasSet:{}};
     byTruck[m].viajes++;
     byTruck[m].km       += parseFloat(v['km recorridos'])||0;
     byTruck[m].ton      += parseFloat(v['toneladas'])||0;
     byTruck[m].ingresos += toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']);
+    var fvDia = String(v['fecha viaje']||v['timestamp']||'').slice(0,10);
+    if (fvDia) byTruck[m]._diasSet[fvDia] = true;
   });
+
+  // ── Período usado como base para "% de días activos" ──────────
+  // Si hay un mes elegido en el filtro, la base es ese mes (o los días
+  // transcurridos si es el mes en curso, para no penalizar días que
+  // todavía no pasaron). Si está en "Todos los meses", la base es el
+  // rango real entre el primer y el último viaje registrado.
+  var perSelDias = document.getElementById('tf-periodo') ? document.getElementById('tf-periodo').value : '';
+  var diasPeriodo = 0, periodoDiasLabel = '';
+  var mPerDias = perSelDias.match(/^(\d{4})-(\d{2})$/);
+  if (mPerDias) {
+    var pyD = parseInt(mPerDias[1],10), pmoD = parseInt(mPerDias[2],10);
+    var ultimoDiaMes = new Date(pyD, pmoD, 0).getDate();
+    var hoyD = new Date(); hoyD.setHours(0,0,0,0);
+    var esMesActual = (hoyD.getFullYear() === pyD && (hoyD.getMonth()+1) === pmoD);
+    diasPeriodo = esMesActual ? hoyD.getDate() : ultimoDiaMes;
+    periodoDiasLabel = (MESES_LABEL[pmoD-1]||pmoD) + ' ' + pyD + ' · ' + diasPeriodo + ' día' + (diasPeriodo===1?'':'s');
+  } else {
+    var fechasTodas = (window._transpViajesRaw || viajes)
+      .map(function(v){ return v['fecha viaje']||v['timestamp']||''; })
+      .filter(Boolean).map(function(f){ return new Date(f); })
+      .filter(function(d){ return !isNaN(d.getTime()); });
+    if (fechasTodas.length) {
+      var minD = new Date(Math.min.apply(null, fechasTodas));
+      var maxD = new Date(Math.max.apply(null, fechasTodas));
+      diasPeriodo = Math.round((maxD - minD) / 86400000) + 1;
+      periodoDiasLabel = 'todo el período registrado · ' + diasPeriodo + ' días';
+    }
+  }
+
   var camiones = Object.values(byTruck).map(function(c) {
     // DAX: Costo directo por camión = SUM(Costos_Operativos[Monto]) filtrado por ID_Camion
     c.costo_directo = costosPorMat[c.matricula] || 0;
@@ -2858,6 +2889,9 @@ function renderTranspKPIs(data, viajes) {
     c.pct_margen = c.ingresos > 0 ? (c.margen / c.ingresos * 100) : 0;
     // DAX: Costo por KM del camión = Costo directo / Km
     c.costo_por_km = c.km > 0 ? c.costo_directo / c.km : 0;
+    c.dias_activos = Object.keys(c._diasSet).length;
+    c.pct_dias_activos = diasPeriodo > 0 ? Math.min(100, c.dias_activos / diasPeriodo * 100) : null;
+    delete c._diasSet;
     return c;
   });
   var numUnidades = camiones.length;
@@ -3115,17 +3149,21 @@ function renderTranspKPIs(data, viajes) {
     var checkOk = Math.abs(sumIngCheck - totalIng) < 1;
     html += '<div class="chart-wrap"><h4>📊 Resultados por camión</h4>';
     if (!checkOk) html += '<div style="color:#b97c0a;font-size:11px;margin-bottom:8px">⚠ Control: suma camiones ≠ total global (revisar datos)</div>';
+    if (periodoDiasLabel) html += '<div style="color:var(--muted);font-size:11px;margin-bottom:8px">% de días activos calculado sobre ' + periodoDiasLabel + '</div>';
     html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
-      + th('Matrícula') + th('Viajes','r') + th('Km','r') + th('Ton','r') + th('Ingresos','r') + th('Costo directo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r')
+      + th('Matrícula') + th('Viajes','r') + th('Km','r') + th('Ton','r') + th('Ingresos','r') + th('Costo directo','r') + th('$/km','r') + th('Margen','r') + th('Margen %','r') + th('Días activos','r') + th('% Días activos','r')
       + '</tr></thead><tbody>';
     camiones.sort(function(a,b){ return b.ingresos-a.ingresos; }).forEach(function(c){
       var col = c.pct_margen >= 20 ? '#0f6e56' : c.pct_margen >= 10 ? '#b97c0a' : '#a32d2d';
+      var colDias = c.pct_dias_activos === null ? '#888' : c.pct_dias_activos >= 60 ? '#0f6e56' : c.pct_dias_activos >= 30 ? '#b97c0a' : '#a32d2d';
       html += '<tr style="border-bottom:1px solid var(--border)">'
         + td('<strong>' + c.matricula + '</strong>')
         + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r') + td(fmtN(c.ton),'r')
         + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_directo),'r')
         + td(fmt$(c.costo_por_km),'r') + td(fmt$(c.margen),'r')
-        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + c.pct_margen.toFixed(1) + '%</td></tr>';
+        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + c.pct_margen.toFixed(1) + '%</td>'
+        + td(fmtN(c.dias_activos),'r')
+        + '<td style="padding:8px;text-align:right;font-weight:700;color:'+colDias+'">' + (c.pct_dias_activos===null?'—':c.pct_dias_activos.toFixed(0)+'%') + '</td></tr>';
     });
     html += '</tbody></table></div></div>';
   }
