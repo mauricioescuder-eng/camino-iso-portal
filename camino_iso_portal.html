@@ -223,6 +223,7 @@ tr:hover td{background:#faf9f6}
       <button class="sidebar-btn" onclick="showPage('archivos',this)"><i class="ti ti-folder"></i> Archivos</button>
       <button class="sidebar-btn" onclick="showPage('registros',this)"><i class="ti ti-clipboard-list"></i> Ganadería</button>
       <button class="sidebar-btn" onclick="showPage('transporte',this)"><i class="ti ti-truck"></i> Transporte</button>
+      <button class="sidebar-btn" id="sidebar-programa" style="display:none" onclick="showPage('programa',this)"><i class="ti ti-target-arrow"></i> Seguimiento del programa</button>
       <div class="sidebar-section admin-only" style="display:none">Administración</div>
       <button class="sidebar-btn admin-only" style="display:none" onclick="showPage('clientes',this)"><i class="ti ti-users"></i> Clientes <span class="admin-badge">Admin</span></button>
       <button class="sidebar-btn admin-only" style="display:none" onclick="showPage('usuarios',this)"><i class="ti ti-lock"></i> Usuarios <span class="admin-badge">Admin</span></button>
@@ -382,6 +383,25 @@ tr:hover td{background:#faf9f6}
         <div id="transp-contenido"></div>
       </div>
 
+      <div class="page" id="page-programa">
+        <div class="page-header">
+          <h2>Seguimiento del programa</h2>
+          <div id="programa-cliente-wrap" style="display:none;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span>👁️ Viendo:</span>
+            <select id="programa-cliente-sel" onchange="cambiarClientePrograma(this.value)" style="padding:5px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;color:var(--text)"></select>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <div id="programa-filtros" style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="fb active" onclick="loadPrograma('dashboard',this)">📊 Dashboard</button>
+            <button class="fb" onclick="loadPrograma('acciones',this)">✅ Acciones</button>
+            <button class="fb" onclick="loadPrograma('actas',this)">📝 Actas</button>
+            <button class="fb" onclick="loadPrograma('indicadores',this)">📈 Indicadores</button>
+          </div>
+        </div>
+        <div id="programa-contenido"></div>
+      </div>
+
       <div class="page" id="page-clientes">
         <div class="page-header"><h2>Clientes</h2><button class="add-btn primary" onclick="openModal('Clientes')"><i class="ti ti-plus"></i> Nuevo cliente</button></div>
         <div class="stats" id="crm-stats"></div>
@@ -511,6 +531,13 @@ var _TRANSP_CLIENTES = [
   { nombre: 'PRUEBA', clienteId: 'prueba', apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec' }
 ];
 
+// Clientes con módulo "Seguimiento del programa" (planilla de acciones
+// ISO propia, una por cliente). Para sumar un cliente nuevo: desplegar
+// el mismo backend de solo lectura en su planilla y agregar una fila acá.
+var _PROGRAMA_CLIENTES = [
+  { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbz1JLsvZgVDZSBOWJqDAkS83gijahKyFqp9lMgdGRxc79LH3gDQvsIbsamGTBmBhdZGOg/exec' }
+];
+
 function toggleAdminLogin(e) {
   e.preventDefault();
   var fields = document.getElementById('admin-login-fields');
@@ -563,6 +590,11 @@ function startApp(){
   document.querySelectorAll('.sidebar-btn').forEach(function(el){ el.style.display=''; });
   document.querySelectorAll('.sidebar-section').forEach(function(el){ el.style.display=''; });
   document.querySelectorAll('.admin-only').forEach(function(el){ el.style.display='none'; });
+  // "Seguimiento del programa" solo existe para los clientes que tienen
+  // una planilla configurada en _PROGRAMA_CLIENTES — se decide explícito
+  // acá abajo en vez de con el filtro de texto genérico (ocultarTextos),
+  // porque ese filtro lo esconde para todos salvo que se liste a mano.
+  document.getElementById('sidebar-programa').style.display = 'none';
   var nombreMostrar = session.nombre || session.usuario || '';
   document.getElementById('topbar-user').textContent = nombreMostrar;
   document.getElementById('topbar-client').textContent = session.rol==='admin' ? '👑 Administrador' : (session.nombre || session.clienteid || '');
@@ -576,6 +608,16 @@ function startApp(){
       sel.innerHTML = _TRANSP_CLIENTES.map(function(c){ return '<option value="'+c.apiUrl+'">'+c.nombre+'</option>'; }).join('');
       cambiarClienteTransporte(_TRANSP_CLIENTES[0].apiUrl);
     }
+    if (_PROGRAMA_CLIENTES.length) {
+      document.getElementById('sidebar-programa').style.display = '';
+      var selWrapP = document.getElementById('programa-cliente-wrap');
+      var selP = document.getElementById('programa-cliente-sel');
+      if (selWrapP && selP) {
+        selWrapP.style.display = 'flex';
+        selP.innerHTML = _PROGRAMA_CLIENTES.map(function(c){ return '<option value="'+c.apiUrl+'">'+c.nombre+'</option>'; }).join('');
+        cambiarClientePrograma(_PROGRAMA_CLIENTES[0].apiUrl);
+      }
+    }
   } else if(session.clienteid === 'jorajuria'){
     // Cliente transporte: ocultar secciones ISO, mostrar solo Transporte
     var ocultarTextos = ['Dashboard','Documentos ISO','Indicadores','Archivos','Ganadería','Construcción'];
@@ -586,6 +628,11 @@ function startApp(){
     });
     document.querySelectorAll('.sidebar-section').forEach(function(s){ s.style.display='none'; });
     actualizarTabsTransporteEspecificos();
+    var progCli = _PROGRAMA_CLIENTES.filter(function(c){ return c.clienteId === session.clienteid; })[0];
+    if (progCli) {
+      document.getElementById('sidebar-programa').style.display = '';
+      session.programaApiUrl = progCli.apiUrl;
+    }
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
   } else if(session.clienteid === 'peralta'){
     // Cliente construcción: ocultar secciones que no le corresponden, mostrar solo Proyectos y Presupuesto
@@ -625,6 +672,17 @@ function cambiarClienteTransporte(apiUrl) {
   actualizarTabsTransporteEspecificos();
   if (document.getElementById('page-transporte').classList.contains('active')) {
     loadTransporte('kpis', document.querySelector('#transp-filtros .fb'));
+  }
+}
+
+// Admin: cambia a qué cliente de "Seguimiento del programa" está viendo el portal
+function cambiarClientePrograma(apiUrl) {
+  session.programaApiUrl = apiUrl;
+  window._programaAcciones = null;
+  window._programaActas = null;
+  window._programaIndicadores = null;
+  if (document.getElementById('page-programa').classList.contains('active')) {
+    loadPrograma('dashboard', document.querySelector('#programa-filtros .fb'));
   }
 }
 
@@ -1932,7 +1990,7 @@ async function uploadFile(input){
   reader.readAsDataURL(file);
 }
 
-function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); }); document.getElementById('page-'+page).classList.add('active'); if(page==='registros') loadRegistros('aliment'); if(page==='transporte'){ var tb=document.querySelector('#transp-filtros .fb'); loadTransporte('kpis', tb); } }
+function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); }); document.getElementById('page-'+page).classList.add('active'); if(page==='registros') loadRegistros('aliment'); if(page==='transporte'){ var tb=document.querySelector('#transp-filtros .fb'); loadTransporte('kpis', tb); } if(page==='programa'){ var pb=document.querySelector('#programa-filtros .fb'); loadPrograma('dashboard', pb); } }
 
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
@@ -2127,6 +2185,293 @@ function callTranspAPI(params, cb, onTimeout) {
   s.src = url;
   s.onerror = function(){ clearTimeout(timeout); if (onTimeout) { onTimeout(); } else { document.getElementById('transp-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API.</div>'; } };
   document.body.appendChild(s);
+}
+
+// ═══════════════════════════════════════════════════════
+// MÓDULO "SEGUIMIENTO DEL PROGRAMA" — solo lectura. Lee una planilla
+// de acciones ISO por cliente (ver _PROGRAMA_CLIENTES) a través de un
+// backend chico y propio (API_Seguimiento_Programa.gs), con el mismo
+// mecanismo JSONP que ya usa Transporte. El portal no guarda ni edita
+// nada acá: todos los KPI y gráficos se calculan en el navegador a
+// partir de la hoja "Acciones" cruda, nunca de la hoja "Resumen".
+// ═══════════════════════════════════════════════════════
+var _programaCbIdx = 0;
+function getProgramaApi() { return (session && session.programaApiUrl) ? session.programaApiUrl : ''; }
+
+function callProgramaAPI(params, cb, onTimeout) {
+  var api = getProgramaApi();
+  if (!api) { document.getElementById('programa-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">No hay una planilla de seguimiento configurada para este cliente.</div>'; return; }
+  var cbName = 'programaCb_' + (++_programaCbIdx) + '_' + Date.now();
+  var url = api + '?callback=' + cbName;
+  Object.keys(params).forEach(function(k){ url += '&' + k + '=' + encodeURIComponent(params[k]); });
+  var timeout = setTimeout(function(){
+    if(window[cbName]) delete window[cbName];
+    if (onTimeout) { onTimeout(); }
+    else { document.getElementById('programa-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error: tiempo de espera agotado.</div>'; }
+  }, 45000);
+  window[cbName] = function(data) {
+    clearTimeout(timeout);
+    delete window[cbName];
+    if (data && data.error) {
+      if (onTimeout) { onTimeout(data); }
+      else { document.getElementById('programa-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error API: ' + data.error + '</div>'; }
+      return;
+    }
+    cb(data);
+  };
+  var s = document.createElement('script');
+  s.src = url;
+  s.onerror = function(){ clearTimeout(timeout); if (onTimeout) { onTimeout(); } else { document.getElementById('programa-contenido').innerHTML = '<div style="color:#c0392b;padding:20px">Error al conectar con la API.</div>'; } };
+  document.body.appendChild(s);
+}
+
+var _programaVista = 'dashboard';
+var _programaFiltroArea = '';
+var _programaFiltroEstado = '';
+var _programaFiltroResp = '';
+
+function loadPrograma(vista, btn) {
+  _programaVista = vista;
+  document.querySelectorAll('#programa-filtros .fb').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  var cont = document.getElementById('programa-contenido');
+
+  if (window._programaAcciones) { pintarPrograma(); return; }
+  cont.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando...</div>';
+  callProgramaAPI({action:'acciones'}, function(acc) {
+    window._programaAcciones = Array.isArray(acc) ? acc : [];
+    pintarPrograma();
+  });
+}
+
+function pintarPrograma() {
+  if (_programaVista === 'dashboard') renderProgramaDashboard();
+  else if (_programaVista === 'acciones') renderProgramaAcciones();
+  else if (_programaVista === 'actas') renderProgramaHojaGenerica('actas', 'Actas de reunión', '📝');
+  else if (_programaVista === 'indicadores') renderProgramaHojaGenerica('indicadores', 'Indicadores', '📈');
+}
+
+// ── Reglas de negocio — se calculan acá siempre a partir de la hoja
+// Acciones cruda, nunca se copian de la hoja Resumen (que puede
+// quedar desactualizada o tener otra lógica).
+function programaHoyStr() {
+  var d = new Date(); d.setHours(0,0,0,0);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Vencida = Estado distinto de Cerrado y Plazo vigente anterior a hoy.
+function programaVencida(r) {
+  return r.estado !== 'Cerrado' && !!r.plazo_vigente && r.plazo_vigente < programaHoyStr();
+}
+// Reprogramada = Plazo vigente distinto de Plazo original.
+function programaReprogramada(r) {
+  return !!r.plazo_original && !!r.plazo_vigente && r.plazo_original !== r.plazo_vigente;
+}
+function programaEsSi(v) {
+  var t = String(v||'').trim().toLowerCase().replace(/í/g,'i');
+  return t === 'si';
+}
+function programaEficaz(r) {
+  return r.estado === 'Cerrado' && programaEsSi(r.fue_eficaz);
+}
+// Evidencia puede ser un link, una imagen o texto libre — se muestra
+// clickeable solo cuando parece una URL; si no, como texto tal cual.
+function programaEvidenciaHtml(v) {
+  var t = String(v||'').trim();
+  if (!t) return '<span style="color:var(--muted)">—</span>';
+  if (/^https?:\/\//i.test(t)) return '<a href="'+t+'" target="_blank" rel="noopener" style="color:var(--green);font-weight:600">🔗 Ver</a>';
+  return t;
+}
+
+var PROGRAMA_ESTADOS = ['Cerrado','En curso','Pendiente'];
+var PROGRAMA_ESTADO_COLOR = {Cerrado:'#0f6e56', 'En curso':'#185fa5', Pendiente:'#9b8ee8'};
+
+function renderProgramaDashboard() {
+  var rows = window._programaAcciones || [];
+  var cont = document.getElementById('programa-contenido');
+  if (!rows.length) { cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Todavía no hay acciones cargadas en la hoja "Acciones".</div>'; return; }
+
+  var total = rows.length;
+  var cerradas = rows.filter(function(r){ return r.estado === 'Cerrado'; }).length;
+  var pctAvance = total > 0 ? (cerradas/total*100) : 0;
+  var vencidas = rows.filter(programaVencida).length;
+  var reprogramadas = rows.filter(programaReprogramada).length;
+  var eficaces = rows.filter(programaEficaz).length;
+
+  var kpiHtml = '<div class="kpibig-grid">'
+    + kpiBig('Total de acciones', fmtN(total), '#1a1a18', '#f5f5f3')
+    + kpiBig('% Avance', pctAvance.toFixed(0)+'%', pctAvance>=50?'#0f6e56':'#b97c0a', pctAvance>=50?'#e8f5e9':'#fff8e1', cerradas+' de '+total+' cerradas')
+    + kpiBig('Vencidas', fmtN(vencidas), vencidas>0?'#a32d2d':'#0f6e56', vencidas>0?'#fdecea':'#e8f5e9')
+    + kpiBig('Reprogramadas', fmtN(reprogramadas), '#b97c0a', '#fff8e1')
+    + kpiBig('Cerradas con eficacia verificada', fmtN(eficaces), '#0f6e56', '#e8f5e9', cerradas>0 ? (Math.round(eficaces/cerradas*100)+'% de las cerradas') : '')
+    + '</div>';
+
+  var porEstado = {};
+  PROGRAMA_ESTADOS.forEach(function(e){ porEstado[e] = 0; });
+  rows.forEach(function(r){ var e = PROGRAMA_ESTADOS.indexOf(r.estado)>=0 ? r.estado : 'Pendiente'; porEstado[e]++; });
+  var donutItems = PROGRAMA_ESTADOS.map(function(e){ return {label:e, val:porEstado[e], color:PROGRAMA_ESTADO_COLOR[e]}; });
+
+  var porArea = {};
+  rows.forEach(function(r){
+    var a = r.area || 'Sin área';
+    if (!porArea[a]) porArea[a] = {area:a, cerradas:0, abiertas:0};
+    if (r.estado === 'Cerrado') porArea[a].cerradas++; else porArea[a].abiertas++;
+  });
+  var areaArr = Object.keys(porArea).map(function(k){ return porArea[k]; });
+
+  // Evolución mensual = cerradas acumuladas por mes, según Fecha de cierre real.
+  var cierresPorMes = {};
+  rows.forEach(function(r){
+    if (r.estado !== 'Cerrado' || !r.fecha_cierre_real) return;
+    var mk = String(r.fecha_cierre_real).slice(0,7);
+    cierresPorMes[mk] = (cierresPorMes[mk]||0) + 1;
+  });
+  var mesesOrdenados = Object.keys(cierresPorMes).sort();
+  var acumMesesArr = [];
+  if (mesesOrdenados.length) {
+    var acumulado = 0;
+    mesesOrdenados.forEach(function(mk){
+      acumulado += cierresPorMes[mk];
+      var partes = mk.split('-');
+      var label = (_MESES_LABEL_G[parseInt(partes[1],10)-1]||partes[1]) + ' ' + partes[0];
+      acumMesesArr.push({label:label, val:acumulado});
+    });
+  }
+
+  var html = kpiHtml;
+  html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Acciones por estado</h4>' + svgDonutGen(donutItems) + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Avance por área</h4>' + programaBarrasArea(areaArr) + '</div>';
+  html += '<div class="chart-wrap" style="margin:0"><h4>Evolución mensual (cerradas acumuladas)</h4>' + (acumMesesArr.length ? svgBarras(acumMesesArr, 'val', '#1E6B2E') : '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Todavía no hay acciones cerradas con fecha de cierre cargada.</div>') + '</div>';
+  html += '</div>';
+
+  cont.innerHTML = html;
+}
+
+// Barras apiladas Cerradas/Abiertas por área — mismo estilo que
+// "Tareas por rubro" de Proyectos.
+function programaBarrasArea(areaArr) {
+  if (!areaArr.length) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos</div>';
+  var chartH = 160;
+  var max = 1;
+  areaArr.forEach(function(a){ var t=a.cerradas+a.abiertas; if (t>max) max=t; });
+  var bars = areaArr.map(function(a){
+    var total = a.cerradas + a.abiertas;
+    var hC = a.cerradas>0 ? Math.max(2, Math.round((a.cerradas/max)*chartH)) : 0;
+    var hA = a.abiertas>0 ? Math.max(2, Math.round((a.abiertas/max)*chartH)) : 0;
+    var segs = '';
+    if (hA>0) segs += '<div title="Abiertas: '+a.abiertas+'" style="height:'+hA+'px;background:#F07820;width:100%"></div>';
+    if (hC>0) segs += '<div title="Cerradas: '+a.cerradas+'" style="height:'+hC+'px;background:#1E6B2E;width:100%"></div>';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;min-width:0">'
+      + '<div style="display:flex;flex-direction:column-reverse;width:40px;height:'+chartH+'px;border-radius:6px 6px 0 0;overflow:hidden;background:var(--gray)">'+segs+'</div>'
+      + '<div style="font-size:11px;color:var(--text);font-weight:600;text-align:center;line-height:1.2">'+a.area+'</div>'
+      + '<div style="font-size:10px;color:var(--muted)">'+total+((total===1)?' acción':' acciones')+'</div>'
+      + '</div>';
+  }).join('');
+  var legend = '<div style="display:flex;gap:16px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">'
+    + '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:#1E6B2E;display:inline-block"></span>Cerradas</div>'
+    + '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:#F07820;display:inline-block"></span>Abiertas</div>'
+    + '</div>';
+  return '<div style="display:flex;align-items:flex-end;gap:16px;padding:0 8px">'+bars+'</div>' + legend;
+}
+
+function renderProgramaAcciones() {
+  var rows = window._programaAcciones || [];
+  var cont = document.getElementById('programa-contenido');
+  if (!rows.length) { cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">Todavía no hay acciones cargadas.</div>'; return; }
+
+  var areas = Array.from(new Set(rows.map(function(r){ return r.area; }))).filter(Boolean).sort();
+  var resps = Array.from(new Set(rows.map(function(r){ return r.responsable; }))).filter(Boolean).sort();
+
+  var filtered = rows.filter(function(r){
+    if (_programaFiltroArea && r.area !== _programaFiltroArea) return false;
+    if (_programaFiltroEstado && r.estado !== _programaFiltroEstado) return false;
+    if (_programaFiltroResp && r.responsable !== _programaFiltroResp) return false;
+    return true;
+  });
+
+  var selStyle = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;cursor:pointer';
+  var filtrosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<select style="'+selStyle+'" onchange="cambiarFiltroPrograma(\'area\',this.value)">'
+    + '<option value="">Todas las áreas</option>' + areas.map(function(a){ return '<option value="'+a+'"'+(a===_programaFiltroArea?' selected':'')+'>'+a+'</option>'; }).join('')
+    + '</select>'
+    + '<select style="'+selStyle+'" onchange="cambiarFiltroPrograma(\'estado\',this.value)">'
+    + '<option value="">Todos los estados</option>' + PROGRAMA_ESTADOS.map(function(e){ return '<option value="'+e+'"'+(e===_programaFiltroEstado?' selected':'')+'>'+e+'</option>'; }).join('')
+    + '</select>'
+    + '<select style="'+selStyle+'" onchange="cambiarFiltroPrograma(\'resp\',this.value)">'
+    + '<option value="">Todos los responsables</option>' + resps.map(function(r){ return '<option value="'+r+'"'+(r===_programaFiltroResp?' selected':'')+'>'+r+'</option>'; }).join('')
+    + '</select>'
+    + (_programaFiltroArea||_programaFiltroEstado||_programaFiltroResp ? '<button class="fb" onclick="limpiarFiltrosPrograma()">✕ Limpiar</button>' : '')
+    + '</div>';
+
+  var html = filtrosHtml + '<div class="card" style="overflow-x:auto">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--gray)">'
+    + th('N°') + th('Área') + th('Asunto') + th('Acción') + th('Responsable') + th('Prioridad') + th('Plazo vigente') + th('Estado') + th('Evidencia') + th('Eficaz')
+    + '</tr></thead><tbody>';
+
+  if (!filtered.length) {
+    html += '<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--muted)">Sin acciones para este filtro.</td></tr>';
+  }
+  filtered.forEach(function(r){
+    var vencida = programaVencida(r);
+    var bg = vencida ? 'background:#fdecea' : '';
+    var colEstado = PROGRAMA_ESTADO_COLOR[r.estado] || '#888';
+    var estadoBadge = '<span style="background:'+colEstado+';color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;white-space:nowrap">'+(r.estado||'—')+'</span>'
+      + (vencida ? ' <span style="color:#a32d2d;font-size:11px;font-weight:700">⚠ Vencida</span>' : '');
+    html += '<tr style="border-bottom:1px solid var(--border);'+bg+'">'
+      + td(r.numero) + td(r.area||'—') + td(r.asunto||'—') + td(r.accion||'—')
+      + td(r.responsable||'<span style="color:var(--muted)">Sin asignar</span>')
+      + td(cap(r.prioridad)||'—') + td(r.plazo_vigente ? fmtFecha(r.plazo_vigente) : '—')
+      + '<td style="padding:8px">'+estadoBadge+'</td>'
+      + '<td style="padding:8px">'+programaEvidenciaHtml(r.evidencia)+'</td>'
+      + td(programaEficaz(r) ? '✅' : (r.estado==='Cerrado' ? '—' : ''))
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+
+function cambiarFiltroPrograma(campo, valor) {
+  if (campo==='area') _programaFiltroArea = valor;
+  else if (campo==='estado') _programaFiltroEstado = valor;
+  else if (campo==='resp') _programaFiltroResp = valor;
+  renderProgramaAcciones();
+}
+function limpiarFiltrosPrograma() {
+  _programaFiltroArea = ''; _programaFiltroEstado = ''; _programaFiltroResp = '';
+  renderProgramaAcciones();
+}
+
+// Actas e Indicadores: tabla genérica a partir de {headers, rows} —
+// no hace falta tocar el portal cuando se agregan columnas de mes
+// nuevas en Indicadores.
+function renderProgramaHojaGenerica(accion, titulo, icono) {
+  var cacheKey = accion === 'actas' ? '_programaActas' : '_programaIndicadores';
+  if (window[cacheKey]) { pintarHojaGenerica(window[cacheKey], titulo, icono); return; }
+  callProgramaAPI({action: accion}, function(data) {
+    window[cacheKey] = (data && data.headers) ? data : {headers:[], rows:[]};
+    pintarHojaGenerica(window[cacheKey], titulo, icono);
+  });
+}
+function pintarHojaGenerica(data, titulo, icono) {
+  var cont = document.getElementById('programa-contenido');
+  var headers = data.headers || [];
+  var rows = data.rows || [];
+  if (!headers.length) { cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">No se encontró la hoja.</div>'; return; }
+  if (!rows.length) {
+    cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">'+icono+' Todavía no hay datos cargados en "'+titulo+'".</div>';
+    return;
+  }
+  var html = '<div class="card" style="overflow-x:auto"><div style="padding:14px 16px 10px;font-weight:700;font-size:14px">'+icono+' '+titulo+'</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">'
+    + headers.map(function(h){ return th(h); }).join('')
+    + '</tr></thead><tbody>';
+  rows.forEach(function(r){
+    html += '<tr style="border-bottom:1px solid var(--border)">'
+      + headers.map(function(h){ var v = r[h]; return td(v===undefined||v===null||v==='' ? '<span style="color:var(--muted)">—</span>' : v); }).join('')
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
 }
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
