@@ -2248,8 +2248,8 @@ function loadPrograma(vista, btn) {
 function pintarPrograma() {
   if (_programaVista === 'dashboard') renderProgramaDashboard();
   else if (_programaVista === 'acciones') renderProgramaAcciones();
-  else if (_programaVista === 'actas') renderProgramaHojaGenerica('actas', 'Actas de reunión', '📝');
-  else if (_programaVista === 'indicadores') renderProgramaHojaGenerica('indicadores', 'Indicadores', '📈');
+  else if (_programaVista === 'actas') renderProgramaHojaGenerica('actas', 'Actas de reunión', '📝', false);
+  else if (_programaVista === 'indicadores') renderProgramaHojaGenerica('indicadores', 'Indicadores', '📈', true);
 }
 
 // ── Reglas de negocio — se calculan acá siempre a partir de la hoja
@@ -2477,15 +2477,42 @@ function limpiarFiltrosPrograma() {
 // Actas e Indicadores: tabla genérica a partir de {headers, rows} —
 // no hace falta tocar el portal cuando se agregan columnas de mes
 // nuevas en Indicadores.
-function renderProgramaHojaGenerica(accion, titulo, icono) {
+function renderProgramaHojaGenerica(accion, titulo, icono, esIndicadores) {
   var cacheKey = accion === 'actas' ? '_programaActas' : '_programaIndicadores';
-  if (window[cacheKey]) { pintarHojaGenerica(window[cacheKey], titulo, icono); return; }
+  if (window[cacheKey]) { pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores); return; }
   callProgramaAPI({action: accion}, function(data) {
     window[cacheKey] = (data && data.headers) ? data : {headers:[], rows:[]};
-    pintarHojaGenerica(window[cacheKey], titulo, icono);
+    pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores);
   });
 }
-function pintarHojaGenerica(data, titulo, icono) {
+
+// Columnas fijas de la hoja Indicadores — todo lo que venga después
+// son los meses, que se van agregando solos con el tiempo.
+var PROGRAMA_IND_COLS_FIJAS = ['Indicador','Cómo se calcula','Unidad','Meta','Línea base'];
+
+// Compara el valor de un mes contra la Meta de esa fila y devuelve
+// 'ok' (cumple), 'bad' (no cumple) o null (no se puede comparar: falta
+// dato, o no es una columna de mes). "Sí/No" compara por igualdad; el
+// resto son numéricos — % y similares, mayor o igual a la meta es
+// mejor; unidades tipo tasa/consumo (con "/", como l/100 km), menor es
+// mejor.
+function programaIndicadorEstado(row, col) {
+  if (PROGRAMA_IND_COLS_FIJAS.indexOf(col) >= 0) return null;
+  var meta = row['Meta'], val = row[col];
+  if (val===undefined || val===null || val==='' || meta===undefined || meta===null || meta==='') return null;
+  var unidad = String(row['Unidad']||'').trim().toLowerCase();
+  if (unidad.indexOf('sí') >= 0 || unidad.indexOf('si/no') >= 0) {
+    var norm = function(s){ return String(s).trim().toLowerCase().replace(/í/g,'i'); };
+    return norm(val) === norm(meta) ? 'ok' : 'bad';
+  }
+  var vNum = parseFloat(String(val).replace(',','.'));
+  var mNum = parseFloat(String(meta).replace(',','.'));
+  if (isNaN(vNum) || isNaN(mNum)) return null;
+  var menorEsMejor = unidad.indexOf('/') >= 0;
+  return menorEsMejor ? (vNum <= mNum ? 'ok' : 'bad') : (vNum >= mNum ? 'ok' : 'bad');
+}
+
+function pintarHojaGenerica(data, titulo, icono, esIndicadores) {
   var cont = document.getElementById('programa-contenido');
   var headers = data.headers || [];
   var rows = data.rows || [];
@@ -2500,7 +2527,14 @@ function pintarHojaGenerica(data, titulo, icono) {
     + '</tr></thead><tbody>';
   rows.forEach(function(r){
     html += '<tr style="border-bottom:1px solid var(--border)">'
-      + headers.map(function(h){ var v = r[h]; return td(v===undefined||v===null||v==='' ? '<span style="color:var(--muted)">—</span>' : v); }).join('')
+      + headers.map(function(h){
+          var v = r[h];
+          var vacio = v===undefined || v===null || v==='';
+          var estado = esIndicadores ? programaIndicadorEstado(r, h) : null;
+          var estiloCelda = estado==='ok' ? 'background:#e8f5e9;color:#0f6e56;font-weight:700'
+                           : estado==='bad' ? 'background:#fdecea;color:#a32d2d;font-weight:700' : '';
+          return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + '</td>';
+        }).join('')
       + '</tr>';
   });
   html += '</tbody></table></div>';
