@@ -632,6 +632,7 @@ function startApp(){
     if (progCli) {
       document.getElementById('sidebar-programa').style.display = '';
       session.programaApiUrl = progCli.apiUrl;
+      session._viendoClienteIdPrograma = progCli.clienteId;
     }
     setTimeout(function(){ showPage('transporte', document.querySelector('[onclick*="transporte"]')); }, 100);
   } else if(session.clienteid === 'peralta'){
@@ -678,9 +679,12 @@ function cambiarClienteTransporte(apiUrl) {
 // Admin: cambia a qué cliente de "Seguimiento del programa" está viendo el portal
 function cambiarClientePrograma(apiUrl) {
   session.programaApiUrl = apiUrl;
+  var cli = _PROGRAMA_CLIENTES.find(function(c){ return c.apiUrl === apiUrl; });
+  session._viendoClienteIdPrograma = cli ? cli.clienteId : '';
   window._programaAcciones = null;
   window._programaActas = null;
   window._programaIndicadores = null;
+  window._programaIndAutoCache = null;
   if (document.getElementById('page-programa').classList.contains('active')) {
     loadPrograma('dashboard', document.querySelector('#programa-filtros .fb'));
   }
@@ -2187,6 +2191,30 @@ function callTranspAPI(params, cb, onTimeout) {
   document.body.appendChild(s);
 }
 
+// Igual que callTranspAPI, pero a una URL explícita en vez de
+// session.apiUrl — lo usa "Seguimiento del programa" para traer datos
+// de Transporte del cliente que está viendo (que puede no ser el
+// mismo que está seleccionado en la pestaña Transporte). Falla en
+// silencio (cb(null)) en vez de pintar un error en pantalla: los
+// indicadores automáticos son un "plus", si no se pueden calcular la
+// tabla igual se muestra con los valores cargados a mano.
+function callTranspAPIForUrl(apiUrl, params, cb) {
+  if (!apiUrl) { cb(null); return; }
+  var cbName = 'transpCb_' + (++_transpCbIdx) + '_' + Date.now();
+  var url = apiUrl + '?callback=' + cbName;
+  Object.keys(params).forEach(function(k){ url += '&' + k + '=' + encodeURIComponent(params[k]); });
+  var timeout = setTimeout(function(){ if(window[cbName]) delete window[cbName]; cb(null); }, 45000);
+  window[cbName] = function(data) {
+    clearTimeout(timeout);
+    delete window[cbName];
+    cb(data && !data.error ? data : null);
+  };
+  var s = document.createElement('script');
+  s.src = url;
+  s.onerror = function(){ clearTimeout(timeout); cb(null); };
+  document.body.appendChild(s);
+}
+
 // ═══════════════════════════════════════════════════════
 // MÓDULO "SEGUIMIENTO DEL PROGRAMA" — solo lectura. Lee una planilla
 // de acciones ISO por cliente (ver _PROGRAMA_CLIENTES) a través de un
@@ -2249,7 +2277,7 @@ function pintarPrograma() {
   if (_programaVista === 'dashboard') renderProgramaDashboard();
   else if (_programaVista === 'acciones') renderProgramaAcciones();
   else if (_programaVista === 'actas') renderProgramaHojaGenerica('actas', 'Actas de reunión', '📝', false);
-  else if (_programaVista === 'indicadores') renderProgramaHojaGenerica('indicadores', 'Indicadores', '📈', true);
+  else if (_programaVista === 'indicadores') renderProgramaIndicadores();
 }
 
 // ── Reglas de negocio — se calculan acá siempre a partir de la hoja
@@ -2512,7 +2540,7 @@ function programaIndicadorEstado(row, col) {
   return menorEsMejor ? (vNum <= mNum ? 'ok' : 'bad') : (vNum >= mNum ? 'ok' : 'bad');
 }
 
-function pintarHojaGenerica(data, titulo, icono, esIndicadores) {
+function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet) {
   var cont = document.getElementById('programa-contenido');
   var headers = data.headers || [];
   var rows = data.rows || [];
@@ -2521,7 +2549,10 @@ function pintarHojaGenerica(data, titulo, icono, esIndicadores) {
     cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">'+icono+' Todavía no hay datos cargados en "'+titulo+'".</div>';
     return;
   }
+  var leyendaAuto = (autoSet && Object.keys(autoSet).length)
+    ? '<div style="padding:0 16px 10px;font-size:11px;color:var(--muted)">⚙️ = calculado automáticamente desde Transporte (mes en curso)</div>' : '';
   var html = '<div class="card" style="overflow-x:auto"><div style="padding:14px 16px 10px;font-weight:700;font-size:14px">'+icono+' '+titulo+'</div>'
+    + leyendaAuto
     + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">'
     + headers.map(function(h){ return th(h); }).join('')
     + '</tr></thead><tbody>';
@@ -2533,12 +2564,108 @@ function pintarHojaGenerica(data, titulo, icono, esIndicadores) {
           var estado = esIndicadores ? programaIndicadorEstado(r, h) : null;
           var estiloCelda = estado==='ok' ? 'background:#e8f5e9;color:#0f6e56;font-weight:700'
                            : estado==='bad' ? 'background:#fdecea;color:#a32d2d;font-weight:700' : '';
-          return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + '</td>';
+          var esAuto = autoSet && autoSet[r['Indicador']+'|'+h];
+          var marcaAuto = esAuto ? ' <span title="Calculado automáticamente desde Transporte">⚙️</span>' : '';
+          return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + marcaAuto + '</td>';
         }).join('')
       + '</tr>';
   });
   html += '</tbody></table></div>';
   cont.innerHTML = html;
+}
+
+// ── Indicadores automáticos ─────────────────────────────────────
+// Algunos indicadores se pueden calcular solos con datos que ya están
+// en Transporte, en vez de cargarlos a mano cada mes. Solo se
+// completa la columna del MES ACTUAL (no se puede reconstruir el
+// pasado); los meses anteriores quedan tal cual estén cargados a
+// mano. "Mantenimientos realizados en fecha" queda afuera por ahora
+// (no hay todavía un dato de "próximo mantenimiento" confiable en
+// Transporte para compararlo).
+var PROGRAMA_IND_AUTO = ['Documentación de equipos vigente', 'Documentación de personal vigente', 'Consumo de gasoil'];
+
+function programaMesActualLabel() {
+  var hoy = new Date();
+  return (_MESES_LABEL_G[hoy.getMonth()]||'') + ' ' + hoy.getFullYear();
+}
+
+// % de documentos vigentes (Doc_Camiones o Doc_Choferes) = cuántos
+// tienen fecha de vencimiento cargada y todavía no vencida, sobre el
+// total de documentos exigidos (todas las filas de la hoja).
+function programaPctVigentes(rows) {
+  if (!rows || !rows.length) return null;
+  var hoy = programaHoyStr();
+  var vigentes = rows.filter(function(r){ return r.fecha_vencimiento && r.fecha_vencimiento >= hoy; }).length;
+  return Math.round(vigentes / rows.length * 100);
+}
+
+// Litros cargados / km recorridos x 100, solo con los registros del
+// mes en curso (Combustible y Viajes de Transporte).
+function programaConsumoGasoil(combArr, viajesArr) {
+  var mesActual = programaHoyStr().slice(0,7);
+  var litros = (combArr||[]).filter(function(c){ return String(c['fecha factura']||'').slice(0,7)===mesActual; })
+    .reduce(function(s,c){ return s + (parseFloat(c['litros'])||0); }, 0);
+  var km = (viajesArr||[]).filter(function(v){ return String(v['fecha viaje']||'').slice(0,7)===mesActual; })
+    .reduce(function(s,v){ return s + (parseFloat(v['km recorridos'])||0); }, 0);
+  if (km <= 0) return null;
+  return (litros/km*100).toFixed(1);
+}
+
+function renderProgramaIndicadores() {
+  if (!window._programaIndicadores) {
+    document.getElementById('programa-contenido').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">Cargando...</div>';
+    callProgramaAPI({action:'indicadores'}, function(data) {
+      window._programaIndicadores = (data && data.headers) ? data : {headers:[], rows:[]};
+      renderProgramaIndicadores();
+    });
+    return;
+  }
+  if (window._programaIndAutoCache) { pintarProgramaIndicadoresConAuto(window._programaIndAutoCache); return; }
+
+  // El cliente de Transporte que corresponde al cliente de Programa que
+  // se está viendo — pueden ser clientes distintos en el selector de
+  // admin de cada módulo, así que se busca por clienteId, no por lo
+  // que esté elegido en la pestaña Transporte en ese momento.
+  var cid = session._viendoClienteIdPrograma || session.clienteid;
+  var cliTransp = _TRANSP_CLIENTES.filter(function(c){ return c.clienteId === cid; })[0];
+  if (!cliTransp) { window._programaIndAutoCache = {}; pintarProgramaIndicadoresConAuto({}); return; }
+
+  var resultados = {};
+  var pendientes = 4;
+  function listo() {
+    pendientes--;
+    if (pendientes > 0) return;
+    var auto = {};
+    var pctEquipos  = programaPctVigentes(resultados.docCamiones);
+    var pctPersonal = programaPctVigentes(resultados.docChoferes);
+    var consumo     = programaConsumoGasoil(resultados.combustible, resultados.viajes);
+    if (pctEquipos  !== null) auto['Documentación de equipos vigente']  = pctEquipos;
+    if (pctPersonal !== null) auto['Documentación de personal vigente'] = pctPersonal;
+    if (consumo     !== null) auto['Consumo de gasoil']                 = consumo;
+    window._programaIndAutoCache = auto;
+    pintarProgramaIndicadoresConAuto(auto);
+  }
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docCamiones'}, function(d){ resultados.docCamiones = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docChoferes'}, function(d){ resultados.docChoferes = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'combustible'}, function(d){ resultados.combustible = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'viajes'},      function(d){ resultados.viajes      = Array.isArray(d)?d:[]; listo(); });
+}
+
+function pintarProgramaIndicadoresConAuto(auto) {
+  var base = window._programaIndicadores || {headers:[], rows:[]};
+  var mesActual = programaMesActualLabel();
+  var autoSet = {};
+  var tieneColMesActual = base.headers.indexOf(mesActual) >= 0;
+  var rows = base.rows.map(function(r){
+    var copia = {};
+    Object.keys(r).forEach(function(k){ copia[k] = r[k]; });
+    if (tieneColMesActual && PROGRAMA_IND_AUTO.indexOf(r['Indicador']) >= 0 && auto[r['Indicador']] !== undefined) {
+      copia[mesActual] = auto[r['Indicador']];
+      autoSet[r['Indicador']+'|'+mesActual] = true;
+    }
+    return copia;
+  });
+  pintarHojaGenerica({headers: base.headers, rows: rows}, 'Indicadores', '📈', true, autoSet);
 }
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
