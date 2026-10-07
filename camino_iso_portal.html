@@ -2229,6 +2229,7 @@ var _programaVista = 'dashboard';
 var _programaFiltroArea = '';
 var _programaFiltroEstado = '';
 var _programaFiltroResp = '';
+var _programaAreaSel = null; // {area, tipo} del segmento clickeado en "Avance por área", o null
 
 function loadPrograma(vista, btn) {
   _programaVista = vista;
@@ -2344,11 +2345,41 @@ function renderProgramaDashboard() {
   html += '<div class="chart-wrap" style="margin:0"><h4>Evolución mensual (cerradas acumuladas)</h4>' + (acumMesesArr.length ? svgBarras(acumMesesArr, 'val', '#1E6B2E') : '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Todavía no hay acciones cerradas con fecha de cierre cargada.</div>') + '</div>';
   html += '</div>';
 
+  // Detalle del segmento clickeado en "Avance por área" (clic en una barra)
+  if (_programaAreaSel) {
+    var selRows = rows.filter(function(r){
+      if ((r.area||'Sin área') !== _programaAreaSel.area) return false;
+      var esCerrada = r.estado === 'Cerrado';
+      return _programaAreaSel.tipo === 'cerradas' ? esCerrada : !esCerrada;
+    });
+    var etiquetaSel = _programaAreaSel.area + ' — ' + (_programaAreaSel.tipo==='cerradas'?'Cerradas':'Abiertas');
+    html += '<div class="chart-wrap" style="margin-top:0">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div style="font-weight:600;font-size:13px">'+etiquetaSel+' ('+selRows.length+')</div>'
+      + '<button class="fb" onclick="toggleProgramaAreaSeg(\''+_programaAreaSel.area+'\',\''+_programaAreaSel.tipo+'\')">Cerrar</button>'
+      + '</div>'
+      + (selRows.length
+          ? selRows.map(function(r){
+              return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px">'
+                + '<span>'+(r.asunto||r.accion||'—')+'</span>'
+                + '<span style="color:var(--muted);white-space:nowrap">'+(r.responsable||'Sin asignar')+(r.plazo_vigente?' · vence '+fmtFecha(r.plazo_vigente):'')+'</span>'
+                + '</div>';
+            }).join('')
+          : '<div style="padding:10px;color:var(--muted);font-size:13px">Sin acciones en esta situación.</div>')
+      + '</div>';
+  }
+
   cont.innerHTML = html;
 }
 
+function toggleProgramaAreaSeg(area, tipo) {
+  _programaAreaSel = (_programaAreaSel && _programaAreaSel.area===area && _programaAreaSel.tipo===tipo) ? null : {area:area, tipo:tipo};
+  renderProgramaDashboard();
+}
+
 // Barras apiladas Cerradas/Abiertas por área — mismo estilo que
-// "Tareas por rubro" de Proyectos.
+// "Tareas por rubro" de Proyectos, con clic en cada segmento para ver
+// el detalle de esas acciones (igual que el resto del portal).
 function programaBarrasArea(areaArr) {
   if (!areaArr.length) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos</div>';
   var chartH = 160;
@@ -2358,9 +2389,11 @@ function programaBarrasArea(areaArr) {
     var total = a.cerradas + a.abiertas;
     var hC = a.cerradas>0 ? Math.max(2, Math.round((a.cerradas/max)*chartH)) : 0;
     var hA = a.abiertas>0 ? Math.max(2, Math.round((a.abiertas/max)*chartH)) : 0;
+    var activoC = _programaAreaSel && _programaAreaSel.area===a.area && _programaAreaSel.tipo==='cerradas';
+    var activoA = _programaAreaSel && _programaAreaSel.area===a.area && _programaAreaSel.tipo==='abiertas';
     var segs = '';
-    if (hA>0) segs += '<div title="Abiertas: '+a.abiertas+'" style="height:'+hA+'px;background:#F07820;width:100%"></div>';
-    if (hC>0) segs += '<div title="Cerradas: '+a.cerradas+'" style="height:'+hC+'px;background:#1E6B2E;width:100%"></div>';
+    if (hA>0) segs += '<div onclick="toggleProgramaAreaSeg(\''+a.area+'\',\'abiertas\')" title="Abiertas: '+a.abiertas+' — clic para ver el detalle" style="height:'+hA+'px;background:#F07820;width:100%;cursor:pointer'+(activoA?';outline:2px solid #222;outline-offset:-2px':'')+'"></div>';
+    if (hC>0) segs += '<div onclick="toggleProgramaAreaSeg(\''+a.area+'\',\'cerradas\')" title="Cerradas: '+a.cerradas+' — clic para ver el detalle" style="height:'+hC+'px;background:#1E6B2E;width:100%;cursor:pointer'+(activoC?';outline:2px solid #222;outline-offset:-2px':'')+'"></div>';
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;min-width:0">'
       + '<div style="display:flex;flex-direction:column-reverse;width:40px;height:'+chartH+'px;border-radius:6px 6px 0 0;overflow:hidden;background:var(--gray)">'+segs+'</div>'
       + '<div style="font-size:11px;color:var(--text);font-weight:600;text-align:center;line-height:1.2">'+a.area+'</div>'
