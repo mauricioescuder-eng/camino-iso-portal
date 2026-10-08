@@ -2655,6 +2655,15 @@ function renderProgramaIndicadores() {
     var registradas = programaFacturasRegistradas(resultados.combustible, resultados.costosFijos);
     var ayuda = {};
     ayuda['Gastos del mes cargados en el portal'] = '📋 ' + registradas + ' factura' + (registradas===1?'':'s') + ' registrada' + (registradas===1?'':'s') + ' este mes (Combustible + Costos Fijos) — dividir por las recibidas';
+
+    // "Chequeos previos al viaje realizados" tampoco se puede
+    // automatizar del todo — no hay ningún registro digital de los
+    // chequeos hechos. Lo que sí se puede contar solo es cuántos
+    // camiones viajaron este mes (el denominador correcto: un
+    // chequeo exigido por camión y por mes, no por viaje).
+    var camionesMes = programaCamionesDelMes(resultados.viajes);
+    ayuda['Chequeos previos al viaje realizados'] = '🚛 ' + camionesMes + ' cami' + (camionesMes===1?'ón':'ones') + ' viaj' + (camionesMes===1?'ó':'aron') + ' este mes — dividir los chequeos registrados por esta cantidad';
+
     window._programaIndAyuda = ayuda;
 
     pintarProgramaIndicadoresConAuto(auto);
@@ -2675,6 +2684,22 @@ function programaFacturasRegistradas(combArr, fijosArr) {
   var nComb  = (combArr||[]).filter(function(c){ return String(c['fecha factura']||'').slice(0,7)===mesActual; }).length;
   var nFijos = (fijosArr||[]).filter(function(f){ return String(f['fecha']||'').slice(0,7)===mesActual; }).length;
   return nComb + nFijos;
+}
+
+// Cantidad de camiones distintos (matrícula) que viajaron este mes —
+// denominador de referencia para "Chequeos previos al viaje
+// realizados": el chequeo se exige una vez por mes por camión, no
+// una vez por viaje, así que no corresponde dividir por la cantidad
+// de viajes.
+function programaCamionesDelMes(viajesArr) {
+  var mesActual = programaHoyStr().slice(0,7);
+  var matriculas = {};
+  (viajesArr||[]).forEach(function(v){
+    if (String(v['fecha viaje']||'').slice(0,7) !== mesActual) return;
+    var m = v['matricula'];
+    if (m) matriculas[m] = true;
+  });
+  return Object.keys(matriculas).length;
 }
 
 function pintarProgramaIndicadoresConAuto(auto) {
