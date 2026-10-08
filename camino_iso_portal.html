@@ -685,6 +685,7 @@ function cambiarClientePrograma(apiUrl) {
   window._programaActas = null;
   window._programaIndicadores = null;
   window._programaIndAutoCache = null;
+  window._programaIndAyuda = null;
   if (document.getElementById('page-programa').classList.contains('active')) {
     loadPrograma('dashboard', document.querySelector('#programa-filtros .fb'));
   }
@@ -2540,7 +2541,7 @@ function programaIndicadorEstado(row, col) {
   return menorEsMejor ? (vNum <= mNum ? 'ok' : 'bad') : (vNum >= mNum ? 'ok' : 'bad');
 }
 
-function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet) {
+function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet, ayudaMap) {
   var cont = document.getElementById('programa-contenido');
   var headers = data.headers || [];
   var rows = data.rows || [];
@@ -2566,7 +2567,8 @@ function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet) {
                            : estado==='bad' ? 'background:#fdecea;color:#a32d2d;font-weight:700' : '';
           var esAuto = autoSet && autoSet[r['Indicador']+'|'+h];
           var marcaAuto = esAuto ? ' <span title="Calculado automáticamente desde Transporte">⚙️</span>' : '';
-          return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + marcaAuto + '</td>';
+          var ayuda = (h === 'Indicador' && ayudaMap && ayudaMap[v]) ? '<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">'+ayudaMap[v]+'</div>' : '';
+          return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + marcaAuto + ayuda + '</td>';
         }).join('')
       + '</tr>';
   });
@@ -2631,7 +2633,7 @@ function renderProgramaIndicadores() {
   if (!cliTransp) { window._programaIndAutoCache = {}; pintarProgramaIndicadoresConAuto({}); return; }
 
   var resultados = {};
-  var pendientes = 4;
+  var pendientes = 5;
   function listo() {
     pendientes--;
     if (pendientes > 0) return;
@@ -2643,12 +2645,36 @@ function renderProgramaIndicadores() {
     if (pctPersonal !== null) auto['Documentación de personal vigente'] = pctPersonal;
     if (consumo     !== null) auto['Consumo de gasoil']                 = consumo;
     window._programaIndAutoCache = auto;
+
+    // "Gastos del mes cargados en el portal" no se puede automatizar
+    // del todo — nadie carga en ningún lado cuántas facturas se
+    // RECIBIERON (eso solo lo sabés vos). Lo que sí se puede contar
+    // solo es cuántas quedaron REGISTRADAS (Combustible + Costos
+    // Fijos), así que se lo mostramos como referencia junto al
+    // indicador: lo divide a mano con la cantidad que recibió.
+    var registradas = programaFacturasRegistradas(resultados.combustible, resultados.costosFijos);
+    var ayuda = {};
+    ayuda['Gastos del mes cargados en el portal'] = '📋 ' + registradas + ' factura' + (registradas===1?'':'s') + ' registrada' + (registradas===1?'':'s') + ' este mes (Combustible + Costos Fijos) — dividir por las recibidas';
+    window._programaIndAyuda = ayuda;
+
     pintarProgramaIndicadoresConAuto(auto);
   }
-  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docCamiones'}, function(d){ resultados.docCamiones = Array.isArray(d)?d:[]; listo(); });
-  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docChoferes'}, function(d){ resultados.docChoferes = Array.isArray(d)?d:[]; listo(); });
-  callTranspAPIForUrl(cliTransp.apiUrl, {action:'combustible'}, function(d){ resultados.combustible = Array.isArray(d)?d:[]; listo(); });
-  callTranspAPIForUrl(cliTransp.apiUrl, {action:'viajes'},      function(d){ resultados.viajes      = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docCamiones'}, function(d){ resultados.docCamiones  = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'docChoferes'}, function(d){ resultados.docChoferes  = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'combustible'}, function(d){ resultados.combustible  = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'viajes'},      function(d){ resultados.viajes       = Array.isArray(d)?d:[]; listo(); });
+  callTranspAPIForUrl(cliTransp.apiUrl, {action:'costosFijos'}, function(d){ resultados.costosFijos  = Array.isArray(d)?d:[]; listo(); });
+}
+
+// Cuenta facturas "registradas en el portal" este mes: una fila de
+// Combustible (siempre tiene factura) más una fila de Costos Fijos
+// (gastos varios: repuestos, gomería, seguros, etc.) cuentan cada una
+// como una factura registrada.
+function programaFacturasRegistradas(combArr, fijosArr) {
+  var mesActual = programaHoyStr().slice(0,7);
+  var nComb  = (combArr||[]).filter(function(c){ return String(c['fecha factura']||'').slice(0,7)===mesActual; }).length;
+  var nFijos = (fijosArr||[]).filter(function(f){ return String(f['fecha']||'').slice(0,7)===mesActual; }).length;
+  return nComb + nFijos;
 }
 
 function pintarProgramaIndicadoresConAuto(auto) {
@@ -2665,7 +2691,7 @@ function pintarProgramaIndicadoresConAuto(auto) {
     }
     return copia;
   });
-  pintarHojaGenerica({headers: base.headers, rows: rows}, 'Indicadores', '📈', true, autoSet);
+  pintarHojaGenerica({headers: base.headers, rows: rows}, 'Indicadores', '📈', true, autoSet, window._programaIndAyuda || {});
 }
 
 function fmt$(n){ return '$U ' + (parseFloat(n)||0).toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0}); }
