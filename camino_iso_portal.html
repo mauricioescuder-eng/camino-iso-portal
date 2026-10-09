@@ -2292,10 +2292,6 @@ function programaHoyStr() {
 function programaVencida(r) {
   return r.estado !== 'Cerrado' && !!r.plazo_vigente && r.plazo_vigente < programaHoyStr();
 }
-// Reprogramada = Plazo vigente distinto de Plazo original.
-function programaReprogramada(r) {
-  return !!r.plazo_original && !!r.plazo_vigente && r.plazo_original !== r.plazo_vigente;
-}
 function programaEsSi(v) {
   var t = String(v||'').trim().toLowerCase().replace(/í/g,'i');
   return t === 'si';
@@ -2324,14 +2320,12 @@ function renderProgramaDashboard() {
   var cerradas = rows.filter(function(r){ return r.estado === 'Cerrado'; }).length;
   var pctAvance = total > 0 ? (cerradas/total*100) : 0;
   var vencidas = rows.filter(programaVencida).length;
-  var reprogramadas = rows.filter(programaReprogramada).length;
   var eficaces = rows.filter(programaEficaz).length;
 
   var kpiHtml = '<div class="kpibig-grid">'
     + kpiBig('Total de acciones', fmtN(total), '#1a1a18', '#f5f5f3')
     + kpiBig('% Avance', pctAvance.toFixed(0)+'%', pctAvance>=50?'#0f6e56':'#b97c0a', pctAvance>=50?'#e8f5e9':'#fff8e1', cerradas+' de '+total+' cerradas')
     + kpiBig('Vencidas', fmtN(vencidas), vencidas>0?'#a32d2d':'#0f6e56', vencidas>0?'#fdecea':'#e8f5e9')
-    + kpiBig('Reprogramadas', fmtN(reprogramadas), '#b97c0a', '#fff8e1')
     + kpiBig('Cerradas con eficacia verificada', fmtN(eficaces), '#0f6e56', '#e8f5e9', cerradas>0 ? (Math.round(eficaces/cerradas*100)+'% de las cerradas') : '')
     + '</div>';
 
