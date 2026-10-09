@@ -2508,10 +2508,29 @@ function limpiarFiltrosPrograma() {
 // nuevas en Indicadores.
 function renderProgramaHojaGenerica(accion, titulo, icono, esIndicadores) {
   var cacheKey = accion === 'actas' ? '_programaActas' : '_programaIndicadores';
-  if (window[cacheKey]) { pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores); return; }
+  if (window[cacheKey]) { pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores, null, null, accion); return; }
   callProgramaAPI({action: accion}, function(data) {
     window[cacheKey] = (data && data.headers) ? data : {headers:[], rows:[]};
-    pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores);
+    pintarHojaGenerica(window[cacheKey], titulo, icono, esIndicadores, null, null, accion);
+  });
+}
+
+// Botón manual "Enviar resumen" en la pestaña Actas — nunca se manda
+// solo, siempre lo dispara quien redactó el acta. No toca la
+// planilla, solo pide al backend que mande el correo con esa fila.
+function enviarResumenActa(numero, btn) {
+  if (!numero) { toast('No se pudo identificar el acta', true); return; }
+  if (!confirm('¿Enviar el resumen de esta reunión por correo a Manuel y Fernando?')) return;
+  var textoOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  function terminar(ok, msg) {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+    toast(ok ? 'Resumen enviado ✅' : (msg || 'No se pudo enviar'), !ok);
+  }
+  callProgramaAPI({action: 'enviarActa', numero: numero}, function(data) {
+    terminar(data && data.ok, data && data.error);
+  }, function(data) {
+    terminar(false, data && data.error);
   });
 }
 
@@ -2541,7 +2560,7 @@ function programaIndicadorEstado(row, col) {
   return menorEsMejor ? (vNum <= mNum ? 'ok' : 'bad') : (vNum >= mNum ? 'ok' : 'bad');
 }
 
-function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet, ayudaMap) {
+function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet, ayudaMap, accion) {
   var cont = document.getElementById('programa-contenido');
   var headers = data.headers || [];
   var rows = data.rows || [];
@@ -2550,12 +2569,14 @@ function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet, ayudaMa
     cont.innerHTML = '<div class="card" style="padding:30px;text-align:center;color:var(--muted)">'+icono+' Todavía no hay datos cargados en "'+titulo+'".</div>';
     return;
   }
+  var esActas = accion === 'actas';
   var leyendaAuto = (autoSet && Object.keys(autoSet).length)
     ? '<div style="padding:0 16px 10px;font-size:11px;color:var(--muted)">⚙️ = calculado automáticamente desde Transporte (mes en curso)</div>' : '';
   var html = '<div class="card" style="overflow-x:auto"><div style="padding:14px 16px 10px;font-weight:700;font-size:14px">'+icono+' '+titulo+'</div>'
     + leyendaAuto
     + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">'
     + headers.map(function(h){ return th(h); }).join('')
+    + (esActas ? th('') : '')
     + '</tr></thead><tbody>';
   rows.forEach(function(r){
     html += '<tr style="border-bottom:1px solid var(--border)">'
@@ -2570,6 +2591,7 @@ function pintarHojaGenerica(data, titulo, icono, esIndicadores, autoSet, ayudaMa
           var ayuda = (h === 'Indicador' && ayudaMap && ayudaMap[v]) ? '<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">'+ayudaMap[v]+'</div>' : '';
           return '<td style="padding:8px;'+estiloCelda+'">' + (vacio ? '<span style="color:var(--muted)">—</span>' : v) + marcaAuto + ayuda + '</td>';
         }).join('')
+      + (esActas ? '<td style="padding:8px;white-space:nowrap"><button class="btn-s" style="font-size:11px;padding:4px 8px" onclick="enviarResumenActa(\''+String(r['N°']||'').replace(/'/g,"\\'")+'\', this)">📧 Enviar resumen</button></td>' : '')
       + '</tr>';
   });
   html += '</tbody></table></div>';
@@ -2655,6 +2677,15 @@ function renderProgramaIndicadores() {
     var registradas = programaFacturasRegistradas(resultados.combustible, resultados.costosFijos);
     var ayuda = {};
     ayuda['Gastos del mes cargados en el portal'] = '📋 ' + registradas + ' factura' + (registradas===1?'':'s') + ' registrada' + (registradas===1?'':'s') + ' este mes (Combustible + Costos Fijos) — dividir por las recibidas';
+
+    // "Chequeos previos al viaje realizados" tampoco se puede
+    // automatizar del todo — no hay ningún registro digital de los
+    // chequeos hechos. Lo que sí se puede contar solo es cuántos
+    // camiones viajaron este mes (el denominador correcto: un
+    // chequeo exigido por camión y por mes, no por viaje).
+    var camionesMes = programaCamionesDelMes(resultados.viajes);
+    ayuda['Chequeos previos al viaje realizados'] = '🚛 ' + camionesMes + ' cami' + (camionesMes===1?'ón':'ones') + ' viaj' + (camionesMes===1?'ó':'aron') + ' este mes — dividir los chequeos registrados por esta cantidad';
+
     window._programaIndAyuda = ayuda;
 
     pintarProgramaIndicadoresConAuto(auto);
@@ -2675,6 +2706,22 @@ function programaFacturasRegistradas(combArr, fijosArr) {
   var nComb  = (combArr||[]).filter(function(c){ return String(c['fecha factura']||'').slice(0,7)===mesActual; }).length;
   var nFijos = (fijosArr||[]).filter(function(f){ return String(f['fecha']||'').slice(0,7)===mesActual; }).length;
   return nComb + nFijos;
+}
+
+// Cantidad de camiones distintos (matrícula) que viajaron este mes —
+// denominador de referencia para "Chequeos previos al viaje
+// realizados": el chequeo se exige una vez por mes por camión, no
+// una vez por viaje, así que no corresponde dividir por la cantidad
+// de viajes.
+function programaCamionesDelMes(viajesArr) {
+  var mesActual = programaHoyStr().slice(0,7);
+  var matriculas = {};
+  (viajesArr||[]).forEach(function(v){
+    if (String(v['fecha viaje']||'').slice(0,7) !== mesActual) return;
+    var m = v['matricula'];
+    if (m) matriculas[m] = true;
+  });
+  return Object.keys(matriculas).length;
 }
 
 function pintarProgramaIndicadoresConAuto(auto) {
