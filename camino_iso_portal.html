@@ -209,6 +209,7 @@ tr:hover td{background:#faf9f6}
     <span class="topbar-client" id="topbar-client"></span>
     <div class="topbar-right">
       <span class="topbar-user" id="topbar-user"></span>
+      <button class="logout-btn" id="btn-actualizar-global" onclick="actualizarPaginaActual(this)" title="Volver a pedir los datos de esta pantalla a la planilla"><i class="ti ti-refresh"></i> Actualizar</button>
       <button class="logout-btn" onclick="logout()"><i class="ti ti-logout"></i> Salir</button>
     </div>
   </div>
@@ -1996,6 +1997,31 @@ async function uploadFile(input){
 }
 
 function showPage(page,btn){ document.querySelectorAll('.sidebar-btn').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); }); document.getElementById('page-'+page).classList.add('active'); if(page==='registros') loadRegistros('aliment'); if(page==='transporte'){ var tb=document.querySelector('#transp-filtros .fb'); loadTransporte('kpis', tb); } if(page==='programa'){ var pb=document.querySelector('#programa-filtros .fb'); loadPrograma('dashboard', pb); } }
+
+// Botón "Actualizar" del topbar — está en todas las páginas (vive en
+// la barra de arriba, no en cada página) y vuelve a pedir los datos
+// de la pantalla que esté activa en ese momento, sin recargar toda la
+// app ni tener que volver a loguearse.
+function actualizarPaginaActual(btn) {
+  var pagActiva = document.querySelector('.page.active');
+  var id = pagActiva ? pagActiva.id : '';
+  if (id === 'page-transporte') {
+    toast('Actualizando...');
+    refrescarTransporte();
+  } else if (id === 'page-programa') {
+    toast('Actualizando...');
+    window._programaAcciones = null;
+    window._programaActas = null;
+    window._programaIndicadores = null;
+    window._programaIndAutoCache = null;
+    window._programaIndAyuda = null;
+    var btnFiltro = document.querySelector('#programa-filtros .fb.active');
+    loadPrograma(_programaVista, btnFiltro);
+  } else {
+    if (btn) btn.disabled = true;
+    loadAll().then(function(){ if (btn) btn.disabled = false; toast('Actualizado ✓'); });
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // MÓDULO TRANSPORTE
