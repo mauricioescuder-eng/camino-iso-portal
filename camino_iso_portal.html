@@ -2044,11 +2044,12 @@ function toUYU(n, moneda) {
   return (moneda && moneda.toString().toUpperCase() === 'USD') ? v * getTc() : v;
 }
 
-function fmtMon(n, moneda) {
+function fmtMon(n, moneda, dec) {
   var v = parseFloat(n) || 0;
   if (moneda && moneda.toString().toUpperCase() === 'USD')
     return 'U$S ' + v.toLocaleString('es-UY', {minimumFractionDigits:2, maximumFractionDigits:2});
-  return '$U ' + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
+  var d = dec === undefined ? 0 : dec;
+  return '$U ' + v.toLocaleString('es-UY', {minimumFractionDigits:d, maximumFractionDigits:d});
 }
 
 function badgeMon(moneda) {
@@ -5210,7 +5211,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
         + kpi('Costo total',     fmt$(totFactura),           'acumulado',       '#a32d2d')
         + kpi('Consumo / km',    fmtN(_viajesKm>0?totLt/_viajesKm:0,2)+' L/km', fmtN(_lPor100km,1)+' L/100km · '+fmtN(_kmPorL,2)+' km/L', '#639922')
-        + kpi('Costo comb. / km', fmt$(_combPorKm),          'Prom. '+fmt$(_precioProm)+'/L', '#854f0b')
+        + kpi('Costo comb. / km', fmt$(_combPorKm),          'Prom. $U '+(parseFloat(_precioProm)||0).toLocaleString('es-UY',{minimumFractionDigits:1,maximumFractionDigits:1})+'/L', '#854f0b')
         + '</div>'
         + _combChartHtml
         + _camionesHtml;
@@ -5263,6 +5264,7 @@ function renderTranspTabla(data, tipo) {
         }
         if (c === 'ingreso') v = (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0);
         if (v === null || v === undefined || v === '') v = '—';
+        else if (c === 'precio litro' && typeof v === 'number') v = fmtMon(v, r['moneda'], 1);
         else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) v = fmtMon(v, r['moneda']);
         else if (typeof v === 'number' && c.indexOf('$') >= 0) v = fmt$(v);
         else if (c === 'proximo_km' && typeof v === 'number') v = fmtN(v,0)+' km';
