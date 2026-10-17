@@ -3027,7 +3027,9 @@ function renderNeumaticos(data) {
 
   var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
     + '<h3 style="margin:0 0 16px;font-size:15px">+ Instalar neumático</h3>'
-    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">N° NEUMÁTICO</label>'
+    + '<input type="text" id="nn-numero" placeholder="Ej: 014" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MATRÍCULA</label>'
     + '<select id="nn-matricula" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+matOpts+'</select></div>'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">POSICIÓN</label>'
@@ -3058,6 +3060,7 @@ function renderNeumaticos(data) {
       ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button>'
       : '—';
     return '<tr>'
+      + '<td>'+(r.numero||'—')+'</td>'
       + '<td>'+r.matricula+'</td>'
       + '<td>'+r.posicion+'</td>'
       + '<td>'+r.fecha_instalacion+' · '+fmtN(r.km_instalacion,0)+' km</td>'
@@ -3071,13 +3074,14 @@ function renderNeumaticos(data) {
   }).join('');
 
   var tableHtml = '<div class="card" style="overflow-x:auto">'
-    + '<table><thead><tr><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
-    + '<tbody>' + (rowsHtml || '<tr><td colspan="9" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
+    + '<table><thead><tr><th>N° Neumático</th><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="10" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
 }
 
 function guardarNeumatico() {
+  var numero    = document.getElementById('nn-numero').value;
   var matricula = document.getElementById('nn-matricula').value;
   var posicion  = document.getElementById('nn-posicion').value;
   var fecha     = document.getElementById('nn-fecha').value;
@@ -3086,16 +3090,16 @@ function guardarNeumatico() {
   var proveedor = document.getElementById('nn-proveedor').value;
   var msg       = document.getElementById('nn-msg');
 
-  if (!matricula || !fecha || !km || !costo) {
+  if (!numero || !matricula || !fecha || !km || !costo) {
     msg.style.color = '#c0392b';
-    msg.textContent = 'Completá matrícula, fecha, km y costo.';
+    msg.textContent = 'Completá N° de neumático, matrícula, fecha, km y costo.';
     return;
   }
   msg.style.color = 'var(--muted)';
   msg.textContent = 'Guardando...';
 
   callTranspAPI({
-    action: 'saveNeumatico', matricula: matricula, posicion: posicion,
+    action: 'saveNeumatico', numero: numero, matricula: matricula, posicion: posicion,
     fecha_instalacion: fecha, km_instalacion: km, costo: costo, proveedor: proveedor
   }, function(resp) {
     if (resp && resp.ok) {
