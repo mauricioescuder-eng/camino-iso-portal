@@ -4701,17 +4701,28 @@ function renderTranspTabla(data, tipo) {
       }
 
     } else if (tipo === 'mantenimientos') {
-      var totCosto = 0, totKm = 0;
+      var totCosto = 0;
       var nPrev = 0, nCorr = 0;
       rows.forEach(function(r){
         totCosto += toUYU(r['costo'], r['moneda']);
-        totKm    += parseFloat(r['km equipo']) || 0;
         var t = String(r['tipo']||r['tipo de intervención']||'').toLowerCase();
         if      (t.indexOf('prev') >= 0) nPrev++;
         else if (t.indexOf('corr') >= 0) nCorr++;
       });
       var pctPrev = rows.length > 0 ? Math.round(nPrev / rows.length * 100) : 0;
       var pctCorr = rows.length > 0 ? Math.round(nCorr / rows.length * 100) : 0;
+      // Km recorridos en el mismo período filtrado — NO la suma de
+      // "km equipo" (el odómetro de cada registro): ese es un valor
+      // acumulado histórico por camión, y sumarlo entre registros y
+      // camiones da un número sin sentido (varios millones de km).
+      var _viajesEnPeriodoMant = (window._transpViajesRaw || []).filter(function(v){
+        var f = String(v['fecha viaje'] || v['timestamp'] || '').substring(0,10);
+        if (!f) return false;
+        if (_rango.desde && f < _rango.desde) return false;
+        if (_rango.hasta && f > _rango.hasta) return false;
+        return true;
+      });
+      var totKm = _viajesEnPeriodoMant.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); }, 0);
       var costoPorKmMant = totKm > 0 ? totCosto / totKm : 0;
 
       // Camiones sin correctivos: % camiones de flota sin correctivos en el período
@@ -5120,7 +5131,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('% Prev. / Corr.', pctPrev+'% / '+pctCorr+'%', nPrev+' prev. · '+nCorr+' corr.', nCorr > nPrev ? '#b97c0a' : '#0f6e56')
         + '</div>'
         + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
-        + kpi('Costo / km', costoPorKmMant > 0 ? fmt$(costoPorKmMant)+'/km' : '—', totKm > 0 ? fmtN(totKm,0)+' km equipo' : 'sin km', '#378add')
+        + kpi('Costo / km', costoPorKmMant > 0 ? fmt$(costoPorKmMant)+'/km' : '—', totKm > 0 ? fmtN(totKm,0)+' km recorridos' : 'sin km', '#378add')
         + kpi('Camiones sin correctivos', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
         + kpi('Disponibilidad operativa', _dispOperativaUltima ? _dispOperativaUltima.pct.toFixed(1)+'%' : '—', _dispOperativaUltima ? _dispOperativaUltima.label+' · '+fmtN(_dispOperativaUltima.diasTaller,0)+' días en taller' : 'Sin días en taller cargados', _dispOperativaUltima && _dispOperativaUltima.pct>=90 ? '#0f6e56' : '#a32d2d')
         + '</div>'
