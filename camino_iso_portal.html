@@ -2153,7 +2153,12 @@ function loadTransporte(vista, btn) {
     } else if (vista === 'documentacion') {
       renderDocumentacion();
     } else {
-      callTranspAPI({action: vista}, function(data) {
+      // "Ver Fijos" pide la acción 'costosFijos' al backend — el nombre
+      // de la vista ('tabla-fijos') no coincide con el de la acción,
+      // así que sin este mapeo se pedía una acción inexistente y la
+      // tabla quedaba vacía.
+      var _accionApiTransp = (vista === 'tabla-fijos') ? 'costosFijos' : vista;
+      callTranspAPI({action: _accionApiTransp}, function(data) {
         if (vista === 'viajes')              renderTranspTabla(data, 'viajes');
         else if (vista === 'combustible') {
           // Si los viajes ya están en memoria los usamos; si no, los traemos para calcular km
@@ -5234,7 +5239,8 @@ function renderTranspTabla(data, tipo) {
     viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
     combustible:    ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
     mantenimientos: ['fecha','tipo','moneda','matricula','area','detalle','km equipo','proximo_km','taller','costo','factura'],
-    flota:          ['matricula','marca','modelo','año','tipo','propietario','chasis','motor']
+    flota:          ['matricula','marca','modelo','año','tipo','propietario','chasis','motor'],
+    costosFijos:    ['fecha','matricula','rubro','clasificacion','monto','detalle','proveedor']
   };
   var labelMap = {
     'fecha viaje':'Fecha','matricula':'Matrícula','fecha factura':'Fecha',
@@ -5246,9 +5252,9 @@ function renderTranspTabla(data, tipo) {
     'tipo':'Tipo','area':'Área','litros':'Litros','proveedor':'Proveedor',
     'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.',
     'marca':'Marca','año':'Año','propietario':'Propietario','chasis':'N° Chasis','motor':'N° Motor',
-    'proximo_km':'Próx. mant. (km)'
+    'proximo_km':'Próx. mant. (km)','rubro':'Rubro','monto':'Monto','clasificacion':'Clasificación'
   };
-  var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro'];
+  var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro','monto'];
 
   var cols = colMap[tipo] || Object.keys(rows[0]||{}).filter(function(k){ return k!=='timestamp'&&k!=='observaciones'; });
 
