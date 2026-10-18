@@ -3007,7 +3007,7 @@ function renderNeumaticos(data) {
   var retirados = rows.filter(function(r){ return !r.activo; });
   var retiradosConKm = retirados.filter(function(r){ return r.km_recorridos > 0; });
   var avgCostoKm = retiradosConKm.length
-    ? retiradosConKm.reduce(function(s,r){ return s+r.costo_por_km; },0) / retiradosConKm.length
+    ? retiradosConKm.reduce(function(s,r){ return s+(toUYU(r.costo,r.moneda)/r.km_recorridos); },0) / retiradosConKm.length
     : 0;
   var avgKmVida = retiradosConKm.length
     ? retiradosConKm.reduce(function(s,r){ return s+r.km_recorridos; },0) / retiradosConKm.length
@@ -3040,11 +3040,13 @@ function renderNeumaticos(data) {
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA INSTALACIÓN</label>'
     + '<input type="date" id="nn-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>'
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">KM DEL CAMIÓN</label>'
     + '<input type="number" id="nn-km" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
-    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">COSTO ($)</label>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">COSTO</label>'
     + '<input type="number" id="nn-costo" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONEDA</label>'
+    + '<select id="nn-moneda" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"><option value="UYU">UYU</option><option value="USD">USD</option></select></div>'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>'
     + '<input type="text" id="nn-proveedor" placeholder="Ej: Gomería Central" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
     + '</div>'
@@ -3058,7 +3060,7 @@ function renderNeumaticos(data) {
       : '<span class="badge b-inactivo">Retirado</span>';
     var retiroTxt = r.activo ? '—' : (r.fecha_retiro+' · '+fmtN(r.km_retiro,0)+' km');
     var kmRecTxt  = r.km_recorridos > 0 ? fmtN(r.km_recorridos,0)+' km' : '—';
-    var costoKmTxt = r.costo_por_km > 0 ? fmt$(r.costo_por_km)+'/km' : '—';
+    var costoKmTxt = r.km_recorridos > 0 ? fmt$(toUYU(r.costo,r.moneda)/r.km_recorridos)+'/km' : '—';
     var accion = r.activo
       ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button>'
       : '—';
@@ -3067,7 +3069,8 @@ function renderNeumaticos(data) {
       + '<td>'+r.matricula+'</td>'
       + '<td>'+r.posicion+'</td>'
       + '<td>'+r.fecha_instalacion+' · '+fmtN(r.km_instalacion,0)+' km</td>'
-      + '<td>'+fmt$(r.costo)+'</td>'
+      + '<td>'+fmtMon(r.costo, r.moneda)+'</td>'
+      + '<td>'+badgeMon(r.moneda)+'</td>'
       + '<td>'+estadoBadge+'</td>'
       + '<td>'+retiroTxt+'</td>'
       + '<td>'+kmRecTxt+'</td>'
@@ -3077,8 +3080,8 @@ function renderNeumaticos(data) {
   }).join('');
 
   var tableHtml = '<div class="card" style="overflow-x:auto">'
-    + '<table><thead><tr><th>N° Neumático</th><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
-    + '<tbody>' + (rowsHtml || '<tr><td colspan="10" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
+    + '<table><thead><tr><th>N° Neumático</th><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Mon.</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="11" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
 }
@@ -3090,6 +3093,7 @@ function guardarNeumatico() {
   var fecha     = document.getElementById('nn-fecha').value;
   var km        = document.getElementById('nn-km').value;
   var costo     = document.getElementById('nn-costo').value;
+  var moneda    = document.getElementById('nn-moneda').value;
   var proveedor = document.getElementById('nn-proveedor').value;
   var msg       = document.getElementById('nn-msg');
 
@@ -3103,7 +3107,7 @@ function guardarNeumatico() {
 
   callTranspAPI({
     action: 'saveNeumatico', numero: numero, matricula: matricula, posicion: posicion,
-    fecha_instalacion: fecha, km_instalacion: km, costo: costo, proveedor: proveedor
+    fecha_instalacion: fecha, km_instalacion: km, costo: costo, moneda: moneda, proveedor: proveedor
   }, function(resp) {
     if (resp && resp.ok) {
       toast('✓ Neumático instalado');
@@ -3176,7 +3180,7 @@ function renderOrdenesCompra(data) {
   rows.forEach(function(r) {
     var e = porEstado[r.estado] ? r.estado : 'Pendiente';
     porEstado[e].n++;
-    porEstado[e].monto += parseFloat(r.monto) || 0;
+    porEstado[e].monto += toUYU(parseFloat(r.monto) || 0, r.moneda);
   });
 
   document.getElementById('transp-indicadores').innerHTML =
@@ -3207,15 +3211,17 @@ function renderOrdenesCompra(data) {
   var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
     + '<h3 style="margin:0 0 16px;font-size:15px">+ Nueva orden de compra</h3>'
     + clienteFieldHtml
-    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+    + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px">'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA</label>'
     + '<input type="date" id="oc-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">RUBRO</label>'
     + '<select id="oc-rubro" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+rubOpts+'</select></div>'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MATRÍCULA (opcional)</label>'
     + '<select id="oc-matricula" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+matOpts+'</select></div>'
-    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONTO ($)</label>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONTO</label>'
     + '<input type="number" id="oc-monto" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONEDA</label>'
+    + '<select id="oc-moneda" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"><option value="UYU">UYU</option><option value="USD">USD</option></select></div>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>'
@@ -3251,7 +3257,8 @@ function renderOrdenesCompra(data) {
       + '<td>'+(r.matricula||'—')+'</td>'
       + '<td>'+r.proveedor+'</td>'
       + '<td>'+r.descripcion+'</td>'
-      + '<td>'+fmt$(r.monto)+'</td>'
+      + '<td>'+fmtMon(r.monto, r.moneda)+'</td>'
+      + '<td>'+badgeMon(r.moneda)+'</td>'
       + '<td>'+badge+'</td>'
       + '<td>'+acciones+'</td>'
       + '</tr>';
@@ -3261,8 +3268,8 @@ function renderOrdenesCompra(data) {
     + '<div style="display:flex;justify-content:flex-end;padding:12px 12px 0">'
     + '<button class="edit-btn" onclick="exportarOrdenesCompraExcel()">📊 Exportar a Excel</button>'
     + '</div>'
-    + '<table><thead><tr><th>N°</th><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Estado</th><th></th></tr></thead>'
-    + '<tbody>' + (rowsHtml || '<tr><td colspan="9" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
+    + '<table><thead><tr><th>N°</th><th>Fecha</th><th>Rubro</th><th>Matrícula</th><th>Proveedor</th><th>Descripción</th><th>Monto</th><th>Mon.</th><th>Estado</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="10" class="loading">Sin órdenes de compra todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
 }
@@ -3271,7 +3278,7 @@ function exportarOrdenesCompraExcel() {
   var rows = window._transpOrdenes || [];
   if (!rows.length) { toast('No hay órdenes de compra para exportar.', true); return; }
 
-  var headers = ['N°','Fecha','Rubro','Matrícula','Proveedor','Descripción','Monto','Estado','Emitida por'];
+  var headers = ['N°','Fecha','Rubro','Matrícula','Proveedor','Descripción','Monto','Moneda','Estado','Emitida por'];
   function csvCell(v) {
     var s = (v === undefined || v === null) ? '' : String(v);
     return '"' + s.replace(/"/g, '""') + '"';
@@ -3279,7 +3286,7 @@ function exportarOrdenesCompraExcel() {
   var lineas = [headers.map(csvCell).join(';')];
   rows.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); }).forEach(function(r) {
     var numOC = r.numero ? ('OC-' + String(r.numero).padStart(4,'0')) : '';
-    lineas.push([numOC, r.fecha, r.rubro, r.matricula||'', r.proveedor, r.descripcion, r.monto, r.estado, r.emisor||''].map(csvCell).join(';'));
+    lineas.push([numOC, r.fecha, r.rubro, r.matricula||'', r.proveedor, r.descripcion, r.monto, r.moneda||'UYU', r.estado, r.emisor||''].map(csvCell).join(';'));
   });
   // BOM al inicio para que Excel detecte UTF-8 y no rompa las tildes/ñ.
   var csv = '﻿' + lineas.join('\r\n');
@@ -3299,6 +3306,7 @@ function guardarOrdenCompra() {
   var rubro       = document.getElementById('oc-rubro').value;
   var matricula   = document.getElementById('oc-matricula').value;
   var monto       = document.getElementById('oc-monto').value;
+  var moneda      = document.getElementById('oc-moneda').value;
   var proveedor   = document.getElementById('oc-proveedor').value;
   var descripcion = document.getElementById('oc-descripcion').value;
   var msg         = document.getElementById('oc-msg');
@@ -3324,7 +3332,7 @@ function guardarOrdenCompra() {
 
   callTranspAPI({
     action: 'saveOrdenCompra', fecha: fecha, rubro: rubro, matricula: matricula,
-    proveedor: proveedor, descripcion: descripcion, monto: monto,
+    proveedor: proveedor, descripcion: descripcion, monto: monto, moneda: moneda,
     emisor: (session && (session.nombre || session.usuario)) || ''
   }, function(resp) {
     if (resp && resp.ok) {
@@ -3440,7 +3448,7 @@ function imprimirOrdenCompra(id) {
     + '<tr><th>Descripción</th><td>' + r.descripcion + '</td></tr>'
     + (r.emisor ? '<tr><th>Emitida por</th><td>' + r.emisor + '</td></tr>' : '')
     + '</tbody></table>'
-    + '<div class="monto">Total: ' + fmt$(r.monto) + '</div>'
+    + '<div class="monto">Total: ' + fmtMon(r.monto, r.moneda) + '</div>'
     + '<div class="firma"><div>Autoriza</div><div>Recibe</div></div>'
     + '<div class="foot">Generado por el Portal CAMINO Gestión &amp; Datos</div>'
     + '</body></html>';
