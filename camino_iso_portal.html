@@ -2044,6 +2044,13 @@ function toUYU(n, moneda) {
   return (moneda && moneda.toString().toUpperCase() === 'USD') ? v * getTc() : v;
 }
 
+function toUSD(n, moneda) {
+  var v = parseFloat(n) || 0;
+  if (moneda && moneda.toString().toUpperCase() === 'USD') return v;
+  var tc = getTc();
+  return tc > 0 ? v / tc : 0;
+}
+
 function fmtMon(n, moneda, dec) {
   var v = parseFloat(n) || 0;
   if (moneda && moneda.toString().toUpperCase() === 'USD')
@@ -4541,7 +4548,17 @@ function exportarDocumentacionExcel() {
 
 var _MES_CAMPO_POR_TIPO = {viajes: 'fecha viaje', combustible: 'fecha factura', mantenimientos: 'fecha'};
 window._transpFiltroRango = window._transpFiltroRango || {};
+window._transpFiltroMoneda = window._transpFiltroMoneda || {};
 var _mesFiltroHtml = '';
+
+// Cambia la moneda en la que se muestra TODA la tabla (cada fila
+// convertida a una sola moneda), sin volver a pedirle los datos a la
+// API — reutiliza la copia completa que ya está en memoria.
+function cambiarMonedaTablaTransp(tipo, val) {
+  window._transpFiltroMoneda[tipo] = val;
+  var full = (window._transpTablaFull || {})[tipo] || [];
+  renderTranspTabla(full, tipo);
+}
 
 function renderTranspTabla(data, tipo) {
   var rows = Array.isArray(data) ? data : [];
@@ -4721,10 +4738,11 @@ function renderTranspTabla(data, tipo) {
       }
 
     } else if (tipo === 'mantenimientos') {
-      var totCosto = 0;
+      var totCosto = 0, totCostoUSD = 0;
       var nPrev = 0, nCorr = 0;
       rows.forEach(function(r){
-        totCosto += toUYU(r['costo'], r['moneda']);
+        totCosto    += toUYU(r['costo'], r['moneda']);
+        totCostoUSD += toUSD(r['costo'], r['moneda']);
         var t = String(r['tipo']||r['tipo de intervención']||'').toLowerCase();
         if      (t.indexOf('prev') >= 0) nPrev++;
         else if (t.indexOf('corr') >= 0) nCorr++;
@@ -5145,9 +5163,10 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _repCatRows + '</tbody></table></div></div>';
       }
 
-      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">'
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
         + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
+        + kpi('Costo total USD', 'U$S ' + totCostoUSD.toLocaleString('es-UY', {minimumFractionDigits:2, maximumFractionDigits:2}), 'tipo de cambio: $' + fmtN(tc), '#1a56db')
         + kpi('% Prev. / Corr.', pctPrev+'% / '+pctCorr+'%', nPrev+' prev. · '+nCorr+' corr.', nCorr > nPrev ? '#b97c0a' : '#0f6e56')
         + '</div>'
         + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
@@ -5273,39 +5292,68 @@ function renderTranspTabla(data, tipo) {
 
   var cols = colMap[tipo] || Object.keys(rows[0]||{}).filter(function(k){ return k!=='timestamp'&&k!=='observaciones'; });
 
+  // ── Ver toda la tabla en una sola moneda (en vez de cada fila en la
+  // suya) — solo tiene sentido en las tablas que mezclan UYU/USD.
+  var _monedaActual = window._transpFiltroMoneda[tipo] || 'original';
+  var showMonedaToggle = cols.indexOf('moneda') >= 0;
+  var monedaToggleHtml = '';
+  if (showMonedaToggle) {
+    var _btnMon = function(val, label) {
+      var activo = _monedaActual === val;
+      return '<button onclick="cambiarMonedaTablaTransp(\''+tipo+'\',\''+val+'\')" style="padding:5px 10px;border-radius:6px;border:1px solid '+(activo?'#1E6B2E':'var(--border)')+';background:'+(activo?'#1E6B2E':'var(--card)')+';color:'+(activo?'#fff':'var(--text)')+';font-size:12px;cursor:pointer;font-weight:'+(activo?'700':'400')+'">'+label+'</button>';
+    };
+    monedaToggleHtml = '<div style="display:flex;align-items:center;gap:6px;padding:0 0 12px;flex-wrap:wrap">'
+      + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Ver tabla en:</span>'
+      + _btnMon('original', 'Cada fila, original')
+      + _btnMon('UYU', 'Todo en $U')
+      + _btnMon('USD', 'Todo en U$S')
+      + '</div>';
+  }
+
   var html = '';
   if (rows.length === 0) {
     html = '<div class="card" style="padding:40px;text-align:center;color:var(--muted)">Sin registros todavía. Completá el formulario correspondiente.</div>';
   } else {
     // Agregar columna ARS equivalente para viajes/mantenimientos
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
-    html = '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
+    var arsLabel = _monedaActual === 'USD' ? 'USD equiv.' : 'UYU equiv.';
+    html = monedaToggleHtml + '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
     var isMant = (tipo === 'mantenimientos');
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
-    if (showARS) html += th('UYU equiv.', 'r');
+    if (showARS) html += th(arsLabel, 'r');
     if (isMant) html += th('Repuestos', 'r');
     html += '</tr></thead><tbody>';
     rows.forEach(function(r, _mri){
       var tieneRep = isMant && r.repuestos && r.repuestos.length > 0;
+      // Cuando se eligió "Todo en $U"/"Todo en U$S", cada celda de
+      // moneda se muestra convertida a esa única moneda, en vez de la
+      // moneda original de esa fila.
+      var monedaMostrada = _monedaActual === 'original' ? r['moneda'] : _monedaActual;
       html += '<tr style="border-bottom:1px solid var(--border)">';
       cols.forEach(function(c){
         var v = r[c];
         if (c === 'moneda') {
-          html += '<td style="padding:6px 8px">' + badgeMon(v) + '</td>';
+          html += '<td style="padding:6px 8px">' + badgeMon(monedaMostrada) + '</td>';
           return;
         }
         if (c === 'ingreso') v = (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0);
         if (v === null || v === undefined || v === '') v = '—';
         else if (c === 'precio litro' && typeof v === 'number') v = fmtMon(v, r['moneda'], 1);
-        else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) v = fmtMon(v, r['moneda']);
+        else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) {
+          var vConv = _monedaActual === 'original' ? v
+            : (_monedaActual === 'USD' ? toUSD(v, r['moneda']) : toUYU(v, r['moneda']));
+          v = fmtMon(vConv, monedaMostrada);
+        }
         else if (typeof v === 'number' && c.indexOf('$') >= 0) v = fmt$(v);
         else if (c === 'proximo_km' && typeof v === 'number') v = fmtN(v,0)+' km';
         else if (c === 'km equipo' && typeof v === 'number') v = fmtN(v,0)+' km';
         html += '<td style="padding:6px 8px">' + v + '</td>';
       });
       if (showARS) {
-        var arsVal = tipo === 'viajes' ? toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']) : toUYU(r['costo'], r['moneda']);
-        html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + fmt$(arsVal) + '</td>';
+        var _baseVal = tipo === 'viajes' ? (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0) : r['costo'];
+        var arsVal = _monedaActual === 'USD' ? toUSD(_baseVal, r['moneda']) : toUYU(_baseVal, r['moneda']);
+        var arsTxt = _monedaActual === 'USD' ? ('U$S ' + arsVal.toLocaleString('es-UY',{minimumFractionDigits:2,maximumFractionDigits:2})) : fmt$(arsVal);
+        html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + arsTxt + '</td>';
       }
       if (isMant) {
         html += '<td style="padding:6px 8px;text-align:right">'
