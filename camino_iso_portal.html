@@ -4738,11 +4738,20 @@ function renderTranspTabla(data, tipo) {
       }
 
     } else if (tipo === 'mantenimientos') {
-      var totCosto = 0, totCostoUSD = 0;
+      // totCosto: TODO convertido a UYU (para Costo/km y el Pareto por
+      // área, que necesitan un único total comparable). Los otros dos
+      // son el gasto REAL en cada moneda, sin convertir — lo que
+      // realmente se pagó en pesos, y lo que realmente se pagó en
+      // dólares, cada uno por separado.
+      var totCosto = 0, totCostoUYUNativo = 0, totCostoUSDNativo = 0;
+      var nRegUYU = 0, nRegUSD = 0;
       var nPrev = 0, nCorr = 0;
       rows.forEach(function(r){
-        totCosto    += toUYU(r['costo'], r['moneda']);
-        totCostoUSD += toUSD(r['costo'], r['moneda']);
+        var _m = (r['moneda']||'').toString().toUpperCase();
+        var _c = parseFloat(r['costo']) || 0;
+        totCosto += toUYU(r['costo'], r['moneda']);
+        if (_m === 'USD') { totCostoUSDNativo += _c; nRegUSD++; }
+        else               { totCostoUYUNativo += _c; nRegUYU++; }
         var t = String(r['tipo']||r['tipo de intervención']||'').toLowerCase();
         if      (t.indexOf('prev') >= 0) nPrev++;
         else if (t.indexOf('corr') >= 0) nCorr++;
@@ -5165,8 +5174,8 @@ function renderTranspTabla(data, tipo) {
 
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">'
         + kpi('Registros', rows.length, 'intervenciones', '#185fa5')
-        + kpi('Costo total UYU', fmt$(totCosto), 'tipo de cambio: $' + fmtN(tc), '#a32d2d')
-        + kpi('Costo total USD', 'U$S ' + totCostoUSD.toLocaleString('es-UY', {minimumFractionDigits:2, maximumFractionDigits:2}), 'tipo de cambio: $' + fmtN(tc), '#1a56db')
+        + kpi('Costo total UYU', fmt$(totCostoUYUNativo), nRegUYU+' registro'+(nRegUYU===1?'':'s')+' pagado'+(nRegUYU===1?'':'s')+' en pesos', '#a32d2d')
+        + kpi('Costo total USD', 'U$S ' + totCostoUSDNativo.toLocaleString('es-UY', {minimumFractionDigits:2, maximumFractionDigits:2}), nRegUSD+' registro'+(nRegUSD===1?'':'s')+' pagado'+(nRegUSD===1?'':'s')+' en dólares', '#1a56db')
         + kpi('% Prev. / Corr.', pctPrev+'% / '+pctCorr+'%', nPrev+' prev. · '+nCorr+' corr.', nCorr > nPrev ? '#b97c0a' : '#0f6e56')
         + '</div>'
         + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">'
