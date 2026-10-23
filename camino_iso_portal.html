@@ -5056,7 +5056,7 @@ function renderTranspTabla(data, tipo) {
           var key = rep.nombre;
           if (!_repXNombre[key]) _repXNombre[key] = {nombre: key, cantidad: 0, costo: 0};
           _repXNombre[key].cantidad += rep.cantidad;
-          _repXNombre[key].costo    += rep.costo_total;
+          _repXNombre[key].costo    += toUYU(rep.costo_total, r['moneda']);
         });
       });
       var _repArr = Object.keys(_repXNombre).map(function(k){ return _repXNombre[k]; })
@@ -5088,11 +5088,11 @@ function renderTranspTabla(data, tipo) {
         (r.repuestos || []).forEach(function(rep){
           if (!_repXCamion[mat]) _repXCamion[mat] = {matricula: mat, cantidad: 0, costo: 0, categorias: {}};
           _repXCamion[mat].cantidad += rep.cantidad;
-          _repXCamion[mat].costo    += rep.costo_total;
+          _repXCamion[mat].costo    += toUYU(rep.costo_total, r['moneda']);
           var cat = rep.categoria || 'Otro';
           if (!_repXCamion[mat].categorias[cat]) _repXCamion[mat].categorias[cat] = {categoria: cat, cantidad: 0, costo: 0};
           _repXCamion[mat].categorias[cat].cantidad += rep.cantidad;
-          _repXCamion[mat].categorias[cat].costo    += rep.costo_total;
+          _repXCamion[mat].categorias[cat].costo    += toUYU(rep.costo_total, r['moneda']);
         });
       });
       var _repCamionArr = Object.keys(_repXCamion).map(function(k){ return _repXCamion[k]; })
@@ -5142,7 +5142,7 @@ function renderTranspTabla(data, tipo) {
           var key = rep.categoria || 'Otro';
           if (!_repXCategoria[key]) _repXCategoria[key] = {categoria: key, cantidad: 0, costo: 0};
           _repXCategoria[key].cantidad += rep.cantidad;
-          _repXCategoria[key].costo    += rep.costo_total;
+          _repXCategoria[key].costo    += toUYU(rep.costo_total, r['moneda']);
         });
       });
       var _repCatArr = Object.keys(_repXCategoria).map(function(k){ return _repXCategoria[k]; })
@@ -5367,7 +5367,7 @@ function renderTranspTabla(data, tipo) {
       if (isMant) {
         html += '<td style="padding:6px 8px;text-align:right">'
           + (tieneRep
-              ? '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:600">'+fmt$(r.costo_repuestos)+'</a>'
+              ? '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:600">'+fmt$(toUYU(r.costo_repuestos, r['moneda']))+'</a>'
               : '<span style="color:var(--muted)">—</span>')
           + '</td>';
       }
@@ -5386,8 +5386,8 @@ function renderTranspTabla(data, tipo) {
                 + '<td style="padding:4px 8px">'+rep.nombre+'</td>'
                 + '<td style="padding:4px 8px;color:var(--muted)">'+(rep.categoria||'—')+'</td>'
                 + '<td style="padding:4px 8px;text-align:right">'+fmtN(rep.cantidad,0)+'</td>'
-                + '<td style="padding:4px 8px;text-align:right">'+fmt$(rep.costo_unitario)+'</td>'
-                + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmt$(rep.costo_total)+'</td>'
+                + '<td style="padding:4px 8px;text-align:right">'+fmtMon(rep.costo_unitario, r['moneda'])+'</td>'
+                + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmtMon(rep.costo_total, r['moneda'])+'</td>'
                 + '</tr>';
             }).join('')
           + '</tbody></table></div>';
