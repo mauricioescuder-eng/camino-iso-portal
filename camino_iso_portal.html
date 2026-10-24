@@ -5333,13 +5333,27 @@ function renderTranspTabla(data, tipo) {
     // TODOS los registros (sin filtrar), ordenados por fecha, para que
     // "el mantenimiento N° 14" siempre sea el mismo, click a click.
     var _mantNumPorTimestamp = {};
+    var _mantPorNumero = {};
+    var _vinculadosDe = {};
     if (isMant) {
       var _mantFull = ((window._transpTablaFull || {})['mantenimientos'] || []).slice()
         .sort(function(a,b){
           var fa = a['fecha']||a['timestamp']||'', fb = b['fecha']||b['timestamp']||'';
           return fa < fb ? -1 : (fa > fb ? 1 : 0);
         });
-      _mantFull.forEach(function(x, i){ _mantNumPorTimestamp[x['timestamp']] = i + 1; });
+      _mantFull.forEach(function(x, i){ _mantNumPorTimestamp[x['timestamp']] = i + 1; _mantPorNumero[i+1] = x; });
+      // "Vinculado a otro mantenimiento N°" — así dos registros de un
+      // mismo mantenimiento real cargados en monedas distintas (uno en
+      // pesos, otro en dólares) quedan asociados aunque sean filas
+      // separadas en la planilla.
+      _mantFull.forEach(function(x){
+        var num = _mantNumPorTimestamp[x['timestamp']];
+        var refNum = parseInt(String(x['vinculado']||'').trim(), 10);
+        if (refNum && _mantPorNumero[refNum]) {
+          _vinculadosDe[refNum] = _vinculadosDe[refNum] || [];
+          _vinculadosDe[refNum].push(num);
+        }
+      });
       html += th('N°', 'r');
     }
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
@@ -5353,10 +5367,16 @@ function renderTranspTabla(data, tipo) {
       // moneda original de esa fila.
       var monedaMostrada = _monedaActual === 'original' ? r['moneda'] : _monedaActual;
       html += '<tr style="border-bottom:1px solid var(--border)">';
+      var _numero = isMant ? (_mantNumPorTimestamp[r['timestamp']] || '—') : null;
+      var _refNum = isMant ? parseInt(String(r['vinculado']||'').trim(), 10) : null;
+      var _vinculados = isMant ? (_vinculadosDe[_numero] || []) : [];
       if (isMant) {
-        var _numero = _mantNumPorTimestamp[r['timestamp']] || '—';
+        var _vinculoBadge = '';
+        if (_refNum && _mantPorNumero[_refNum]) _vinculoBadge = ' <span style="font-size:10px;color:var(--muted)" title="Vinculado al mantenimiento N° '+_refNum+'">🔗#'+_refNum+'</span>';
+        else if (_vinculados.length) _vinculoBadge = ' <span style="font-size:10px;color:var(--muted)" title="Tiene '+_vinculados.length+' mantenimiento(s) vinculado(s)">🔗+'+_vinculados.length+'</span>';
         html += '<td style="padding:6px 8px;text-align:right">'
           + '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:700">#'+_numero+'</a>'
+          + _vinculoBadge
           + '</td>';
       }
       cols.forEach(function(c){
@@ -5414,7 +5434,31 @@ function renderTranspTabla(data, tipo) {
                 }).join('')
               + '</tbody></table></div>')
           : '<div style="padding:4px 8px;color:var(--muted);font-size:12px">Este mantenimiento no tiene repuestos cargados en detalle — solo el costo total.</div>';
-        html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 2)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+'</div></td></tr>';
+        // Mantenimientos vinculados (mismo trabajo real, cargado en más
+        // de un registro por tener gastos en distinta moneda) — se
+        // muestran juntos acá, con el total combinado en UYU.
+        var _vinculoHtml = '';
+        var _relacionados = [];
+        if (_refNum && _mantPorNumero[_refNum]) _relacionados.push({numero: _refNum, reg: _mantPorNumero[_refNum]});
+        _vinculados.forEach(function(n){ if (_mantPorNumero[n]) _relacionados.push({numero: n, reg: _mantPorNumero[n]}); });
+        if (_relacionados.length) {
+          var _totCombinado = toUYU(r['costo'], r['moneda']);
+          var _relFilas = _relacionados.map(function(x){
+            _totCombinado += toUYU(x.reg['costo'], x.reg['moneda']);
+            return '<tr style="border-bottom:1px solid var(--border)">'
+              + '<td style="padding:4px 8px">#'+x.numero+'</td>'
+              + '<td style="padding:4px 8px">'+(x.reg['fecha']||'')+'</td>'
+              + '<td style="padding:4px 8px">'+(x.reg['detalle']||x.reg['area']||'')+'</td>'
+              + '<td style="padding:4px 8px;text-align:right">'+fmtMon(x.reg['costo'], x.reg['moneda'])+'</td>'
+              + '</tr>';
+          }).join('');
+          _vinculoHtml = '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'
+            + '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🔗 Mantenimiento(s) vinculado(s) — mismo trabajo, otra moneda</div>'
+            + '<table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>' + _relFilas + '</tbody></table>'
+            + '<div style="margin-top:6px;font-weight:700;color:#0f6e56">Costo total combinado: ' + fmt$(_totCombinado) + '</div>'
+            + '</div>';
+        }
+        html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 2)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+_vinculoHtml+'</div></td></tr>';
       }
     });
     html += '</tbody></table></div>';
