@@ -5328,6 +5328,20 @@ function renderTranspTabla(data, tipo) {
     var arsLabel = _monedaActual === 'USD' ? 'USD equiv.' : 'UYU equiv.';
     html = monedaToggleHtml + '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
     var isMant = (tipo === 'mantenimientos');
+    // N° de mantenimiento: estable aunque se filtre por fecha o se
+    // cambie la moneda de la tabla — se arma una sola vez a partir de
+    // TODOS los registros (sin filtrar), ordenados por fecha, para que
+    // "el mantenimiento N° 14" siempre sea el mismo, click a click.
+    var _mantNumPorTimestamp = {};
+    if (isMant) {
+      var _mantFull = ((window._transpTablaFull || {})['mantenimientos'] || []).slice()
+        .sort(function(a,b){
+          var fa = a['fecha']||a['timestamp']||'', fb = b['fecha']||b['timestamp']||'';
+          return fa < fb ? -1 : (fa > fb ? 1 : 0);
+        });
+      _mantFull.forEach(function(x, i){ _mantNumPorTimestamp[x['timestamp']] = i + 1; });
+      html += th('N°', 'r');
+    }
     cols.forEach(function(c){ html += th(labelMap[c]||c); });
     if (showARS) html += th(arsLabel, 'r');
     if (isMant) html += th('Repuestos', 'r');
@@ -5339,6 +5353,12 @@ function renderTranspTabla(data, tipo) {
       // moneda original de esa fila.
       var monedaMostrada = _monedaActual === 'original' ? r['moneda'] : _monedaActual;
       html += '<tr style="border-bottom:1px solid var(--border)">';
+      if (isMant) {
+        var _numero = _mantNumPorTimestamp[r['timestamp']] || '—';
+        html += '<td style="padding:6px 8px;text-align:right">'
+          + '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:700">#'+_numero+'</a>'
+          + '</td>';
+      }
       cols.forEach(function(c){
         var v = r[c];
         if (c === 'moneda') {
@@ -5366,32 +5386,35 @@ function renderTranspTabla(data, tipo) {
       }
       if (isMant) {
         html += '<td style="padding:6px 8px;text-align:right">'
-          + (tieneRep
-              ? '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:600">'+fmt$(toUYU(r.costo_repuestos, r['moneda']))+'</a>'
-              : '<span style="color:var(--muted)">—</span>')
+          + (tieneRep ? fmt$(toUYU(r.costo_repuestos, r['moneda'])) : '<span style="color:var(--muted)">—</span>')
           + '</td>';
       }
       html += '</tr>';
-      if (tieneRep) {
-        var _repDetalle = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-          + '<thead><tr style="background:var(--border)">'
-          + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
-          + '<th style="padding:4px 8px;text-align:left">Categoría</th>'
-          + '<th style="padding:4px 8px;text-align:right">Cant.</th>'
-          + '<th style="padding:4px 8px;text-align:right">Costo unit.</th>'
-          + '<th style="padding:4px 8px;text-align:right">Total</th>'
-          + '</tr></thead><tbody>'
-          + r.repuestos.map(function(rep){
-              return '<tr style="border-bottom:1px solid var(--border)">'
-                + '<td style="padding:4px 8px">'+rep.nombre+'</td>'
-                + '<td style="padding:4px 8px;color:var(--muted)">'+(rep.categoria||'—')+'</td>'
-                + '<td style="padding:4px 8px;text-align:right">'+fmtN(rep.cantidad,0)+'</td>'
-                + '<td style="padding:4px 8px;text-align:right">'+fmtMon(rep.costo_unitario, r['moneda'])+'</td>'
-                + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmtMon(rep.costo_total, r['moneda'])+'</td>'
-                + '</tr>';
-            }).join('')
-          + '</tbody></table></div>';
-        html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 1)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+'</div></td></tr>';
+      if (isMant) {
+        // Clic en el N° de cualquier mantenimiento (tenga o no repuestos
+        // detallados) abre esta fila con todo lo que compone ese
+        // mantenimiento puntual.
+        var _repDetalle = tieneRep
+          ? ('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+              + '<thead><tr style="background:var(--border)">'
+              + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
+              + '<th style="padding:4px 8px;text-align:left">Categoría</th>'
+              + '<th style="padding:4px 8px;text-align:right">Cant.</th>'
+              + '<th style="padding:4px 8px;text-align:right">Costo unit.</th>'
+              + '<th style="padding:4px 8px;text-align:right">Total</th>'
+              + '</tr></thead><tbody>'
+              + r.repuestos.map(function(rep){
+                  return '<tr style="border-bottom:1px solid var(--border)">'
+                    + '<td style="padding:4px 8px">'+rep.nombre+'</td>'
+                    + '<td style="padding:4px 8px;color:var(--muted)">'+(rep.categoria||'—')+'</td>'
+                    + '<td style="padding:4px 8px;text-align:right">'+fmtN(rep.cantidad,0)+'</td>'
+                    + '<td style="padding:4px 8px;text-align:right">'+fmtMon(rep.costo_unitario, r['moneda'])+'</td>'
+                    + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmtMon(rep.costo_total, r['moneda'])+'</td>'
+                    + '</tr>';
+                }).join('')
+              + '</tbody></table></div>')
+          : '<div style="padding:4px 8px;color:var(--muted);font-size:12px">Este mantenimiento no tiene repuestos cargados en detalle — solo el costo total.</div>';
+        html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 2)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+'</div></td></tr>';
       }
     });
     html += '</tbody></table></div>';
