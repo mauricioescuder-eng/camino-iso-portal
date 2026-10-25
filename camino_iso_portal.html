@@ -5330,9 +5330,12 @@ function renderTranspTabla(data, tipo) {
     var isMant = (tipo === 'mantenimientos');
     // N° de mantenimiento: estable aunque se filtre por fecha o se
     // cambie la moneda de la tabla — se arma una sola vez a partir de
-    // TODOS los registros (sin filtrar), ordenados por fecha, para que
-    // "el mantenimiento N° 14" siempre sea el mismo, click a click.
-    var _mantNumPorTimestamp = {};
+    // TODOS los registros (sin filtrar), ordenados por fecha. Se
+    // indexa por REFERENCIA de objeto (Map), no por timestamp — si
+    // dos mantenimientos se cargan el mismo día, su "Marca temporal"
+    // recortada a nivel de día coincide, y usarla como clave los hacía
+    // pisarse el número.
+    var _mantNumeros = new Map();
     var _mantPorNumero = {};
     var _vinculadosDe = {};
     if (isMant) {
@@ -5341,13 +5344,13 @@ function renderTranspTabla(data, tipo) {
           var fa = a['fecha']||a['timestamp']||'', fb = b['fecha']||b['timestamp']||'';
           return fa < fb ? -1 : (fa > fb ? 1 : 0);
         });
-      _mantFull.forEach(function(x, i){ _mantNumPorTimestamp[x['timestamp']] = i + 1; _mantPorNumero[i+1] = x; });
+      _mantFull.forEach(function(x, i){ _mantNumeros.set(x, i + 1); _mantPorNumero[i+1] = x; });
       // "Vinculado a otro mantenimiento N°" — así dos registros de un
       // mismo mantenimiento real cargados en monedas distintas (uno en
       // pesos, otro en dólares) quedan asociados aunque sean filas
       // separadas en la planilla.
       _mantFull.forEach(function(x){
-        var num = _mantNumPorTimestamp[x['timestamp']];
+        var num = _mantNumeros.get(x);
         var refNum = parseInt(String(x['vinculado']||'').trim(), 10);
         if (refNum && _mantPorNumero[refNum]) {
           _vinculadosDe[refNum] = _vinculadosDe[refNum] || [];
@@ -5367,7 +5370,7 @@ function renderTranspTabla(data, tipo) {
       // moneda original de esa fila.
       var monedaMostrada = _monedaActual === 'original' ? r['moneda'] : _monedaActual;
       html += '<tr style="border-bottom:1px solid var(--border)">';
-      var _numero = isMant ? (_mantNumPorTimestamp[r['timestamp']] || '—') : null;
+      var _numero = isMant ? (_mantNumeros.get(r) || '—') : null;
       var _refNum = isMant ? parseInt(String(r['vinculado']||'').trim(), 10) : null;
       var _vinculados = isMant ? (_vinculadosDe[_numero] || []) : [];
       if (isMant) {
