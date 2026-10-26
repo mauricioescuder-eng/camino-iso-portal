@@ -448,6 +448,32 @@ tr:hover td{background:#faf9f6}
     <div id="nr-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
+<div class="overlay" id="ov-mant-editar">
+  <div class="modal">
+    <h3>Editar mantenimiento <span id="me-numero" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
+    <div class="fg"><label>Fecha</label><input type="date" id="me-fecha"></div>
+    <div class="fg"><label>Matrícula del camión</label><input type="text" id="me-matricula"></div>
+    <div class="fg"><label>Incluye trabajo en acoplado</label><select id="me-acoplado"><option value="No">No</option><option value="Sí">Sí</option></select></div>
+    <div class="fg"><label>Área de mantenimiento</label><input type="text" id="me-area" placeholder="Ej: Motor, Frenos, Filtros y lubricantes..."></div>
+    <div class="fg"><label>Tipo de intervención</label><select id="me-tipo"><option value="Preventivo">Preventivo</option><option value="Correctivo">Correctivo</option></select></div>
+    <div class="fg"><label>Detalle del trabajo realizado</label><textarea id="me-detalle" rows="2"></textarea></div>
+    <div class="fg"><label>Km actuales del equipo</label><input type="number" id="me-km" placeholder="0"></div>
+    <div class="fg"><label>Proveedor / Taller</label><input type="text" id="me-taller"></div>
+    <div class="fg"><label>Costo total</label><input type="number" id="me-costo" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Moneda</label><select id="me-moneda"><option value="UYU">Pesos (UYU)</option><option value="USD">Dólares (USD)</option></select></div>
+    <div class="fg"><label>N° de factura</label><input type="text" id="me-factura"></div>
+    <div class="fg"><label>Observaciones</label><textarea id="me-observaciones" rows="2"></textarea></div>
+    <div class="fg"><label>Cantidad de días en el taller</label><input type="number" id="me-dias-taller" placeholder="0"></div>
+    <div class="fg"><label>Próximo mantenimiento (km)</label><input type="number" id="me-proximo-km" placeholder="0"></div>
+    <div class="fg"><label>Vinculado a otro mantenimiento N° (opcional)</label><input type="text" id="me-vinculado" placeholder="Dejar vacío si no aplica"></div>
+    <div style="font-size:11px;color:var(--muted);margin:4px 0 8px">Este formulario no edita el desglose de repuestos por categoría — solo los campos de arriba.</div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeEditarMantenimiento()">Cancelar</button>
+      <button class="btn-s" onclick="guardarEditarMantenimiento()">Guardar cambios</button>
+    </div>
+    <div id="me-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -5388,9 +5414,12 @@ function renderTranspTabla(data, tipo) {
         var _vinculoBadge = '';
         if (_refNum && _mantPorNumero[_refNum]) _vinculoBadge = ' <span style="font-size:10px;color:var(--muted)" title="Vinculado al mantenimiento N° '+_refNum+'">🔗#'+_refNum+'</span>';
         else if (_vinculados.length) _vinculoBadge = ' <span style="font-size:10px;color:var(--muted)" title="Tiene '+_vinculados.length+' mantenimiento(s) vinculado(s)">🔗+'+_vinculados.length+'</span>';
+        r._numero = _numero;
+        window._mantRegistros[_mri] = r;
         html += '<td style="padding:6px 8px;text-align:right">'
           + '<a href="javascript:void(0)" onclick="toggleMantRepuestosFila('+_mri+')" style="color:#185fa5;text-decoration:none;font-weight:700">#'+_numero+'</a>'
           + _vinculoBadge
+          + ' <a href="javascript:void(0)" onclick="abrirEditarMantenimiento('+_mri+')" title="Editar este mantenimiento" style="text-decoration:none">✏️</a>'
           + '</td>';
       }
       cols.forEach(function(c){
@@ -5533,6 +5562,81 @@ function toggleMantRepuestosFila(i) {
   if (!row) return;
   row.style.display = (row.style.display === 'none') ? '' : 'none';
 }
+
+// ── Editar un mantenimiento ya cargado ──────────────────────────
+// window._mantRegistros se arma al pintar la tabla (en
+// renderTranspTabla) guardando el registro completo de cada fila,
+// indexado por el mismo _mri que ya se usa para "mant-rep-N" — así
+// se puede abrir el formulario de edición con los datos actuales sin
+// tener que volver a pedirlos al servidor.
+window._mantRegistros = window._mantRegistros || {};
+var _meEditandoIdx = null;
+function abrirEditarMantenimiento(i) {
+  var r = window._mantRegistros[i];
+  if (!r) { toast('No se encontró el registro.', true); return; }
+  if (!r._fila) { toast('Este registro no tiene fila asociada — actualizá la página e intentá de nuevo.', true); return; }
+  _meEditandoIdx = i;
+  document.getElementById('me-numero').textContent = r._numero ? ('#'+r._numero) : '';
+  document.getElementById('me-fecha').value = r['fecha'] || '';
+  document.getElementById('me-matricula').value = r['matricula'] || '';
+  document.getElementById('me-acoplado').value = (r['acoplado']||'').toLowerCase().indexOf('s') === 0 ? 'Sí' : 'No';
+  document.getElementById('me-area').value = r['area'] || '';
+  document.getElementById('me-tipo').value = (r['tipo']||'').toLowerCase().indexOf('correc') === 0 ? 'Correctivo' : 'Preventivo';
+  document.getElementById('me-detalle').value = r['detalle'] || '';
+  document.getElementById('me-km').value = r['km equipo'] || '';
+  document.getElementById('me-taller').value = r['taller'] || '';
+  document.getElementById('me-costo').value = r['costo'] || '';
+  document.getElementById('me-moneda').value = (r['moneda']||'UYU').toUpperCase() === 'USD' ? 'USD' : 'UYU';
+  document.getElementById('me-factura').value = r['factura'] || '';
+  document.getElementById('me-observaciones').value = r['observaciones'] || '';
+  document.getElementById('me-dias-taller').value = r['dias_taller'] || '';
+  document.getElementById('me-proximo-km').value = r['proximo_km'] || '';
+  document.getElementById('me-vinculado').value = r['vinculado'] || '';
+  document.getElementById('me-msg').textContent = '';
+  document.getElementById('ov-mant-editar').classList.add('open');
+}
+function closeEditarMantenimiento() {
+  document.getElementById('ov-mant-editar').classList.remove('open');
+  _meEditandoIdx = null;
+}
+function guardarEditarMantenimiento() {
+  if (_meEditandoIdx === null) return;
+  var r = window._mantRegistros[_meEditandoIdx];
+  var msg = document.getElementById('me-msg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  callTranspAPI({
+    action: 'updateMantenimiento',
+    fila: r._fila,
+    fecha: document.getElementById('me-fecha').value,
+    matricula: document.getElementById('me-matricula').value,
+    acoplado: document.getElementById('me-acoplado').value,
+    area: document.getElementById('me-area').value,
+    tipo: document.getElementById('me-tipo').value,
+    detalle: document.getElementById('me-detalle').value,
+    km: document.getElementById('me-km').value,
+    taller: document.getElementById('me-taller').value,
+    costo: document.getElementById('me-costo').value,
+    moneda: document.getElementById('me-moneda').value,
+    factura: document.getElementById('me-factura').value,
+    observaciones: document.getElementById('me-observaciones').value,
+    dias_taller: document.getElementById('me-dias-taller').value,
+    proximo_km: document.getElementById('me-proximo-km').value,
+    vinculado: document.getElementById('me-vinculado').value
+  }, function(resp) {
+    if (resp && resp.ok) {
+      closeEditarMantenimiento();
+      toast('✓ Mantenimiento actualizado');
+      loadTransporte('mantenimientos');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'No se pudo conectar. Intentá de nuevo.';
+  });
+}
 function toggleRepCamion(id) {
   var row = document.getElementById(id);
   if (!row) return;
@@ -5558,6 +5662,7 @@ function limpiarRangoTransp(tipo) {
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
+document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
 // Precargar config al abrir la página
 loadConfig();
 </script>
