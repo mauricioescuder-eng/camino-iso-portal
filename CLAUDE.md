@@ -40,6 +40,18 @@
   que leer el estado actual (acción `mantenimientos` de la API) y
   recalcular ese orden, no asumirlo de memoria.
 
+- **Antes de mandar la página de carga (el HTML con el botón "Cargar
+  todo"), releer el campo `detalle` de cada registro como si lo
+  fuera a leer el cliente final** — no puede tener notas de revisión
+  internas tipo "(el resto queda con cantidad real, ver abajo)". Esas
+  notas son para que el usuario revise la tabla de la página antes de
+  cargar, nunca para que terminen guardadas en el Detalle real del
+  mantenimiento (ya pasó una vez: quedaron pegadas en 3 registros y
+  hubo que corregirlas aparte con `updateDetalleMantenimiento`, que
+  busca por N° de factura + matrícula y reescribe el Detalle). Para
+  avisos de revisión, usar la columna "Repuestos (cant. real)" de la
+  tabla de la página, no el texto de `detalle`.
+
 - La hoja "Respuestas de formulario 3" (Mantenimientos) tiene varias
   columnas duplicadas por rediseños anteriores del formulario (Área,
   Tipo, Detalle, Km, Taller, N° de factura, Observaciones, Cantidad
