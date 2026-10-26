@@ -5326,7 +5326,6 @@ function renderTranspTabla(data, tipo) {
     // Agregar columna ARS equivalente para viajes/mantenimientos
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
     var arsLabel = _monedaActual === 'USD' ? 'USD equiv.' : 'UYU equiv.';
-    html = monedaToggleHtml + '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray)">';
     var isMant = (tipo === 'mantenimientos');
     // N° de mantenimiento: estable aunque se filtre por fecha o se
     // cambie la moneda de la tabla — se arma una sola vez a partir de
@@ -5357,13 +5356,25 @@ function renderTranspTabla(data, tipo) {
           _vinculadosDe[refNum].push(num);
         }
       });
-      html += th('N°', 'r');
     }
-    cols.forEach(function(c){ html += th(labelMap[c]||c); });
-    if (showARS) html += th(arsLabel, 'r');
-    if (isMant) html += th('Repuestos', 'r');
-    html += '</tr></thead><tbody>';
-    rows.forEach(function(r, _mri){
+
+    var _theadHtml = '<thead><tr style="background:var(--gray)">'
+      + (isMant ? th('N°', 'r') : '')
+      + cols.map(function(c){ return th(labelMap[c]||c); }).join('')
+      + (showARS ? th(arsLabel, 'r') : '')
+      + (isMant ? th('Repuestos', 'r') : '')
+      + '</tr></thead>';
+
+    // Arma el <tbody> de filas para una lista de registros de
+    // mantenimiento — se reutiliza tanto para la tabla plana (otros
+    // tipos) como para cada grupo por matrícula (mantenimientos). El
+    // índice usado para los "mant-rep-N" clickeables es global
+    // (_mantRowSeq), no por grupo, para que no se repita entre grupos.
+    var _mantRowSeq = 0;
+    function buildFilasHtml(filas) {
+    var html = '<tbody>';
+    filas.forEach(function(r){
+      var _mri = _mantRowSeq++;
       var tieneRep = isMant && r.repuestos && r.repuestos.length > 0;
       // Cuando se eligió "Todo en $U"/"Todo en U$S", cada celda de
       // moneda se muestra convertida a esa única moneda, en vez de la
@@ -5464,9 +5475,46 @@ function renderTranspTabla(data, tipo) {
         html += '<tr id="mant-rep-'+_mri+'" style="display:none"><td colspan="'+(cols.length + (showARS?1:0) + 2)+'" style="padding:0;background:var(--gray)"><div style="padding:8px 12px">'+_repDetalle+_vinculoHtml+'</div></td></tr>';
       }
     });
-    html += '</tbody></table></div>';
+    html += '</tbody>';
+    return html;
+    }
+
+    if (isMant) {
+      // Agrupar por matrícula — un resumen clickeable por camión, con
+      // la tabla detallada de sus mantenimientos adentro (mismo
+      // formato de siempre), para que la lista no quede toda junta.
+      var _porMatricula = {};
+      rows.forEach(function(r){
+        var mat = r.matricula || 'Sin matrícula';
+        (_porMatricula[mat] = _porMatricula[mat] || []).push(r);
+      });
+      var _matriculasOrdenadas = Object.keys(_porMatricula).sort(function(a,b){
+        return _porMatricula[b].length - _porMatricula[a].length;
+      });
+      html = monedaToggleHtml;
+      _matriculasOrdenadas.forEach(function(mat, _gi){
+        var grupo = _porMatricula[mat];
+        var costoGrupo = grupo.reduce(function(s,r){ return s + toUYU(r.costo, r.moneda); }, 0);
+        var gslug = 'mant-grupo-' + _gi;
+        html += '<div class="card" style="margin-bottom:8px;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px" onclick="toggleMantGrupo(\''+gslug+'\')">'
+          + '<div><span style="font-weight:700;font-size:14px">🚛 '+mat+'</span> <span style="color:var(--muted);font-size:12px">— '+grupo.length+' mantenimiento'+(grupo.length===1?'':'s')+'</span></div>'
+          + '<div style="font-weight:700;color:#0f6e56">'+fmt$(costoGrupo)+'</div>'
+          + '</div>';
+        html += '<div id="'+gslug+'" style="display:none;margin:0 0 16px"><div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+          + _theadHtml + buildFilasHtml(grupo) + '</table></div></div>';
+      });
+    } else {
+      html = monedaToggleHtml + '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + _theadHtml + buildFilasHtml(rows) + '</table></div>';
+    }
   }
   document.getElementById('transp-contenido').innerHTML = html;
+}
+
+function toggleMantGrupo(id) {
+  var row = document.getElementById(id);
+  if (!row) return;
+  row.style.display = (row.style.display === 'none') ? '' : 'none';
 }
 
 // ── Repuestos de mantenimientos: el detalle ya viene cargado junto con
