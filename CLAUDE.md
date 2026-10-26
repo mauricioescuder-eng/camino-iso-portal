@@ -9,13 +9,19 @@
   cantidad y costo unitario reales — nunca meterlo como texto suelto
   en "Detalle", aunque sea más rápido. Esto es necesario para que
   "Repuestos por categoría" y "Repuestos más usados" cuenten bien las
-  cantidades. Solo los repuestos que NO tienen casillero fijo van
-  agrupados en el "Otro" de su categoría (cantidad=1, nombre
-  descriptivo, costo = suma de ese grupo) — y como cada categoría
-  tiene un solo "Otro", si hay más de un repuesto sin casillero fijo
-  dentro de la misma categoría, hay que elegir si se agrupan juntos
-  en ese "Otro" (se pierde el detalle pieza por pieza) o se le pide
-  al usuario agregar más casilleros "Otro" al formulario.
+  cantidades. Esto incluye repuestos que no tienen un nombre propio
+  dedicado pero sí encajan en el "Otro" de su categoría: **ese "Otro"
+  también hay que usarlo con cantidad y costo real**, no dejarlo
+  vacío con todo en "Detalle" como texto — es el error más fácil de
+  cometer (pasó la primera vez: se cargaron 3 ítems con casillero
+  fijo pero el resto quedó solo como texto, incluido uno con cantidad
+  bien clara en el Excel origen).
+  Como cada categoría tiene un solo "Otro" (y un solo casillero por
+  nombre fijo), cuando compiten varios repuestos por el mismo
+  casillero: elegir el de **mayor costo** para ocupar el casillero
+  con cantidad real, y dejar los demás como texto en "Detalle" (o
+  pedirle al usuario agregar más casilleros "Otro" al formulario si
+  quiere el detalle completo de todos).
 
 - **Los montos que se cargan son siempre el subtotal de la factura,
   sin IVA** (confirmado explícitamente por el usuario varias veces).
