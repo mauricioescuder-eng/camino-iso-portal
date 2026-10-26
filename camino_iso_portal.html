@@ -4970,36 +4970,6 @@ function renderTranspTabla(data, tipo) {
           + _bars2 + _labs2 + '</svg></div></div>';
       }
 
-      // ── Por taller ───────────────────────────────────────────────
-      var _tallerCostos = {};
-      rows.forEach(function(r){
-        var t = r['taller'] || 'Sin especificar';
-        _tallerCostos[t] = (_tallerCostos[t]||0) + toUYU(r['costo'], r['moneda']);
-      });
-      var _tallerArr = Object.keys(_tallerCostos).map(function(t){ return {taller:t, costo:_tallerCostos[t]}; })
-                        .sort(function(a,b){ return b.costo - a.costo; });
-      var _tallerHtml = '';
-      if (_tallerArr.length > 1) {
-        var _maxT = _tallerArr[0].costo || 1;
-        var _tRows = '';
-        _tallerArr.forEach(function(t){
-          var p = Math.round(t.costo / _maxT * 100);
-          _tRows += '<tr style="border-bottom:1px solid var(--border)">'
-            + '<td style="padding:5px 8px;font-size:12px">'+t.taller+'</td>'
-            + '<td style="padding:5px 8px"><div style="display:flex;align-items:center;gap:6px">'
-            + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden"><div style="width:'+p+'%;height:100%;background:#F07820;border-radius:2px"></div></div>'
-            + '<span style="font-size:11px;font-weight:600;min-width:52px;text-align:right">'+fmt$(t.costo)+'</span>'
-            + '</div></td></tr>';
-        });
-        _tallerHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
-          + '<h4 style="margin:0 0 10px;font-size:13px">🔧 Costo por Taller</h4>'
-          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
-          + '<thead><tr style="background:var(--gray)">'
-          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Taller</th>'
-          + '<th style="padding:5px 8px;text-align:left;font-size:11px">Costo UYU</th>'
-          + '</tr></thead><tbody>' + _tRows + '</tbody></table></div></div>';
-      }
-
       // ── Próximo mantenimiento por camión ──────────────────────────
       // El objetivo (a qué km le toca el próximo service) sale del último
       // mantenimiento de cada camión que tenga ese dato cargado. Para
@@ -5209,7 +5179,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Camiones sin correctivos', dispPct+'%', (flotaTotal - Object.keys(matsConCorr).length)+'/'+flotaTotal+' camiones', dispPct >= 80 ? '#0f6e56' : '#a32d2d')
         + kpi('Disponibilidad operativa', _dispOperativaUltima ? _dispOperativaUltima.pct.toFixed(1)+'%' : '—', _dispOperativaUltima ? _dispOperativaUltima.label+' · '+fmtN(_dispOperativaUltima.diasTaller,0)+' días en taller' : 'Sin días en taller cargados', _dispOperativaUltima && _dispOperativaUltima.pct>=90 ? '#0f6e56' : '#a32d2d')
         + '</div>'
-        + _proxMantHtml + _paretoHtml + _repuestosAnalisisHtml + _repPorCamionHtml + _repCategoriaHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml + _tallerHtml;
+        + _proxMantHtml + _paretoHtml + _repuestosAnalisisHtml + _repPorCamionHtml + _repCategoriaHtml + _evolHtml + _dispEvolHtml + _dispCamionesHtml;
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
