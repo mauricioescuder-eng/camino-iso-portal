@@ -5059,16 +5059,27 @@ function renderTranspTabla(data, tipo) {
                       .sort(function(a,b){ return b.cantidad - a.cantidad; });
       var _repuestosAnalisisHtml = '';
       if (_repArr.length > 0) {
-        var _repRows = _repArr.map(function(x){
+        function _repRow(x) {
           return '<tr style="border-bottom:1px solid var(--border)">'
             + '<td style="padding:6px 8px;font-size:12px">'+x.nombre+'</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700">'+fmtN(x.cantidad,0)+'</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmt$(x.costo)+'</td>'
             + '</tr>';
-        }).join('');
+        }
+        var _repRows = _repArr.slice(0, 10).map(_repRow).join('');
+        var _repResto = _repArr.slice(10);
+        if (_repResto.length > 0) {
+          _repRows += '<tr id="rep-mas-usados-resto" style="display:none">'
+            + '<td colspan="3" style="padding:0">'
+            + '<table style="width:100%;border-collapse:collapse"><tbody>' + _repResto.map(_repRow).join('') + '</tbody></table>'
+            + '</td></tr>'
+            + '<tr><td colspan="3" style="padding:6px 8px;text-align:center">'
+            + '<a href="javascript:void(0)" onclick="toggleMantGrupo(\'rep-mas-usados-resto\')" style="color:#185fa5;text-decoration:none;font-size:12px;font-weight:600">Ver los '+_repResto.length+' restantes ▾</a>'
+            + '</td></tr>';
+        }
         _repuestosAnalisisHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<h4 style="margin:0 0 10px;font-size:13px">🔩 Repuestos más usados</h4>'
-          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Según los campos de repuesto cargados en el formulario de mantenimiento.</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Según los campos de repuesto cargados en el formulario de mantenimiento'+(_repResto.length>0?' — top 10, el resto se puede expandir':'')+'.</div>'
           + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
           + '<thead><tr style="background:var(--gray)">'
           + '<th style="padding:5px 8px;text-align:left;font-size:11px">Repuesto</th>'
