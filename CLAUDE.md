@@ -18,10 +18,19 @@
   bien clara en el Excel origen).
   Como cada categoría tiene un solo "Otro" (y un solo casillero por
   nombre fijo), cuando compiten varios repuestos por el mismo
-  casillero: elegir el de **mayor costo** para ocupar el casillero
-  con cantidad real, y dejar los demás como texto en "Detalle" (o
-  pedirle al usuario agregar más casilleros "Otro" al formulario si
-  quiere el detalle completo de todos).
+  casillero **no hay que elegir uno y dejar el resto como texto**:
+  el usuario prefiere que cada artículo de la factura sea su **propio
+  registro de mantenimiento**, vinculado al mismo N° (campo
+  "Vinculado a otro mantenimiento N°") que los demás ítems de ese
+  mismo trabajo/factura — así cada uno entra en su casillero fijo u
+  "Otro" con cantidad y costo real, sin perder nada ni mezclar varios
+  repuestos sueltos en un solo Detalle genérico (pasó con la carga de
+  las facturas 151944-152086: se agruparon ~9 repuestos distintos de
+  Motor/Frenos en un solo registro de $15.182, y varios quedaron
+  como texto porque "Motor - Otro" y "Frenos - Otro" ya estaban
+  ocupados; el usuario pidió borrarlo y rehacerlo como un registro
+  por artículo). Un trabajo con muchos repuestos termina siendo
+  varios registros chicos vinculados entre sí, no uno grande.
 
 - **Los montos que se cargan son siempre el subtotal de la factura,
   sin IVA** (confirmado explícitamente por el usuario varias veces).
