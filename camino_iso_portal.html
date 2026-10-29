@@ -370,6 +370,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="loadTransporte('documentacion',this)">📄 Documentación</button>
             <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
             <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
+            <button class="fb" onclick="loadTransporte('infraestructura',this)">🏗️ Infraestructura</button>
             <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
             <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
             <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
@@ -2185,6 +2186,12 @@ function loadTransporte(vista, btn) {
       ensureFlotaLoaded(renderFormCostosFijos);
     } else if (vista === 'documentacion') {
       renderDocumentacion();
+    } else if (vista === 'infraestructura') {
+      callTranspAPI({action:'gastosInfraestructura'}, function(data) {
+        renderGastosInfraestructura(Array.isArray(data) ? data : []);
+      }, function() {
+        document.getElementById('transp-contenido').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">No se pudo conectar con la API.</div>';
+      });
     } else {
       // "Ver Fijos" pide la acción 'costosFijos' al backend — el nombre
       // de la vista ('tabla-fijos') no coincide con el de la acción,
@@ -3023,6 +3030,147 @@ function guardarCostoFijo() {
       document.getElementById('cf-monto').value = '';
       document.getElementById('cf-detalle').value = '';
       document.getElementById('cf-proveedor').value = '';
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Error de conexión.';
+  });
+}
+
+// ── Gastos de Infraestructura — alquiler, luz, seguro del predio,
+// mantenimiento del depósito/oficina, etc. Es solo informativo: no
+// tiene matrícula y no se cruza con ningún dato de camiones (viajes,
+// combustible, mantenimientos, costos fijos). Una sola pantalla con
+// el form de carga arriba y el detalle + totales abajo.
+var GI_RUBROS = ['Alquiler','Luz','Agua','Internet / Telefonía','Seguro del predio','Mantenimiento edificio','Limpieza','Seguridad','Impuestos (Contribución, etc.)','Otro'];
+
+function renderGastosInfraestructura(rows) {
+  window._giRows = rows;
+  var cont = document.getElementById('transp-contenido');
+  var rubOpts = GI_RUBROS.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+
+  var totUYU = 0, totUSD = 0;
+  rows.forEach(function(r){ if (r.moneda === 'USD') totUSD += r.monto; else totUYU += r.monto; });
+
+  var porRubro = {};
+  rows.forEach(function(r){
+    var k = r.rubro || 'Otro';
+    if (!porRubro[k]) porRubro[k] = {rubro:k, costo:0};
+    porRubro[k].costo += toUYU(r.monto, r.moneda);
+  });
+  var rubroArr = Object.keys(porRubro).map(function(k){ return porRubro[k]; }).sort(function(a,b){ return b.costo - a.costo; });
+  var maxRubro = rubroArr.length ? rubroArr[0].costo || 1 : 1;
+  var rubroHtml = rubroArr.map(function(x){
+    var pct = Math.round(x.costo / maxRubro * 100);
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:5px 8px;font-size:12px">'+x.rubro+'</td>'
+      + '<td style="padding:5px 8px;min-width:120px"><div style="display:flex;align-items:center;gap:6px">'
+      + '<div style="flex:1;height:12px;background:var(--gray);border-radius:2px;overflow:hidden">'
+      + '<div style="width:'+pct+'%;height:100%;background:#1E6B2E;border-radius:2px"></div></div>'
+      + '<span style="font-size:11px;font-weight:600;min-width:72px;text-align:right">'+fmt$(x.costo)+'</span>'
+      + '</div></td></tr>';
+  }).join('');
+
+  var filasHtml = rows.slice().sort(function(a,b){ return (b.fecha||'').localeCompare(a.fecha||''); }).map(function(r){
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:6px 8px;font-size:12px">'+(r.fecha||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px">'+(r.rubro||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px">'+(r.detalle||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px">'+(r.proveedor||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtMon(r.monto, r.moneda)+'</td>'
+      + '<td style="padding:6px 8px;font-size:12px">'+(r.factura||'—')+'</td>'
+      + '<td style="padding:6px 8px;font-size:11px;color:var(--muted)">'+(r.observaciones||'—')+'</td>'
+      + '</tr>';
+  }).join('');
+
+  cont.innerHTML =
+    '<div style="max-width:560px;margin:0 auto 24px;padding:24px 0 0">' +
+    '<h3 style="margin:0 0 20px;font-size:18px;color:var(--text)">Registrar Gasto de Infraestructura</h3>' +
+    '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:16px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">FECHA</label>' +
+    '<input type="date" id="gi-fecha" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box" value="'+new Date().toISOString().substring(0,10)+'"></div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">RUBRO</label>' +
+    '<select id="gi-rubro" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box">'+rubOpts+'</select></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONTO</label>' +
+    '<input type="number" id="gi-monto" placeholder="0" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">MONEDA</label>' +
+    '<select id="gi-moneda" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"><option value="UYU">UYU</option><option value="USD">USD</option></select></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">DETALLE</label>' +
+    '<input type="text" id="gi-detalle" placeholder="Ej: Alquiler depósito octubre" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>' +
+    '<input type="text" id="gi-proveedor" placeholder="Ej: UTE, Inmobiliaria X" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">N° FACTURA</label>' +
+    '<input type="text" id="gi-factura" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">OBSERVACIONES</label>' +
+    '<input type="text" id="gi-observaciones" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>' +
+    '<button onclick="guardarGastoInfraestructura()" style="padding:12px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px">Guardar</button>' +
+    '<div id="gi-msg" style="text-align:center;font-size:13px;min-height:20px"></div>' +
+    '</div></div>' +
+
+    '<div class="kpibig-grid" style="margin-bottom:16px">' +
+    kpiBig('Total UYU', fmt$(totUYU), '#a32d2d', '#fdecea') +
+    kpiBig('Total USD', 'U$S ' + totUSD.toLocaleString('es-UY',{minimumFractionDigits:0,maximumFractionDigits:0}), '#185fa5', '#eaf2fb') +
+    kpiBig('Registros', fmtN(rows.length,0), '#1a1a18', '#f5f5f3') +
+    '</div>' +
+
+    (rubroArr.length ? '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+      + '<h4 style="margin:0 0 10px;font-size:13px">🗂️ Por rubro (convertido a UYU solo para el gráfico)</h4>'
+      + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>' + rubroHtml + '</tbody></table></div></div>' : '') +
+
+    '<div class="chart-wrap" style="padding:16px 18px">' +
+    '<h4 style="margin:0 0 10px;font-size:13px">📋 Detalle</h4>' +
+    (rows.length
+      ? '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+        + '<thead><tr style="background:var(--gray)">'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Fecha</th>'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Rubro</th>'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Detalle</th>'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Proveedor</th>'
+        + '<th style="padding:5px 8px;text-align:right;font-size:11px">Monto</th>'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Factura</th>'
+        + '<th style="padding:5px 8px;text-align:left;font-size:11px">Observaciones</th>'
+        + '</tr></thead><tbody>' + filasHtml + '</tbody></table></div>'
+      : '<div style="padding:20px;text-align:center;color:var(--muted)">Todavía no hay gastos de infraestructura cargados.</div>') +
+    '</div>';
+}
+
+function guardarGastoInfraestructura() {
+  var fecha         = document.getElementById('gi-fecha').value;
+  var rubro         = document.getElementById('gi-rubro').value;
+  var monto         = document.getElementById('gi-monto').value;
+  var moneda        = document.getElementById('gi-moneda').value;
+  var detalle       = document.getElementById('gi-detalle').value;
+  var proveedor     = document.getElementById('gi-proveedor').value;
+  var factura       = document.getElementById('gi-factura').value;
+  var observaciones = document.getElementById('gi-observaciones').value;
+  var msg           = document.getElementById('gi-msg');
+
+  if (!fecha || !rubro || !monto) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá fecha, rubro y monto.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'saveGastoInfraestructura',
+    fecha: fecha, rubro: rubro, monto: monto, moneda: moneda,
+    detalle: detalle, proveedor: proveedor, factura: factura, observaciones: observaciones
+  }, function(resp) {
+    if (resp && resp.ok) {
+      msg.style.color = '#1E6B2E';
+      msg.textContent = '✓ Guardado correctamente';
+      loadTransporte('infraestructura');
     } else {
       msg.style.color = '#c0392b';
       msg.textContent = 'Error al guardar. Intentá de nuevo.';
