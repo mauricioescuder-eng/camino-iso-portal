@@ -5236,18 +5236,19 @@ function renderTranspTabla(data, tipo) {
           + '</tr></thead><tbody>' + _repRows + '</tbody></table></div></div>';
       }
 
-      // ── Repuestos por camión (qué categoría/repuesto consumió cada equipo) ──
+      // ── Repuestos por camión (qué artículo consumió cada equipo) ──
       var _repXCamion = {};
       rows.forEach(function(r){
         var mat = r.matricula || 'Sin matrícula';
         (r.repuestos || []).forEach(function(rep){
-          if (!_repXCamion[mat]) _repXCamion[mat] = {matricula: mat, cantidad: 0, costo: 0, categorias: {}};
+          if (!_repXCamion[mat]) _repXCamion[mat] = {matricula: mat, cantidad: 0, costo: 0, articulos: {}};
           _repXCamion[mat].cantidad += rep.cantidad;
           _repXCamion[mat].costo    += toUYU(rep.costo_total, r['moneda']);
-          var cat = rep.categoria || 'Otro';
-          if (!_repXCamion[mat].categorias[cat]) _repXCamion[mat].categorias[cat] = {categoria: cat, cantidad: 0, costo: 0};
-          _repXCamion[mat].categorias[cat].cantidad += rep.cantidad;
-          _repXCamion[mat].categorias[cat].costo    += toUYU(rep.costo_total, r['moneda']);
+          var nombre = rep.nombre || 'Otro';
+          var artKey = (rep.categoria || 'Otro') + ' | ' + nombre;
+          if (!_repXCamion[mat].articulos[artKey]) _repXCamion[mat].articulos[artKey] = {nombre: nombre, categoria: rep.categoria || 'Otro', cantidad: 0, costo: 0};
+          _repXCamion[mat].articulos[artKey].cantidad += rep.cantidad;
+          _repXCamion[mat].articulos[artKey].costo    += toUYU(rep.costo_total, r['moneda']);
         });
       });
       var _repCamionArr = Object.keys(_repXCamion).map(function(k){ return _repXCamion[k]; })
@@ -5256,23 +5257,25 @@ function renderTranspTabla(data, tipo) {
       if (_repCamionArr.length > 0) {
         var _rpcRows = _repCamionArr.map(function(c, _rpcIdx){
           var slug = 'rpc-det-' + _rpcIdx;
-          var catArr = Object.keys(c.categorias).map(function(k){ return c.categorias[k]; })
+          var artArr = Object.keys(c.articulos).map(function(k){ return c.articulos[k]; })
                          .sort(function(a,b){ return b.costo - a.costo; });
           var detTable = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
             + '<thead><tr style="background:var(--border)">'
-            + '<th style="padding:4px 8px;text-align:left">Categoría / Área</th>'
+            + '<th style="padding:4px 8px;text-align:left">Repuesto</th>'
+            + '<th style="padding:4px 8px;text-align:left">Categoría</th>'
             + '<th style="padding:4px 8px;text-align:right">Cantidad</th>'
             + '<th style="padding:4px 8px;text-align:right">Costo UYU</th>'
             + '</tr></thead><tbody>'
-            + catArr.map(function(x){
+            + artArr.map(function(x){
                 return '<tr style="border-bottom:1px solid var(--border)">'
-                  + '<td style="padding:4px 8px">'+x.categoria+'</td>'
+                  + '<td style="padding:4px 8px">'+x.nombre+'</td>'
+                  + '<td style="padding:4px 8px;color:var(--muted)">'+x.categoria+'</td>'
                   + '<td style="padding:4px 8px;text-align:right">'+fmtN(x.cantidad,0)+'</td>'
                   + '<td style="padding:4px 8px;text-align:right;font-weight:600">'+fmt$(x.costo)+'</td>'
                   + '</tr>';
               }).join('')
             + '</tbody></table>';
-          return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="toggleRepCamion(\''+slug+'\')" title="Click para ver el detalle por categoría">'
+          return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="toggleRepCamion(\''+slug+'\')" title="Click para ver qué repuestos usó">'
             + '<td style="padding:6px 8px;font-size:12px;font-weight:700">'+c.matricula+'</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmtN(c.cantidad,0)+'</td>'
             + '<td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:600">'+fmt$(c.costo)+'</td>'
@@ -5281,7 +5284,7 @@ function renderTranspTabla(data, tipo) {
         }).join('');
         _repPorCamionHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<h4 style="margin:0 0 10px;font-size:13px">🚛 Repuestos por camión</h4>'
-          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tocá un camión para ver qué categorías de repuesto consumió.</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Tocá un camión para ver qué repuestos usó.</div>'
           + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
           + '<thead><tr style="background:var(--gray)">'
           + '<th style="padding:5px 8px;text-align:left;font-size:11px">Camión</th>'
