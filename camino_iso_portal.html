@@ -376,6 +376,11 @@ tr:hover td{background:#faf9f6}
             <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span>Ver en:</span>
+            <select id="transp-vista-moneda" onchange="setVistaMonedaDashboard(this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600">
+              <option value="USD">US$</option>
+              <option value="UYU">$U</option>
+            </select>
             <span>💱 USD =</span>
             <input id="transp-tc" type="number" value="1400" min="1" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px" onchange="if(_transpVista==='kpis')loadTransporte('kpis')">
             <span>UYU</span>
@@ -2112,6 +2117,14 @@ function refrescarTransporte() {
   callTranspAPI({action:'clearCache'}, function(){ loadTransporte(_transpVista); }, function(){ loadTransporte(_transpVista); });
 }
 
+// Vista de moneda del Dashboard principal — por defecto USD porque los
+// ingresos de viajes se cargan en dólares; el margen y los costos se
+// recalculan en la moneda elegida sin tocar los datos originales.
+function setVistaMonedaDashboard(v) {
+  window._transpVistaMoneda = v;
+  if (_transpVista === 'kpis') loadTransporte('kpis');
+}
+
 function loadTransporte(vista, btn) {
   _transpVista = vista || 'kpis';
   if (btn) {
@@ -3650,6 +3663,26 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
+  // ── Vista de moneda del Dashboard (US$ por defecto) — se redefinen acá,
+  // SOLO dentro de esta función, toUYU/fmt$/fmtMillones (variables/funciones
+  // locales con el mismo nombre que las globales le ganan a esas en todo el
+  // cuerpo de la función por el scoping de JS), así el resto del código de
+  // abajo no cambia ni una línea y automáticamente calcula y muestra todo
+  // en la moneda elegida sin duplicar lógica.
+  var _vistaMon = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
+  var _pfx = _vistaMon === 'USD' ? 'US$ ' : '$U ';
+  var toUYU = (_vistaMon === 'USD') ? toUSD : window.toUYU;
+  function fmt$(n) {
+    var v = parseFloat(n) || 0;
+    return _pfx + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
+  }
+  function fmtMillones(n) {
+    var v = parseFloat(n) || 0;
+    if (Math.abs(v) >= 1000000) return _pfx + (v/1000000).toFixed(2) + ' mill.';
+    if (Math.abs(v) >= 1000)    return _pfx + (v/1000).toFixed(1) + ' mil';
+    return _pfx + v.toLocaleString('es-UY',{maximumFractionDigits:0});
+  }
+
   // ── COSTOS FIJOS desde hoja Costos_Fijos (registros reales) ──
   var flotaArr = data.flotaArr || window._transpFlotaArr || [];
   var fijosArr = data.fijosArr || window._transpFijosArr || [];
@@ -4196,6 +4229,23 @@ function openDrillThrough(type, filterKey, filterVal) {
   var combArr = window._transpCombArr    || [];
   var mantArr = window._transpMantArr    || [];
   var fijosArr= window._transpFijosArr   || [];
+
+  // Mismo criterio de vista de moneda que el Dashboard principal, para que
+  // el detalle que abre este panel (drill-through) no muestre otra moneda
+  // distinta a la de las tarjetas que lo abrieron.
+  var _vistaMon = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
+  var _pfx = _vistaMon === 'USD' ? 'US$ ' : '$U ';
+  var toUYU = (_vistaMon === 'USD') ? toUSD : window.toUYU;
+  function fmt$(n) {
+    var v = parseFloat(n) || 0;
+    return _pfx + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
+  }
+  function fmtMillones(n) {
+    var v = parseFloat(n) || 0;
+    if (Math.abs(v) >= 1000000) return _pfx + (v/1000000).toFixed(2) + ' mill.';
+    if (Math.abs(v) >= 1000)    return _pfx + (v/1000).toFixed(1) + ' mil';
+    return _pfx + v.toLocaleString('es-UY',{maximumFractionDigits:0});
+  }
 
   // mesKey = 'YYYY-MM' para filtrar por mes (viene de las barras del gráfico)
   var mesKey = filterKey || null;
