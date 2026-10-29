@@ -5214,15 +5214,15 @@ function renderTranspTabla(data, tipo) {
             + '<td style="padding:6px 8px;font-size:12px;text-align:right">'+fmt$(x.costo)+'</td>'
             + '</tr>';
         }
-        var _repRows = _repArr.slice(0, 10).map(_repRow).join('');
-        var _repResto = _repArr.slice(10);
+        var _repRows = _repArr.slice(0, 5).map(_repRow).join('');
+        var _repResto = _repArr.slice(5);
         if (_repResto.length > 0) {
           _repRows += '<tr id="rep-mas-usados-resto" style="display:none">'
             + '<td colspan="3" style="padding:0">'
             + '<table style="width:100%;border-collapse:collapse"><tbody>' + _repResto.map(_repRow).join('') + '</tbody></table>'
             + '</td></tr>'
             + '<tr><td colspan="3" style="padding:6px 8px;text-align:center">'
-            + '<a href="javascript:void(0)" onclick="toggleMantGrupo(\'rep-mas-usados-resto\')" style="color:#185fa5;text-decoration:none;font-size:12px;font-weight:600">Ver los '+_repResto.length+' restantes ▾</a>'
+            + '<a href="javascript:void(0)" onclick="toggleMantGrupo(\'rep-mas-usados-resto\')" style="color:#185fa5;text-decoration:none;font-size:12px;font-weight:600">Mostrar +</a>'
             + '</td></tr>';
         }
         _repuestosAnalisisHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
