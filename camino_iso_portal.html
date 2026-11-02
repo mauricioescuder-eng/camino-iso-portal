@@ -2083,6 +2083,22 @@ function toUSD(n, moneda) {
   return tc > 0 ? v / tc : 0;
 }
 
+// Ingreso de un viaje — usa el "ingreso" que ya manda calculado el
+// backend (toneladas×tarifa en un viaje normal, tarifa×cantidad de
+// viajes en uno de feedlot) en vez de recalcularlo acá, porque son dos
+// fórmulas distintas según el tipo de trabajo. Si una fila vieja no
+// trae ese campo (API desactualizada), cae al cálculo de siempre.
+function ingresoViaje(v) {
+  return (v['ingreso'] !== undefined && v['ingreso'] !== null)
+    ? (parseFloat(v['ingreso']) || 0)
+    : (parseFloat(v['toneladas'])||0) * (parseFloat(v['tarifa'])||0);
+}
+// Cuántos viajes reales representa una fila — 1 en un viaje normal,
+// o la "Cantidad de viajes" cargada cuando es una fila de feedlot.
+function nViajesDe(v) {
+  return parseFloat(v['n_viajes']) || 1;
+}
+
 function fmtMon(n, moneda, dec) {
   var v = parseFloat(n) || 0;
   if (moneda && moneda.toString().toUpperCase() === 'USD')
@@ -3732,7 +3748,7 @@ function renderTranspKPIs(data, viajes) {
   // DAX: Toneladas Totales = SUM(Operaciones[Toneladas])
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
-  var totalIng = viajes.reduce(function(s,v){ return s+toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']); },0);
+  var totalIng = viajes.reduce(function(s,v){ return s+toUYU(ingresoViaje(v), v['moneda']); },0);
   // DAX: Costo total = Variable + Cuasi variable + Fijo (ya incluidos en data.costoTotal)
   var costosPorMat = data.costosPorMatricula || {};
   var totalCosto = parseFloat(data.costoTotal) || 0;
@@ -3760,7 +3776,7 @@ function renderTranspKPIs(data, viajes) {
   var colM  = pct >= 20 ? '#0f6e56' : pct >= 10 ? '#b97c0a' : '#a32d2d';
   var kmObj = Math.max(totalKm * 1.25, 1000);
   // Promedios
-  var nViajes = viajes.length;
+  var nViajes = viajes.reduce(function(s,v){ return s+nViajesDe(v); },0);
   var avgTonViaje = nViajes > 0 ? totalTon / nViajes : 0;
   var avgIngViaje = nViajes > 0 ? totalIng / nViajes : 0;
   var avgIngTon   = totalTon > 0 ? totalIng / totalTon : 0;
@@ -3795,10 +3811,10 @@ function renderTranspKPIs(data, viajes) {
   viajes.forEach(function(v) {
     var m = v['matricula'] || 'Sin matrícula';
     if (!byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0, _diasSet:{}};
-    byTruck[m].viajes++;
+    byTruck[m].viajes  += nViajesDe(v);
     byTruck[m].km       += parseFloat(v['km recorridos'])||0;
     byTruck[m].ton      += parseFloat(v['toneladas'])||0;
-    byTruck[m].ingresos += toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']);
+    byTruck[m].ingresos += toUYU(ingresoViaje(v), v['moneda']);
     var fvDia = String(v['fecha viaje']||v['timestamp']||'').slice(0,10);
     if (fvDia) byTruck[m]._diasSet[fvDia] = true;
   });
@@ -3875,9 +3891,9 @@ function renderTranspKPIs(data, viajes) {
       label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
     }
     if (!meses[key]) meses[key] = {label:label, ing:0, ton:0, viajes:0};
-    meses[key].ing    += toUYU((parseFloat(v['toneladas'])||0)*(parseFloat(v['tarifa'])||0), v['moneda']);
+    meses[key].ing    += toUYU(ingresoViaje(v), v['moneda']);
     meses[key].ton    += parseFloat(v['toneladas'])||0;
-    meses[key].viajes++;
+    meses[key].viajes += nViajesDe(v);
   });
   var mesesArr = Object.keys(meses).sort().map(function(k){ return meses[k]; });
   // DAX: Variación Toneladas = (Ton mes actual - Ton mes anterior) / Ton mes anterior
@@ -4146,7 +4162,7 @@ function renderTranspKPIs(data, viajes) {
   viajes.forEach(function(v) {
     var d = v['destino']; if (!d) return;
     if (!porDestino[d]) porDestino[d] = {destino:d, viajes:0, ton:0};
-    porDestino[d].viajes++;
+    porDestino[d].viajes += nViajesDe(v);
     porDestino[d].ton += parseFloat(v['toneladas'])||0;
   });
   var destArr = Object.values(porDestino).sort(function(a,b){ return b.viajes-a.viajes; });
@@ -4824,7 +4840,7 @@ function renderTranspTabla(data, tipo) {
       rows.forEach(function(r){
         totKm   += parseFloat(r['km recorridos'])||0;
         totTon  += parseFloat(r['toneladas'])||0;
-        totIng  += toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']);
+        totIng  += toUYU(ingresoViaje(r), r['moneda']);
         totViat += toUYU(parseFloat(r['viaticos'])||0, r['moneda']);
         totPeaj += toUYU(parseFloat(r['peajes'])||0, r['moneda']);
       });
@@ -4892,13 +4908,17 @@ function renderTranspTabla(data, tipo) {
         + '</div>';
 
       // ── Control de Proceso ────────────────────────────────────────
-      // Calcular ingreso por viaje para cada registro (todos, incluidos tarifa=0)
+      // Calcular ingreso por viaje para cada registro (todos, incluidos tarifa=0).
+      // En una fila de feedlot "ingreso" es el total de varios viajes — se
+      // divide por la cantidad real para que el control de outliers compare
+      // ingreso de UN viaje contra ingreso de UN viaje, no un día entero
+      // contra un viaje suelto.
       var ingPorViaje = rows.map(function(r){
         return {
           fecha: r['fecha viaje'] || r['timestamp'] || '',
           mat:   r['matricula'] || '',
           dest:  r['destino'] || '',
-          ing:   toUYU((parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0), r['moneda']),
+          ing:   toUYU(ingresoViaje(r), r['moneda']) / nViajesDe(r),
           km:    parseFloat(r['km recorridos'])||0,
           ton:   parseFloat(r['toneladas'])||0
         };
@@ -5610,7 +5630,7 @@ function renderTranspTabla(data, tipo) {
           html += '<td style="padding:6px 8px">' + badgeMon(monedaMostrada) + '</td>';
           return;
         }
-        if (c === 'ingreso') v = (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0);
+        if (c === 'ingreso') v = ingresoViaje(r);
         if (v === null || v === undefined || v === '') v = '—';
         else if (c === 'precio litro' && typeof v === 'number') v = fmtMon(v, r['moneda'], 1);
         else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) {
@@ -5624,7 +5644,7 @@ function renderTranspTabla(data, tipo) {
         html += '<td style="padding:6px 8px">' + v + '</td>';
       });
       if (showARS) {
-        var _baseVal = tipo === 'viajes' ? (parseFloat(r['toneladas'])||0)*(parseFloat(r['tarifa'])||0) : r['costo'];
+        var _baseVal = tipo === 'viajes' ? ingresoViaje(r) : r['costo'];
         var arsVal = _monedaActual === 'USD' ? toUSD(_baseVal, r['moneda']) : toUYU(_baseVal, r['moneda']);
         var arsTxt = _monedaActual === 'USD' ? ('U$S ' + arsVal.toLocaleString('es-UY',{minimumFractionDigits:2,maximumFractionDigits:2})) : fmt$(arsVal);
         html += '<td style="padding:6px 8px;text-align:right;font-weight:600;color:#0f6e56">' + arsTxt + '</td>';
