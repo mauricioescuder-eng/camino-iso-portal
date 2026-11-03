@@ -3851,8 +3851,13 @@ function renderTranspKPIs(data, viajes) {
       .filter(function(d){ return !isNaN(d.getTime()); });
     if (fechasTodas.length) {
       var minD = new Date(Math.min.apply(null, fechasTodas));
-      var maxD = new Date(Math.max.apply(null, fechasTodas));
-      diasPeriodo = Math.round((maxD - minD) / 86400000) + 1;
+      // Hasta HOY, no hasta el último viaje cargado — si se usara el
+      // último viaje como borde de la ventana, ese viaje siempre cae
+      // justo en el límite y el % de días activos queda inflado
+      // artificialmente (ej. 2 viajes en una ventana de 5 días = 40%,
+      // cuando en realidad pasaron varias semanas desde el primero).
+      var hoyP = new Date(); hoyP.setHours(0,0,0,0);
+      diasPeriodo = Math.max(1, Math.round((hoyP - minD) / 86400000) + 1);
       periodoDiasLabel = 'todo el período registrado · ' + diasPeriodo + ' días';
     }
   }
