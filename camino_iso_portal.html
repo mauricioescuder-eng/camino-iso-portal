@@ -2988,7 +2988,7 @@ function renderFormCostosFijos() {
 
   // Rubros FIJOS (sueldo base, cargas sociales, costos estructurales del camión)
   // Rubros VARIABLE: Comisión por viaje → clasificado como variable al guardar
-  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Comisión por viaje','Seguro','Patente','VTV','Amortización','Otro'];
+  var rubros = ['Sueldo','Aguinaldo','Horas extra','Vacaciones','Liquidación final','Aportes personales','Aportes patronales','Comisión por viaje','Seguro','Patente','ITV','GPS','PNC MTOP','Amortización','Otro'];
   var rubrosVariable = ['Comisión por viaje'];
   var matOpts = matriculas.length
     ? matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('')
@@ -3921,7 +3921,7 @@ function renderTranspKPIs(data, viajes) {
   //               Viáticos (viajes), Peajes (viajes), Comisión por viaje (Costos_Fijos.clasificacion='variable')
   // Cuasi var.:   Repuestos, Mecánicos, Lubricación, Motor, Rodado, Suspensión,
   //               Hidráulicos, Refrigeración, Aire acondicionado, Insumos, Taller
-  // Fijo:         Sueldo base, Aguinaldo, Vacaciones, Aportes, Seguros, Patentes, VTV, Amortización
+  // Fijo:         Sueldo base, Aguinaldo, Vacaciones, Aportes, Seguros, Patentes, ITV, GPS, PNC MTOP, Amortización
   //               → Costos_Fijos con clasificacion='fijo' (o sin campo = retrocompatible como fijo)
   var _AREAS_VARIABLE = [
     'neumático', 'neumatico', 'cubiertas', 'gomería', 'gomeria',
@@ -4041,7 +4041,7 @@ function renderTranspKPIs(data, viajes) {
   eHtml += '<div onclick="openDrillThrough(\'fijo\')" style="cursor:pointer;padding:10px 12px;border-radius:8px;background:#f0f7f0;border:1px solid #1E6B2E">'
     +'<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">● FIJO</div>'
     +'<div style="font-size:16px;font-weight:800;color:#333">'+fmtMillones(eFijo)+'</div>'
-    +'<div style="font-size:10px;color:var(--muted)">Sueldos + Seguros + VTV</div></div>';
+    +'<div style="font-size:10px;color:var(--muted)">Sueldos + Seguros + ITV</div></div>';
   eHtml += '</div>';
   // Punto de equilibrio + alerta
   // Punto de equilibrio en $ (exacto, independiente de tarifa por viaje)
@@ -4516,7 +4516,7 @@ function svgBarrasApiladas(gastosArr) {
       svg += '<rect x="'+x2+'" y="'+(yBase-hQ)+'" width="'+BAR_W+'" height="'+hQ+'" fill="#378add" rx="2"'+ocQ+'><title>Cuasi var. '+m.label+': '+fmtMillones(m.cuasivariable)+' — clic para ver detalle</title></rect>';
       svg += '<text x="'+(x2+BAR_W/2)+'" y="'+(yBase-hQ-2)+'" text-anchor="middle" font-size="6" fill="#185fa5" pointer-events="none">'+fmtMillones(m.cuasivariable)+'</text>';
     }
-    // Fijo (sueldos, seguros, patentes, VTV, amortización)
+    // Fijo (sueldos, seguros, patentes, ITV, amortización)
     if (hF > 0) {
       svg += '<rect x="'+x3+'" y="'+(yBase-hF)+'" width="'+BAR_W+'" height="'+hF+'" fill="#1E6B2E" rx="2"'+ocF+'><title>Fijo '+m.label+': '+fmtMillones(m.fijo)+' — clic para ver detalle</title></rect>';
       svg += '<text x="'+(x3+BAR_W/2)+'" y="'+(yBase-hF-2)+'" text-anchor="middle" font-size="6" fill="#0d4018" pointer-events="none">'+fmtMillones(m.fijo)+'</text>';
@@ -4897,7 +4897,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Costo total / km',      fmt$(_cKm),      'Variable+Cuasi+Fijo',    '#c0392b')
         + kpi('Costo variable / km',   fmt$(_cVarKm),   'Comb+Viát+Peaj+Comis',  '#F07820')
         + kpi('Costo cuasi-var / km',  fmt$(_cCuasiKm), 'Repuestos+Mecánicos',    '#378add')
-        + kpi('Costo fijo / km',       fmt$(_cFijoKm),  'Sueldos+Seguros+VTV',    '#1E6B2E')
+        + kpi('Costo fijo / km',       fmt$(_cFijoKm),  'Sueldos+Seguros+ITV',    '#1E6B2E')
         + '</div>'
         + '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">'
         + kpi('Km promedio / viaje',   fmtN(_avgKmViaje,1)+' km', rows.length+' viaje'+(rows.length===1?'':'s'), '#378add')
