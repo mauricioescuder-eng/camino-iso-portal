@@ -3537,26 +3537,35 @@ async function exportarViajesExcel() {
   wb.created = new Date();
   var ws = wb.addWorksheet('Viajes');
 
-  // Reutiliza el mismo logo en base64 que ya tiene la página (apple-touch-icon)
-  // en vez de duplicar el string acá.
-  var logoLink = document.querySelector('link[rel="apple-touch-icon"]');
-  if (logoLink) {
-    var logoB64 = logoLink.href.split(',')[1];
-    var imgId = wb.addImage({ base64: logoB64, extension: 'png' });
-    ws.addImage(imgId, { tl: {col:0, row:0}, ext: {width:64, height:64} });
-  }
+  // Logo real de CAMINO Gestión & Datos (archivo propio del portal, no el
+  // ícono de la pestaña — ese dice "Camino ISO" y tiene fondo verde sólido).
+  try {
+    var logoResp = await fetch('./logo-camino-gd.jpg');
+    var logoBlob = await logoResp.blob();
+    var logoB64 = await new Promise(function(resolve, reject){
+      var fr = new FileReader();
+      fr.onload = function(){ resolve(fr.result.split(',')[1]); };
+      fr.onerror = reject;
+      fr.readAsDataURL(logoBlob);
+    });
+    var imgId = wb.addImage({ base64: logoB64, extension: 'jpeg' });
+    // Imagen panorámica (1536x1024, ratio 1.5:1) — se achica manteniendo esa proporción.
+    ws.addImage(imgId, { tl: {col:0, row:0}, ext: {width:150, height:100} });
+  } catch(e) { /* si falla la carga del logo, sigue igual sin bloquear la exportación */ }
 
-  ws.mergeCells('C1:I1');
-  ws.getCell('C1').value = 'Transporte Jorajuria — Detalle de Viajes';
-  ws.getCell('C1').font = { bold:true, size:16, color:{argb:'FF1E6B2E'} };
-  ws.mergeCells('C2:I2');
-  ws.getCell('C2').value = 'Exportado el ' + new Date().toLocaleDateString('es-UY') + ' — CAMINO Gestión & Datos';
-  ws.getCell('C2').font = { italic:true, size:10, color:{argb:'FF888780'} };
-  ws.getRow(1).height = 26;
-  ws.getRow(2).height = 16;
-  ws.getRow(3).height = 10;
+  ws.mergeCells('D2:J2');
+  ws.getCell('D2').value = 'Transporte Jorajuria — Detalle de Viajes';
+  ws.getCell('D2').font = { bold:true, size:16, color:{argb:'FF1E6B2E'} };
+  ws.mergeCells('D3:J3');
+  ws.getCell('D3').value = 'Exportado el ' + new Date().toLocaleDateString('es-UY') + ' — CAMINO Gestión & Datos';
+  ws.getCell('D3').font = { italic:true, size:10, color:{argb:'FF888780'} };
+  ws.getRow(1).height = 20;
+  ws.getRow(2).height = 22;
+  ws.getRow(3).height = 18;
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 10;
 
-  var headerRowIdx = 4;
+  var headerRowIdx = 6;
   var headers = ['Fecha','Matrícula','Chofer','Origen','Destino','Carga','Toneladas','Km','Peajes','Viáticos','Tarifa','Moneda','Ingreso','Equiv. $U','Remito'];
   var headerRow = ws.getRow(headerRowIdx);
   headerRow.values = headers;
