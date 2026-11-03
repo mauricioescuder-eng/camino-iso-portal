@@ -4894,7 +4894,14 @@ function renderTranspTabla(data, tipo) {
         _diasActivos = Math.max(Math.round((Math.max.apply(null, _fechasViajes) - Math.min.apply(null, _fechasViajes)) / 86400000) + 1, 1);
       }
       var _viajesPorCamionDia = (_numUnidadesV > 0 && _diasActivos > 0) ? rows.length / (_numUnidadesV * _diasActivos) : 0;
-      var _flotaTotalV = (window._transpFlotaArr || []).length;
+      // % Ocupación de flota se calcula solo sobre camiones (tracción
+      // propia) — un semirremolque/acoplado no "hace" un viaje por sí
+      // solo, así que no cuenta como unidad en el denominador.
+      var _flotaTotalV = (window._transpFlotaArr || []).filter(function(f){
+        var t = String(f['tipo']||'').trim().toLowerCase()
+          .replace(/[áàäâã]/g,'a').replace(/[íìïî]/g,'i');
+        return t.indexOf('cami') === 0;
+      }).length;
       var _ocupacionFlotaPct = _flotaTotalV > 0 ? (_numUnidadesV / _flotaTotalV * 100) : 0;
       indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:10px">'
         + kpi('Registros',    rows.length,          'viajes',                    '#185fa5')
