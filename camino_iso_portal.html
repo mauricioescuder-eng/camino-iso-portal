@@ -2174,19 +2174,26 @@ function loadTransporte(vista, btn) {
             var flotaArr = Array.isArray(flota) ? flota : [];
             callTranspAPI({action:'costosFijos'}, function(fijos) {
               var fijosArr = Array.isArray(fijos) ? fijos : [];
-              // Costos por matrícula: variable + cuasi-variable + fijo (para tabla por camión correcta)
+              // Costos por matrícula: variable + cuasi-variable + fijo (para tabla por camión correcta).
+              // Se convierte a la moneda de vista elegida (US$ por defecto) —
+              // antes el combustible se sumaba crudo (sin convertir) y
+              // mantenimientos/fijos se convertían siempre a $U sin importar
+              // el selector "Ver en", lo que mezclaba pesos y dólares en el
+              // mismo total.
+              var _vMonK = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
+              function _convVistaK(n, moneda) { return _vMonK === 'USD' ? toUSD(n, moneda) : toUYU(n, moneda); }
               var costosPorMat = {};
               combArr.forEach(function(c) {
                 var m = c['matricula'] || ''; if (!m) return;
-                costosPorMat[m] = (costosPorMat[m]||0) + (parseFloat(c['total'])||0);
+                costosPorMat[m] = (costosPorMat[m]||0) + _convVistaK(c['total'], 'UYU');
               });
               mantArr.forEach(function(m) {
                 var mat = m['matricula'] || ''; if (!mat) return;
-                costosPorMat[mat] = (costosPorMat[mat]||0) + toUYU(m['costo'], m['moneda']);
+                costosPorMat[mat] = (costosPorMat[mat]||0) + _convVistaK(m['costo'], m['moneda']);
               });
               fijosArr.forEach(function(f) {
                 var mat = f['matrícula'] || f['matricula'] || ''; if (!mat) return;
-                costosPorMat[mat] = (costosPorMat[mat]||0) + toUYU(f['monto'], f['moneda']);
+                costosPorMat[mat] = (costosPorMat[mat]||0) + _convVistaK(f['monto'], f['moneda']);
               });
               // costoTotal incluye todo: var + cuasi + fijo (ya sin doble conteo en renderTranspKPIs)
               var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
@@ -2894,19 +2901,22 @@ function aplicarFiltrosTransp() {
     return true;
   });
 
-  // Recalcular costosPorMatricula con los costos filtrados (comb + mant + fijos)
+  // Recalcular costosPorMatricula con los costos filtrados (comb + mant + fijos),
+  // en la moneda de vista elegida (mismo criterio que loadTransporte).
+  var _vMonF = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
+  function _convVistaF(n, moneda) { return _vMonF === 'USD' ? toUSD(n, moneda) : toUYU(n, moneda); }
   var costosPorMat = {};
   combFilt.forEach(function(c) {
     var m2 = c['matricula'] || ''; if (!m2) return;
-    costosPorMat[m2] = (costosPorMat[m2]||0) + (parseFloat(c['total'])||0);
+    costosPorMat[m2] = (costosPorMat[m2]||0) + _convVistaF(c['total'], 'UYU');
   });
   mantFilt.forEach(function(m) {
     var m2 = m['matricula'] || ''; if (!m2) return;
-    costosPorMat[m2] = (costosPorMat[m2]||0) + toUYU(m['costo'], m['moneda']);
+    costosPorMat[m2] = (costosPorMat[m2]||0) + _convVistaF(m['costo'], m['moneda']);
   });
   fijosArrFilt.forEach(function(f) {
     var m2 = f['matrícula'] || f['matricula'] || ''; if (!m2) return;
-    costosPorMat[m2] = (costosPorMat[m2]||0) + toUYU(f['monto'], f['moneda']);
+    costosPorMat[m2] = (costosPorMat[m2]||0) + _convVistaF(f['monto'], f['moneda']);
   });
   var costoTotal = Object.values(costosPorMat).reduce(function(s,v){ return s+v; }, 0);
 
@@ -3757,12 +3767,12 @@ function renderTranspKPIs(data, viajes) {
     var combArr0b = data.combArr || window._transpCombArr || [];
     var mantArr0b = data.mantArr || window._transpMantArr || [];
     var fijosArr0b = data.fijosArr || window._transpFijosArr || [];
-    combArr0b.forEach(function(c){ totalCosto += parseFloat(c['total'])||0; });
+    combArr0b.forEach(function(c){ totalCosto += toUYU(c['total'], 'UYU'); });
     mantArr0b.forEach(function(m){ totalCosto += toUYU(m['costo'], m['moneda']); });
     fijosArr0b.forEach(function(f){ totalCosto += toUYU(f['monto'], f['moneda']); });
     // Reconstruir costosPorMat también
     if (!Object.keys(costosPorMat).length) {
-      combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+(parseFloat(c['total'])||0); });
+      combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['total'], 'UYU'); });
       mantArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['costo'], c['moneda']); });
       fijosArr0b.forEach(function(c){ var m=c['matrícula']||c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['monto'], c['moneda']); });
     }
@@ -3949,7 +3959,7 @@ function renderTranspKPIs(data, viajes) {
   combArr.forEach(function(c) {
     var mk = getMesKey(c['fecha factura']||c['timestamp']); if (!mk) return;
     if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
-    gastosM[mk.key].variable += parseFloat(c['total'])||0;
+    gastosM[mk.key].variable += toUYU(c['total'], 'UYU');
   });
   // Mantenimientos → Variable o Cuasi variable según área
   mantArr.forEach(function(m) {
@@ -4000,7 +4010,7 @@ function renderTranspKPIs(data, viajes) {
   // ── Estructura de costos ──────────────────────────────────────
   var combArrE = data.combArr || window._transpCombArr || [];
   var mantArrE = data.mantArr || window._transpMantArr || [];
-  var eVar = combArrE.reduce(function(s,c){return s+(parseFloat(c['total'])||0);},0);
+  var eVar = combArrE.reduce(function(s,c){return s+toUYU(c['total'], 'UYU');},0);
   mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='variable') eVar+=toUYU(m['costo'], m['moneda']); });
   // Viáticos y peajes de viajes → Variable
   viajes.forEach(function(v){ eVar += toUYU(parseFloat(v['viaticos'])||0, v['moneda']); });
@@ -4285,7 +4295,7 @@ function openDrillThrough(type, filterKey, filterVal) {
     cols  = ['Fecha','Matrícula','Proveedor','Litros','$/L','Total'];
     rows  = data.map(function(c){ return [
       c['fecha factura']||c['timestamp']||'', c['matricula']||'', c['proveedor']||'',
-      fmtN(c['litros'],2) + ' L', fmt$(c['precio litro']), fmt$(c['total'])
+      fmtN(c['litros'],2) + ' L', fmt$(c['precio litro']), fmt$(toUYU(c['total'], 'UYU'))
     ]; });
 
   } else if (type === 'variable') {
@@ -4293,7 +4303,7 @@ function openDrillThrough(type, filterKey, filterVal) {
     function _dtEsVarV(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rvCFv.indexOf(rb)>=0; }
     var allCosts = [];
     combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
-      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),monto:parseFloat(c['total'])||0}); });
+      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),monto:toUYU(c['total'], 'UYU')}); });
     mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']) && tipoMant(m['area'])==='variable'; })
       .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),monto:toUYU(m['costo'], m['moneda'])}); });
     // Viáticos y peajes de viajes
@@ -4337,7 +4347,7 @@ function openDrillThrough(type, filterKey, filterVal) {
     function _dtEsVar(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rvCF2.indexOf(rb)>=0; }
     var allCosts = [];
     combArr.filter(function(c){ return inMes(c['fecha factura']||c['timestamp']); })
-      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),tipo:'Variable',monto:parseFloat(c['total'])||0}); });
+      .forEach(function(c){ allCosts.push({fecha:c['fecha factura']||c['timestamp']||'',mat:c['matricula']||'',desc:'Combustible - '+(c['proveedor']||''),tipo:'Variable',monto:toUYU(c['total'], 'UYU')}); });
     mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']); })
       .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:toUYU(m['costo'], m['moneda'])}); });
     fijosArr.filter(function(f){ return inMes(f['fecha']); })
