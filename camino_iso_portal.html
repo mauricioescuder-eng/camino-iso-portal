@@ -4548,6 +4548,14 @@ function svgDonut(areas) {
 
 function svgDonutTipo(tipoArr) {
   if (!tipoArr || tipoArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de viajes</div>';
+  // El donut se arma pesando por Toneladas — si los viajes cargados no
+  // tienen Toneladas (0), no hay nada que dibujar aunque sí haya
+  // viajes. Antes esto quedaba como un círculo vacío sin ninguna
+  // explicación; ahora se avisa qué falta.
+  var totalTonTipo = tipoArr.reduce(function(s,t){ return s+(parseFloat(t.ton)||0); },0);
+  if (totalTonTipo <= 0) {
+    return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Hay viajes cargados, pero sin Toneladas — completá ese campo para ver el gráfico.</div>';
+  }
   var TIPO_COLORS = {
     'Soja':                   '#D4AC0D',
     'Maíz':                   '#F5A623',
