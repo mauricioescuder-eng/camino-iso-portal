@@ -4247,6 +4247,8 @@ function renderTranspKPIs(data, viajes) {
       + '<div style="display:flex;gap:6px">'
       + '<button class="fb'+(_transpOrdenCamiones==='ingresos'?' active':'')+'" onclick="cambiarOrdenCamiones(\'ingresos\')">Ordenar por ingresos</button>'
       + '<button class="fb'+(_transpOrdenCamiones==='margen'?' active':'')+'" onclick="cambiarOrdenCamiones(\'margen\')">🏆 Ordenar por rentabilidad</button>'
+      + '<button class="fb'+(_transpOrdenCamiones==='costokm'?' active':'')+'" onclick="cambiarOrdenCamiones(\'costokm\')">Ordenar por $/km</button>'
+      + '<button class="fb'+(_transpOrdenCamiones==='diasactivos'?' active':'')+'" onclick="cambiarOrdenCamiones(\'diasactivos\')">Ordenar por % días activos</button>'
       + '</div></div>';
     if (!checkOk) html += '<div style="color:#b97c0a;font-size:11px;margin-bottom:8px">⚠ Control: suma camiones ≠ total global (revisar datos)</div>';
     if (periodoDiasLabel) html += '<div style="color:var(--muted);font-size:11px;margin-bottom:8px">% de días activos calculado sobre ' + periodoDiasLabel + '</div>';
@@ -4255,6 +4257,10 @@ function renderTranspKPIs(data, viajes) {
       + '</tr></thead><tbody>';
     var camionesOrden = _transpOrdenCamiones === 'margen'
       ? camiones.sort(function(a,b){ return b.pct_margen - a.pct_margen; })
+      : _transpOrdenCamiones === 'costokm'
+      ? camiones.sort(function(a,b){ return a.costo_por_km - b.costo_por_km; }) // más eficiente primero
+      : _transpOrdenCamiones === 'diasactivos'
+      ? camiones.sort(function(a,b){ return (b.pct_dias_activos||0) - (a.pct_dias_activos||0); })
       : camiones.sort(function(a,b){ return b.ingresos - a.ingresos; });
     camionesOrden.forEach(function(c, idx){
       var col = c.pct_margen >= 20 ? '#0f6e56' : c.pct_margen >= 10 ? '#b97c0a' : '#a32d2d';
