@@ -2862,10 +2862,18 @@ function aplicarFiltrosTransp() {
   var mat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
   var tipo = document.getElementById('tf-tipo')      ? document.getElementById('tf-tipo').value      : '';
 
-  // Helper: normalizar fecha a "yyyy-mm"
+  // Helper: normalizar fecha a "yyyy-mm". Prueba primero el recorte por
+  // texto (zafra/combustible/mantenimientos vienen como "yyyy-mm-dd") y
+  // solo cae a new Date() si no matchea ese formato — new Date("yyyy-mm-dd")
+  // se interpreta como medianoche UTC, y con los getters locales
+  // (getMonth/getFullYear) un viaje cargado el 1° del mes queda en el
+  // mes anterior para cualquier huso horario detrás de UTC (ej. Uruguay).
   function mesKey(raw) {
-    var d = new Date(raw); if (!isNaN(d.getTime())) { var m=d.getMonth()+1; return d.getFullYear()+'-'+(m<10?'0':'')+m; }
-    return String(raw).substring(0,7);
+    var s = String(raw||'').trim();
+    var m = s.match(/^(\d{4})-(\d{2})/);
+    if (m) return m[1]+'-'+m[2];
+    var d = new Date(raw); if (!isNaN(d.getTime())) { var mo=d.getMonth()+1; return d.getFullYear()+'-'+(mo<10?'0':'')+mo; }
+    return s.substring(0,7);
   }
   // Filtrar viajes
   var filtered = raw.filter(function(v) {
@@ -3971,21 +3979,34 @@ function renderTranspKPIs(data, viajes) {
   document.getElementById('transp-indicadores').innerHTML = kpiHtml;
 
   // ── Agrupar viajes por mes ─────────────────────────────────────
+  // Se prueba primero el recorte por texto ("yyyy-mm-dd" → año/mes tal
+  // cual) y solo se cae a new Date() si no matchea ese formato.
+  // new Date("yyyy-mm-dd") se interpreta como medianoche UTC; con los
+  // getters locales (getMonth/getFullYear) un viaje del 1° del mes
+  // quedaba contado en el mes anterior en cualquier huso detrás de UTC
+  // (Uruguay, UTC-3) — por eso 23 viajes cargados el 1/10 aparecían en
+  // "Sep" en vez de "Oct".
   var meses = {};
   viajes.forEach(function(v) {
     var f = v['fecha viaje'] || v['timestamp'] || '';
     if (!f) return;
-    var d = new Date(f);
     var key, label;
-    if (!isNaN(d.getTime())) {
-      var yr = d.getFullYear(), mo = d.getMonth() + 1;
-      key = yr + '-' + (mo < 10 ? '0' : '') + mo;
-      label = MESES_LABEL[mo - 1] || String(mo);
+    var mISO = String(f).match(/^(\d{4})-(\d{2})/);
+    if (mISO) {
+      key = mISO[1] + '-' + mISO[2];
+      label = MESES_LABEL[parseInt(mISO[2],10) - 1] || mISO[2];
     } else {
-      var parts = String(f).split('-');
-      if (parts.length < 2) return;
-      key = parts[0] + '-' + parts[1];
-      label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
+      var d = new Date(f);
+      if (!isNaN(d.getTime())) {
+        var yr = d.getFullYear(), mo = d.getMonth() + 1;
+        key = yr + '-' + (mo < 10 ? '0' : '') + mo;
+        label = MESES_LABEL[mo - 1] || String(mo);
+      } else {
+        var parts = String(f).split('-');
+        if (parts.length < 2) return;
+        key = parts[0] + '-' + parts[1];
+        label = MESES_LABEL[parseInt(parts[1],10)-1] || parts[1];
+      }
     }
     if (!meses[key]) meses[key] = {label:label, ing:0, ton:0, viajes:0};
     meses[key].ing    += toUYU(ingresoViaje(v), v['moneda']);
@@ -5028,7 +5049,8 @@ function renderTranspTabla(data, tipo) {
           dest:  r['destino'] || '',
           ing:   toUYU(ingresoViaje(r), r['moneda']) / nViajesDe(r),
           km:    parseFloat(r['km recorridos'])||0,
-          ton:   parseFloat(r['toneladas'])||0
+          ton:   parseFloat(r['toneladas'])||0,
+          nv:    nViajesDe(r)
         };
       });
 
@@ -5040,10 +5062,17 @@ function renderTranspTabla(data, tipo) {
         var avgTon = totTon / n;
         var arriba    = ingPorViaje.filter(function(v){ return v.ing >= avgIng; });
         var abajo     = ingPorViaje.filter(function(v){ return v.ing <  avgIng; });
-        var pctArriba = (arriba.length / n * 100).toFixed(0);
-        var pctAbajo  = (abajo.length  / n * 100).toFixed(0);
-        var sumArriba = arriba.reduce(function(s,v){ return s+v.ing; },0);
-        var sumAbajo  = abajo.reduce(function(s,v){ return s+v.ing; },0);
+        // El % y el conteo de "viajes" se arman sumando nv (cantidad real
+        // de viajes de cada registro) en vez de contar registros — un
+        // registro de feedlot con "Cantidad de viajes" cargada representa
+        // varios viajes, no uno solo.
+        var totalViajesCtrl = ingPorViaje.reduce(function(s,v){ return s+v.nv; },0);
+        var arribaViajes = arriba.reduce(function(s,v){ return s+v.nv; },0);
+        var abajoViajes  = abajo.reduce(function(s,v){ return s+v.nv; },0);
+        var pctArriba = (arribaViajes / totalViajesCtrl * 100).toFixed(0);
+        var pctAbajo  = (abajoViajes  / totalViajesCtrl * 100).toFixed(0);
+        var sumArriba = arriba.reduce(function(s,v){ return s+v.ing*v.nv; },0);
+        var sumAbajo  = abajo.reduce(function(s,v){ return s+v.ing*v.nv; },0);
 
         // Mini gráfico de barras: cada viaje como barra vs promedio
         var maxIng = Math.max.apply(null, ingPorViaje.map(function(v){ return v.ing; })) || 1;
@@ -5078,12 +5107,12 @@ function renderTranspTabla(data, tipo) {
           + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">'
           + '<div onclick="openCtrlDrill(\'arriba\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
           + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">▲ POR ENCIMA DEL PROMEDIO <span style="float:right;font-weight:400">Ver → </span></div>'
-          + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+arriba.length+' viajes <span style="font-size:12px;font-weight:600">('+pctArriba+'%)</span></div>'
+          + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+arribaViajes+' viajes <span style="font-size:12px;font-weight:600">('+pctArriba+'%)</span></div>'
           + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumArriba)+'</div>'
           + '</div>'
           + '<div onclick="openCtrlDrill(\'abajo\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
           + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">▼ POR DEBAJO DEL PROMEDIO <span style="float:right;font-weight:400">Ver → </span></div>'
-          + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+abajo.length+' viajes <span style="font-size:12px;font-weight:600">('+pctAbajo+'%)</span></div>'
+          + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+abajoViajes+' viajes <span style="font-size:12px;font-weight:600">('+pctAbajo+'%)</span></div>'
           + '<div style="font-size:11px;color:var(--muted);margin-top:2px">Total: '+fmt$(sumAbajo)+'</div>'
           + '</div>'
           + '</div></div>';
