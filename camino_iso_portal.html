@@ -181,6 +181,19 @@ tr:hover td{background:#faf9f6}
 .loading{text-align:center;padding:40px;color:var(--muted);font-size:13px}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;font-size:13px;padding:10px 18px;border-radius:8px;z-index:300;display:none}
 .toast.show{display:block}
+
+/* Impresión / "Descargar como PDF" — se activa con el botón 🖨️ de
+   cada sección (usa window.print(), el navegador ofrece "Guardar como
+   PDF" como destino). Esconde todo lo que no sirve en un papel/PDF
+   para compartir con el cliente: navegación, filtros y botones. */
+@media print {
+  .topbar, .sidebar, .overlay, .toast { display:none !important; }
+  .main { display:block !important; overflow:visible !important; }
+  .page { padding:0 !important; }
+  button, .fb, input[type="date"], select { display:none !important; }
+  .chart-wrap, .kpibig-card, .kpi { break-inside:avoid; }
+  body { background:#fff !important; }
+}
 </style>
 </head>
 <body>
@@ -375,6 +388,7 @@ tr:hover td{background:#faf9f6}
             <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
             <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
             <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
+            <button class="fb" onclick="window.print()" title="Abre el diálogo de impresión — ahí elegís 'Guardar como PDF' para descargarlo">🖨️ Descargar / Imprimir</button>
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>Ver en:</span>
@@ -4280,16 +4294,39 @@ function renderTranspKPIs(data, viajes) {
     });
     html += '</tbody></table></div></div>';
 
-    // ── Ingresos por mes y por camión (una línea por matrícula) ─────
-    var mesesKeysCam = Object.keys(meses).sort();
-    if (mesesKeysCam.length > 0) {
+    // ── Ingresos por camión (una línea por matrícula) ───────────────
+    // Si hay un mes puntual elegido en el filtro "Período" de arriba,
+    // se agrupa por DÍA dentro de ese mes (para ver cómo se movió cada
+    // camión día a día); si está en "Todos los meses", se agrupa por
+    // mes como antes.
+    var perSelCam = document.getElementById('tf-periodo') ? document.getElementById('tf-periodo').value : '';
+    var mMesFiltradoCam = perSelCam.match(/^(\d{4})-(\d{2})$/);
+    var ejesCam, tituloCam;
+    if (mMesFiltradoCam) {
+      var anioCamF = mMesFiltradoCam[1], mesCamF = mMesFiltradoCam[2];
+      var ultimoDiaCamF = new Date(parseInt(anioCamF,10), parseInt(mesCamF,10), 0).getDate();
+      ejesCam = [];
+      for (var ddCam=1; ddCam<=ultimoDiaCamF; ddCam++) ejesCam.push(anioCamF+'-'+mesCamF+'-'+(ddCam<10?'0':'')+ddCam);
+      tituloCam = '📈 Ingresos por día y por camión — ' + (MESES_LABEL[parseInt(mesCamF,10)-1]||mesCamF) + ' ' + anioCamF;
+    } else {
+      ejesCam = Object.keys(meses).sort();
+      tituloCam = '📈 Ingresos por mes y por camión';
+    }
+    if (ejesCam.length > 0) {
       var porMesCamion = {};
       viajes.forEach(function(v) {
         var mat = v['matricula'] || ''; if (!mat) return;
         var f = v['fecha viaje'] || v['timestamp'] || '';
-        var mISO = String(f).match(/^(\d{4})-(\d{2})/);
-        if (!mISO) return;
-        var key = mISO[1] + '-' + mISO[2];
+        var key;
+        if (mMesFiltradoCam) {
+          var mD = String(f).match(/^(\d{4}-\d{2}-\d{2})/);
+          if (!mD) return;
+          key = mD[1];
+        } else {
+          var mISO = String(f).match(/^(\d{4})-(\d{2})/);
+          if (!mISO) return;
+          key = mISO[1] + '-' + mISO[2];
+        }
         if (!porMesCamion[mat]) porMesCamion[mat] = {};
         porMesCamion[mat][key] = (porMesCamion[mat][key] || 0) + toUYU(ingresoViaje(v), v['moneda']);
       });
@@ -4300,13 +4337,13 @@ function renderTranspKPIs(data, viajes) {
           return {
             matricula: mat,
             color: COLORES_LINEA_CAM[i % COLORES_LINEA_CAM.length],
-            arr: mesesKeysCam.map(function(k){ return porMesCamion[mat][k] || 0; })
+            arr: ejesCam.map(function(k){ return porMesCamion[mat][k] || 0; })
           };
         });
         var maxValCam = Math.max.apply(null, seriesCam.reduce(function(s,ser){ return s.concat(ser.arr); },[0]));
         if (maxValCam <= 0) maxValCam = 1;
         var padLc=42, padRc=10, padTc=10, padBc=22, svgWc=600, svgHc=210;
-        function pxc(i){ return padLc + (mesesKeysCam.length<=1?0:(i/(mesesKeysCam.length-1))*(svgWc-padLc-padRc)); }
+        function pxc(i){ return padLc + (ejesCam.length<=1?0:(i/(ejesCam.length-1))*(svgWc-padLc-padRc)); }
         function pyc(v){ return padTc + (1-v/maxValCam)*(svgHc-padTc-padBc); }
         var gridHtmlc = '';
         for (var gyC=0; gyC<=4; gyC++) {
@@ -4315,13 +4352,18 @@ function renderTranspKPIs(data, viajes) {
           gridHtmlc += '<line x1="'+padLc+'" y1="'+gyyC.toFixed(1)+'" x2="'+(svgWc-padRc)+'" y2="'+gyyC.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'
             + '<text x="'+(padLc-4)+'" y="'+(gyyC+3).toFixed(1)+'" font-size="9" text-anchor="end" fill="var(--muted)">'+fmtMillones(gvC)+'</text>';
         }
-        var xLabelsHtmlc = mesesKeysCam.map(function(k,i){
-          return '<text x="'+pxc(i).toFixed(1)+'" y="'+(svgHc-6)+'" font-size="9" text-anchor="middle" fill="var(--muted)">'+(meses[k]?meses[k].label:k)+'</text>';
+        // En modo día se muestra 1 de cada N etiquetas para que no se amontonen.
+        var stepXCam = mMesFiltradoCam ? Math.max(1, Math.ceil(ejesCam.length/15)) : 1;
+        var xLabelsHtmlc = ejesCam.map(function(k,i){
+          if (i % stepXCam !== 0 && i !== ejesCam.length-1) return '';
+          var lbl = mMesFiltradoCam ? String(parseInt(k.slice(-2),10)) : (meses[k] ? meses[k].label : k);
+          return '<text x="'+pxc(i).toFixed(1)+'" y="'+(svgHc-6)+'" font-size="9" text-anchor="middle" fill="var(--muted)">'+lbl+'</text>';
         }).join('');
         var linesHtmlc = seriesCam.map(function(ser){
           var pts = ser.arr.map(function(v,i){ return pxc(i).toFixed(1)+','+pyc(v).toFixed(1); }).join(' ');
           var dots = ser.arr.map(function(v,i){
-            var mLbl = meses[mesesKeysCam[i]] ? meses[mesesKeysCam[i]].label : mesesKeysCam[i];
+            if (!v) return '';
+            var mLbl = mMesFiltradoCam ? ejesCam[i] : (meses[ejesCam[i]] ? meses[ejesCam[i]].label : ejesCam[i]);
             return '<circle cx="'+pxc(i).toFixed(1)+'" cy="'+pyc(v).toFixed(1)+'" r="3" fill="'+ser.color+'"><title>'+ser.matricula+' '+mLbl+': '+fmt$(v)+'</title></circle>';
           }).join('');
           return '<polyline points="'+pts+'" fill="none" stroke="'+ser.color+'" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>' + dots;
@@ -4330,7 +4372,7 @@ function renderTranspKPIs(data, viajes) {
           return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:10px"><span style="width:14px;height:3px;background:'+ser.color+';display:inline-block;border-radius:2px"></span>'+ser.matricula+'</span>';
         }).join('');
         html += '<div class="chart-wrap" style="margin-top:12px">'
-          + '<h4 style="margin:0 0 8px">📈 Ingresos por mes y por camión</h4>'
+          + '<h4 style="margin:0 0 8px">'+tituloCam+'</h4>'
           + '<div style="overflow-x:auto"><svg viewBox="0 0 '+svgWc+' '+svgHc+'" style="width:100%;max-width:'+svgWc+'px;height:auto;display:block">'
           + gridHtmlc + linesHtmlc + xLabelsHtmlc
           + '</svg></div>'
