@@ -4282,7 +4282,7 @@ function renderTranspKPIs(data, viajes) {
 
     // ── Ingresos por mes y por camión (una línea por matrícula) ─────
     var mesesKeysCam = Object.keys(meses).sort();
-    if (mesesKeysCam.length > 1) {
+    if (mesesKeysCam.length > 0) {
       var porMesCamion = {};
       viajes.forEach(function(v) {
         var mat = v['matricula'] || ''; if (!mat) return;
