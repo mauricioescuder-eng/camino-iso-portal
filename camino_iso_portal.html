@@ -5233,6 +5233,69 @@ function renderTranspTabla(data, tipo) {
           + '</div></div>';
       }
 
+      // ── Viajes por día y por camión (una línea por matrícula) ───────
+      // Muestra cómo se fueron distribuyendo los viajes de cada camión
+      // día a día — respeta el filtro Desde/Hasta de arriba, así que
+      // para ver un mes puntual alcanza con poner ese rango de fechas.
+      var porDiaCamionV = {};
+      rows.forEach(function(r) {
+        var mat = r['matricula'] || ''; if (!mat) return;
+        var f = r['fecha viaje'] || r['timestamp'] || '';
+        var mD = String(f).match(/^(\d{4}-\d{2}-\d{2})/);
+        if (!mD) return;
+        if (!porDiaCamionV[mat]) porDiaCamionV[mat] = {};
+        porDiaCamionV[mat][mD[1]] = (porDiaCamionV[mat][mD[1]] || 0) + nViajesDe(r);
+      });
+      var matsConViajesV = Object.keys(porDiaCamionV);
+      if (matsConViajesV.length > 0) {
+        var diasConViajesV = {};
+        matsConViajesV.forEach(function(mat){ Object.keys(porDiaCamionV[mat]).forEach(function(d){ diasConViajesV[d]=true; }); });
+        var ejesDiaV = Object.keys(diasConViajesV).sort();
+        var COLORES_V = ['#1E6B2E','#378add','#F07820','#a32d2d','#7030a0','#0f6e56','#b97c0a','#2980B9','#8E44AD','#616A6B'];
+        var seriesV = matsConViajesV.map(function(mat, i){
+          return {
+            matricula: mat,
+            color: COLORES_V[i % COLORES_V.length],
+            arr: ejesDiaV.map(function(d){ return porDiaCamionV[mat][d] || 0; })
+          };
+        });
+        var maxValV = Math.max.apply(null, seriesV.reduce(function(s,ser){ return s.concat(ser.arr); },[0]));
+        if (maxValV <= 0) maxValV = 1;
+        var padLv=34, padRv=10, padTv=10, padBv=22, svgWv=600, svgHv=210;
+        function pxv(i){ return padLv + (ejesDiaV.length<=1?0:(i/(ejesDiaV.length-1))*(svgWv-padLv-padRv)); }
+        function pyv(v){ return padTv + (1-v/maxValV)*(svgHv-padTv-padBv); }
+        var gridHtmlv = '';
+        for (var gyV=0; gyV<=4; gyV++) {
+          var gvV = Math.round((maxValV/4)*gyV);
+          var gyyV = pyv(gvV);
+          gridHtmlv += '<line x1="'+padLv+'" y1="'+gyyV.toFixed(1)+'" x2="'+(svgWv-padRv)+'" y2="'+gyyV.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'
+            + '<text x="'+(padLv-4)+'" y="'+(gyyV+3).toFixed(1)+'" font-size="9" text-anchor="end" fill="var(--muted)">'+gvV+'</text>';
+        }
+        var stepXv = Math.max(1, Math.ceil(ejesDiaV.length/15));
+        var xLabelsHtmlv = ejesDiaV.map(function(d,i){
+          if (i % stepXv !== 0 && i !== ejesDiaV.length-1) return '';
+          return '<text x="'+pxv(i).toFixed(1)+'" y="'+(svgHv-6)+'" font-size="9" text-anchor="middle" fill="var(--muted)">'+parseInt(d.slice(-2),10)+'</text>';
+        }).join('');
+        var linesHtmlv = seriesV.map(function(ser){
+          var pts = ser.arr.map(function(v,i){ return pxv(i).toFixed(1)+','+pyv(v).toFixed(1); }).join(' ');
+          var dots = ser.arr.map(function(v,i){
+            if (!v) return '';
+            return '<circle cx="'+pxv(i).toFixed(1)+'" cy="'+pyv(v).toFixed(1)+'" r="3" fill="'+ser.color+'"><title>'+ser.matricula+' '+ejesDiaV[i]+': '+fmtN(v,0)+' viaje'+(v===1?'':'s')+'</title></circle>';
+          }).join('');
+          return '<polyline points="'+pts+'" fill="none" stroke="'+ser.color+'" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>' + dots;
+        }).join('');
+        var legendHtmlv = seriesV.map(function(ser){
+          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:10px"><span style="width:14px;height:3px;background:'+ser.color+';display:inline-block;border-radius:2px"></span>'+ser.matricula+'</span>';
+        }).join('');
+        indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 8px;font-size:13px">📈 Viajes por día y por camión</h4>'
+          + '<div style="overflow-x:auto"><svg viewBox="0 0 '+svgWv+' '+svgHv+'" style="width:100%;max-width:'+svgWv+'px;height:auto;display:block">'
+          + gridHtmlv + linesHtmlv + xLabelsHtmlv
+          + '</svg></div>'
+          + '<div style="margin-top:8px;display:flex;flex-wrap:wrap">' + legendHtmlv + '</div>'
+          + '</div>';
+      }
+
     } else if (tipo === 'mantenimientos') {
       // totCosto: TODO convertido a UYU (para Costo/km y el Pareto por
       // área, que necesitan un único total comparable). Los otros dos
