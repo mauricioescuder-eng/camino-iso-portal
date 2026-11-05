@@ -481,14 +481,6 @@ tr:hover td{background:#faf9f6}
     <div id="me-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
-<div class="overlay" id="ov-camion-timeline">
-  <div class="modal" style="max-width:640px">
-    <h3>🚛 Línea de tiempo — <span id="ct-matricula"></span></h3>
-    <div id="ct-resumen" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>
-    <div id="ct-body" style="max-height:60vh;overflow-y:auto"></div>
-    <div class="mactions"><button class="btn-c" onclick="closeTimelineCamion()">Cerrar</button></div>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -4276,7 +4268,7 @@ function renderTranspKPIs(data, viajes) {
       var esMejor = c.matricula === mejorMat, esPeor = c.matricula === peorMat;
       var filaBg = esMejor ? 'background:#f0f9f2' : esPeor ? 'background:#fdf2f0' : '';
       var badge = esMejor ? ' 🏆' : esPeor ? ' ⚠️' : '';
-      html += '<tr onclick="abrirTimelineCamion(\''+c.matricula+'\')" title="Ver línea de tiempo de este camión" style="cursor:pointer;border-bottom:1px solid var(--border);'+filaBg+'">'
+      html += '<tr style="border-bottom:1px solid var(--border);'+filaBg+'">'
         + td(String(idx+1))
         + td('<strong>' + c.matricula + '</strong>' + badge)
         + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r') + td(fmtN(c.ton),'r')
@@ -4287,6 +4279,65 @@ function renderTranspKPIs(data, viajes) {
         + '<td style="padding:8px;text-align:right;font-weight:700;color:'+colDias+'">' + (c.pct_dias_activos===null?'—':c.pct_dias_activos.toFixed(0)+'%') + '</td></tr>';
     });
     html += '</tbody></table></div></div>';
+
+    // ── Ingresos por mes y por camión (una línea por matrícula) ─────
+    var mesesKeysCam = Object.keys(meses).sort();
+    if (mesesKeysCam.length > 1) {
+      var porMesCamion = {};
+      viajes.forEach(function(v) {
+        var mat = v['matricula'] || ''; if (!mat) return;
+        var f = v['fecha viaje'] || v['timestamp'] || '';
+        var mISO = String(f).match(/^(\d{4})-(\d{2})/);
+        if (!mISO) return;
+        var key = mISO[1] + '-' + mISO[2];
+        if (!porMesCamion[mat]) porMesCamion[mat] = {};
+        porMesCamion[mat][key] = (porMesCamion[mat][key] || 0) + toUYU(ingresoViaje(v), v['moneda']);
+      });
+      var matsConDatos = Object.keys(porMesCamion);
+      if (matsConDatos.length > 0) {
+        var COLORES_LINEA_CAM = ['#1E6B2E','#378add','#F07820','#a32d2d','#7030a0','#0f6e56','#b97c0a','#2980B9','#8E44AD','#616A6B'];
+        var seriesCam = matsConDatos.map(function(mat, i){
+          return {
+            matricula: mat,
+            color: COLORES_LINEA_CAM[i % COLORES_LINEA_CAM.length],
+            arr: mesesKeysCam.map(function(k){ return porMesCamion[mat][k] || 0; })
+          };
+        });
+        var maxValCam = Math.max.apply(null, seriesCam.reduce(function(s,ser){ return s.concat(ser.arr); },[0]));
+        if (maxValCam <= 0) maxValCam = 1;
+        var padLc=42, padRc=10, padTc=10, padBc=22, svgWc=600, svgHc=210;
+        function pxc(i){ return padLc + (mesesKeysCam.length<=1?0:(i/(mesesKeysCam.length-1))*(svgWc-padLc-padRc)); }
+        function pyc(v){ return padTc + (1-v/maxValCam)*(svgHc-padTc-padBc); }
+        var gridHtmlc = '';
+        for (var gyC=0; gyC<=4; gyC++) {
+          var gvC = Math.round((maxValCam/4)*gyC);
+          var gyyC = pyc(gvC);
+          gridHtmlc += '<line x1="'+padLc+'" y1="'+gyyC.toFixed(1)+'" x2="'+(svgWc-padRc)+'" y2="'+gyyC.toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'
+            + '<text x="'+(padLc-4)+'" y="'+(gyyC+3).toFixed(1)+'" font-size="9" text-anchor="end" fill="var(--muted)">'+fmtMillones(gvC)+'</text>';
+        }
+        var xLabelsHtmlc = mesesKeysCam.map(function(k,i){
+          return '<text x="'+pxc(i).toFixed(1)+'" y="'+(svgHc-6)+'" font-size="9" text-anchor="middle" fill="var(--muted)">'+(meses[k]?meses[k].label:k)+'</text>';
+        }).join('');
+        var linesHtmlc = seriesCam.map(function(ser){
+          var pts = ser.arr.map(function(v,i){ return pxc(i).toFixed(1)+','+pyc(v).toFixed(1); }).join(' ');
+          var dots = ser.arr.map(function(v,i){
+            var mLbl = meses[mesesKeysCam[i]] ? meses[mesesKeysCam[i]].label : mesesKeysCam[i];
+            return '<circle cx="'+pxc(i).toFixed(1)+'" cy="'+pyc(v).toFixed(1)+'" r="3" fill="'+ser.color+'"><title>'+ser.matricula+' '+mLbl+': '+fmt$(v)+'</title></circle>';
+          }).join('');
+          return '<polyline points="'+pts+'" fill="none" stroke="'+ser.color+'" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>' + dots;
+        }).join('');
+        var legendHtmlc = seriesCam.map(function(ser){
+          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:10px"><span style="width:14px;height:3px;background:'+ser.color+';display:inline-block;border-radius:2px"></span>'+ser.matricula+'</span>';
+        }).join('');
+        html += '<div class="chart-wrap" style="margin-top:12px">'
+          + '<h4 style="margin:0 0 8px">📈 Ingresos por mes y por camión</h4>'
+          + '<div style="overflow-x:auto"><svg viewBox="0 0 '+svgWc+' '+svgHc+'" style="width:100%;max-width:'+svgWc+'px;height:auto;display:block">'
+          + gridHtmlc + linesHtmlc + xLabelsHtmlc
+          + '</svg></div>'
+          + '<div style="margin-top:8px;display:flex;flex-wrap:wrap">' + legendHtmlc + '</div>'
+          + '</div>';
+      }
+    }
   }
 
   // ── Destinos (calculado desde viajes) ─────────────────────────
@@ -5961,69 +6012,6 @@ function closeEditarMantenimiento() {
   document.getElementById('ov-mant-editar').classList.remove('open');
   _meEditandoIdx = null;
 }
-
-// Línea de tiempo de viajes de un camión — se abre al tocar su fila en
-// "Resultados por camión". Usa siempre el historial completo (no el
-// filtrado por período que esté activo en la tabla), porque la idea es
-// ver cómo fue evolucionando ese camión en el tiempo, no solo el mes
-// que se esté mirando.
-function abrirTimelineCamion(matricula) {
-  // Mismo criterio de vista de moneda que el Dashboard (US$ por defecto),
-  // así este panel no muestra otra moneda distinta a la de las tarjetas.
-  var _vistaMon = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
-  var _pfx = _vistaMon === 'USD' ? 'US$ ' : '$U ';
-  var toUYU = (_vistaMon === 'USD') ? toUSD : window.toUYU;
-  function fmt$(n) {
-    var v = parseFloat(n) || 0;
-    return _pfx + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
-  }
-
-  var todos = (window._transpViajesRaw || []).filter(function(v){ return v['matricula'] === matricula; });
-  todos.sort(function(a,b){
-    var fa = a['fecha viaje']||a['timestamp']||'', fb = b['fecha viaje']||b['timestamp']||'';
-    return fa < fb ? -1 : (fa > fb ? 1 : 0);
-  });
-
-  document.getElementById('ct-matricula').textContent = matricula;
-
-  if (!todos.length) {
-    document.getElementById('ct-resumen').textContent = '';
-    document.getElementById('ct-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Sin viajes cargados para este camión.</div>';
-    document.getElementById('ov-camion-timeline').classList.add('open');
-    return;
-  }
-
-  var totalViajesReales = todos.reduce(function(s,v){ return s+nViajesDe(v); },0);
-  var totalIngCt = todos.reduce(function(s,v){ return s+toUYU(ingresoViaje(v), v['moneda']); },0);
-  document.getElementById('ct-resumen').textContent =
-    todos.length + ' registro' + (todos.length===1?'':'s') + ' · ' + fmtN(totalViajesReales,0) + ' viaje' + (totalViajesReales===1?'':'s') + ' · ' + fmt$(totalIngCt) + ' de ingreso total';
-
-  var html = '<div style="position:relative;padding-left:18px">'
-    + '<div style="position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--border)"></div>';
-  todos.forEach(function(v){
-    var ing = toUYU(ingresoViaje(v), v['moneda']);
-    var nv = nViajesDe(v);
-    var ruta = (v['origen']||'—') + ' → ' + (v['destino']||'—');
-    var detalle = [];
-    if (parseFloat(v['toneladas'])) detalle.push(fmtN(v['toneladas'],1) + ' t');
-    if (parseFloat(v['km recorridos'])) detalle.push(fmtN(v['km recorridos'],0) + ' km');
-    if (v['tipo de carga']) detalle.push(v['tipo de carga']);
-    if (nv > 1) detalle.push(nv + ' viajes (feedlot)');
-    html += '<div style="position:relative;margin-bottom:14px">'
-      + '<div style="position:absolute;left:-18px;top:3px;width:10px;height:10px;border-radius:50%;background:#1E6B2E;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)"></div>'
-      + '<div style="font-size:11px;color:var(--muted);font-weight:600">' + (v['fecha viaje']||v['timestamp']||'—') + '</div>'
-      + '<div style="font-size:13px;font-weight:600">' + ruta + '</div>'
-      + '<div style="font-size:12px;color:var(--muted)">' + detalle.join(' · ') + '</div>'
-      + '<div style="font-size:12px;font-weight:700;color:#0f6e56">' + fmt$(ing) + '</div>'
-      + '</div>';
-  });
-  html += '</div>';
-  document.getElementById('ct-body').innerHTML = html;
-  document.getElementById('ov-camion-timeline').classList.add('open');
-}
-function closeTimelineCamion() {
-  document.getElementById('ov-camion-timeline').classList.remove('open');
-}
 function guardarEditarMantenimiento() {
   if (_meEditandoIdx === null) return;
   var r = window._mantRegistros[_meEditandoIdx];
@@ -6088,7 +6076,6 @@ function closeModal(){ document.getElementById('overlay').classList.remove('open
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
-document.getElementById('ov-camion-timeline').addEventListener('click',function(e){ if(e.target===this) closeTimelineCamion(); });
 // Precargar config al abrir la página
 loadConfig();
 </script>
