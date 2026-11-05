@@ -4489,102 +4489,75 @@ function openChartModal(el) {
   document.getElementById('_chartModalOv').classList.add('open');
 }
 
-// Descarga UN gráfico puntual como imagen PNG (para compartir con el
-// cliente sin pasar por "Imprimir / Guardar como PDF", que mezcla todo
-// el dashboard en una sola hoja). Toma el <svg> de la tarjeta, lo dibuja
-// en un <canvas> al doble de resolución con fondo blanco, título y pie
-// de marca, y descarga el PNG resultante.
+// Descarga UNA tarjeta puntual (gráfico SVG, tabla, barras de progreso —
+// lo que sea) como imagen PNG, para compartir con el cliente sin pasar
+// por "Imprimir / Guardar como PDF" (que mezcla todo el dashboard en una
+// sola hoja larga con cabeceras del navegador). En vez de redibujar cada
+// tipo de gráfico a mano, se envuelve el contenido TAL CUAL se ve en
+// pantalla dentro de un <svg><foreignObject>, se serializa esa imagen y
+// se la dibuja sobre un <canvas> al doble de resolución con fondo blanco,
+// título y pie de marca — así funciona igual para un donut, una tabla
+// con barras de progreso (Pareto, Repuestos por categoría) o cualquier
+// tarjeta nueva que se agregue después, sin casos especiales por tipo.
 function descargarChartPNG(wrap) {
-  var svg = wrap.querySelector('svg');
-  if (!svg) return;
   var h4 = wrap.querySelector('h4');
-  var titulo = (h4 ? h4.textContent : 'Gráfico').replace(/[🔍📈📊📍]/g, '').trim();
+  var titulo = (h4 ? h4.textContent : 'Gráfico').replace(/[🔍📈📊📍🔧🔩🚚🚛⛽🗂️]/g, '').trim();
 
-  // Algunos gráficos (Por Tipo de Carga, los de línea por camión) dibujan
-  // su leyenda AFUERA del <svg>, como cuadraditos de color + texto en un
-  // div aparte — hay que detectarlos y volver a dibujarlos sobre el
-  // canvas, si no la imagen descargada pierde los nombres/colores.
-  var legendItems = [];
-  wrap.querySelectorAll('div, span').forEach(function(elx) {
-    if (svg.contains(elx)) return;
-    var st = elx.getAttribute('style') || '';
-    if (!/background:/.test(st) || !/width:\s*(9|14)px/.test(st)) return;
-    var parent = elx.parentElement;
-    if (!parent) return;
-    // La leyenda del donut (div swatch + <span>label</span> + <strong>pct</strong>)
-    // y la de los gráficos de línea (<span>swatch</span>MATRICULA, como texto
-    // suelto) usan markup distinto — se intenta encontrar un <span> hermano
-    // con el texto, y si no hay (caso línea), se usa el texto del padre.
-    var sib = Array.prototype.filter.call(parent.querySelectorAll('span'), function(s){ return s !== elx; });
-    var label = (sib.length ? sib[0].textContent : parent.textContent).trim();
-    if (label) legendItems.push({color: getComputedStyle(elx).backgroundColor, label: label});
-  });
+  var w = wrap.clientWidth;
+  var h = wrap.scrollHeight;
+  if (!w || !h) return;
 
-  var svgClone = svg.cloneNode(true);
-  svgClone.removeAttribute('style');
-  svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  var vb = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number);
-  var w = vb.length === 4 ? vb[2] : (svg.clientWidth || 600);
-  var h = vb.length === 4 ? vb[3] : (svg.clientHeight || 300);
-  svgClone.setAttribute('width', w);
-  svgClone.setAttribute('height', h);
-  // Las grillas/ejes de los gráficos de línea usan var(--border)/var(--muted)
-  // (colores del tema). Una imagen SVG standalone no hereda las variables
-  // CSS del documento, así que hay que dejarlas en su valor concreto o
-  // esas líneas/textos saldrían invisibles en el PNG.
-  var svgStr = new XMLSerializer().serializeToString(svgClone)
-    .split('var(--border)').join('#c9c7bc')
-    .split('var(--muted)').join('#6b6a63');
+  var clone = wrap.cloneNode(true);
+  clone.querySelectorAll('.chart-dl-btn').forEach(function(b){ b.remove(); });
+  clone.style.margin = '0';
+  clone.style.boxSizing = 'border-box';
+
+  var svgNs = 'http://www.w3.org/2000/svg', xhtmlNs = 'http://www.w3.org/1999/xhtml';
+  var svgEl = document.createElementNS(svgNs, 'svg');
+  svgEl.setAttribute('xmlns', svgNs);
+  svgEl.setAttribute('width', w);
+  svgEl.setAttribute('height', h);
+  svgEl.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  var fo = document.createElementNS(svgNs, 'foreignObject');
+  fo.setAttribute('width', w);
+  fo.setAttribute('height', h);
+  var outer = document.createElementNS(xhtmlNs, 'div');
+  outer.setAttribute('xmlns', xhtmlNs);
+  outer.style.cssText = 'font-family:Arial,Helvetica,sans-serif;width:' + w + 'px;background:#fff';
+  outer.appendChild(clone);
+  fo.appendChild(outer);
+  svgEl.appendChild(fo);
+
+  // Una imagen SVG standalone (cargada vía data URI) no hereda las
+  // variables CSS del documento (--border, --muted, etc.) — hay que
+  // dejarlas en su valor concreto o ese texto/bordes saldrían invisibles.
+  // Los nombres más largos van primero para no pisar una coincidencia
+  // parcial (ej. "var(--green)" adentro de "var(--green-dark)").
+  var svgStr = new XMLSerializer().serializeToString(svgEl)
+    .split('var(--green-dark)').join('#164f22')
+    .split('var(--green-light)').join('#e8f5eb')
+    .split('var(--green)').join('#1E6B2E')
+    .split('var(--orange-light)').join('#fff3e8')
+    .split('var(--orange)').join('#F07820')
+    .split('var(--gray)').join('#f5f5f3')
+    .split('var(--border)').join('#e0dfd7')
+    .split('var(--muted)').join('#888780')
+    .split('var(--text)').join('#1a1a18');
   var svgData = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
   var img = new Image();
   img.onload = function() {
-    var scale = 2, padSide = 24, padTop = 50, padBottom = 34, lineH = 18;
-    var legendFont = '11px Arial';
-
-    // Primera pasada (con un canvas de medida) para saber cuántas líneas
-    // ocupa la leyenda y así poder dimensionar el canvas final antes de
-    // dibujar nada.
-    var measureCtx = document.createElement('canvas').getContext('2d');
-    measureCtx.font = legendFont;
-    function layoutLegend() {
-      var lx = 0, ly = 0, lines = legendItems.length ? 1 : 0;
-      var placed = legendItems.map(function(it) {
-        var itemW = 14 + measureCtx.measureText(it.label).width + 16;
-        if (lx + itemW > w && lx > 0) { lx = 0; ly += lineH; lines++; }
-        var pos = {x: lx, y: ly, item: it};
-        lx += itemW;
-        return pos;
-      });
-      return {placed: placed, lines: lines};
-    }
-    var legendLayout = layoutLegend();
-    var legendH = legendItems.length ? (legendLayout.lines * lineH + 10) : 0;
-
+    var scale = 2, pad = 20, footerH = 28;
     var canvas = document.createElement('canvas');
-    canvas.width = (w + padSide * 2) * scale;
-    canvas.height = (h + padTop + padBottom + legendH) * scale;
+    canvas.width = (w + pad * 2) * scale;
+    canvas.height = (h + pad * 2 + footerH) * scale;
     var ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w + padSide * 2, h + padTop + padBottom + legendH);
-    ctx.fillStyle = '#1a1a18';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(titulo, padSide, 30);
-    ctx.drawImage(img, padSide, padTop, w, h);
-    if (legendItems.length) {
-      var legendTop = padTop + h + 16;
-      ctx.font = legendFont;
-      legendLayout.placed.forEach(function(p) {
-        var ly = legendTop + p.y;
-        ctx.fillStyle = p.item.color;
-        ctx.fillRect(padSide + p.x, ly - 9, 10, 10);
-        ctx.fillStyle = '#333';
-        ctx.fillText(p.item.label, padSide + p.x + 14, ly);
-      });
-    }
+    ctx.fillRect(0, 0, w + pad * 2, h + pad * 2 + footerH);
+    ctx.drawImage(img, pad, pad, w, h);
     ctx.fillStyle = '#888780';
     ctx.font = '10px Arial';
-    ctx.fillText('CAMINO Gestión & Datos — ' + new Date().toLocaleDateString('es-UY'), padSide, h + padTop + legendH + 22);
+    ctx.fillText('CAMINO Gestión & Datos — ' + new Date().toLocaleDateString('es-UY'), pad, h + pad + 20);
     canvas.toBlob(function(blob) {
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -4595,17 +4568,23 @@ function descargarChartPNG(wrap) {
       setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
     }, 'image/png');
   };
+  img.onerror = function() {
+    toast('No se pudo generar la imagen de "' + titulo + '"', true);
+  };
   img.src = svgData;
 }
 
-// Agrega un botón "⬇️" a cada tarjeta .chart-wrap que tenga un gráfico
-// SVG adentro, para descargarlo individualmente. Se llama después de
-// cada re-render de la sección de Transporte; no duplica botones si ya
-// los agregó antes.
+// Agrega un botón "⬇️" a cada tarjeta .chart-wrap con título para
+// descargarla individualmente como imagen. Se llama después de cada
+// re-render de la sección de Transporte; no duplica botones si ya los
+// agregó antes. Se excluyen las tarjetas que ya tienen sus propios
+// controles (ej. "Resultados por camión", con botones de ordenar) para
+// no superponer el botón de descarga con la UI interactiva.
 function agregarBotonesDescargaCharts(root) {
   (root || document).querySelectorAll('.chart-wrap').forEach(function(wrap) {
     if (wrap.querySelector('.chart-dl-btn')) return;
-    if (!wrap.querySelector('svg')) return;
+    if (!wrap.querySelector('h4')) return;
+    if (wrap.querySelector('button')) return;
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'chart-dl-btn';
@@ -5662,7 +5641,10 @@ function renderTranspTabla(data, tipo) {
         var _bars2 = '', _labs2 = '';
         _mantMesesArr.forEach(function(m, i){
           var x = i*(_bw2+14)+7;
-          var h = Math.round(_svgH2*0.8*(m.costo/_maxMC));
+          // 0.7 (no 0.8) deja lugar arriba de la barra más alta para su
+          // etiqueta — con 0.8 el número del mes con mayor costo quedaba
+          // pegado/cortado contra el borde superior del SVG.
+          var h = Math.round(_svgH2*0.7*(m.costo/_maxMC));
           var y = _svgH2 - h - 20;
           _bars2 += '<rect x="'+x+'" y="'+y+'" width="'+_bw2+'" height="'+h+'" fill="#185fa5" rx="2"/>';
           _bars2 += '<text x="'+(x+_bw2/2)+'" y="'+(y-3)+'" font-size="8" fill="#185fa5" text-anchor="middle">'+fmtN(m.costo/1000,0)+'k</text>';
