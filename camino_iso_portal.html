@@ -187,12 +187,23 @@ tr:hover td{background:#faf9f6}
    PDF" como destino). Esconde todo lo que no sirve en un papel/PDF
    para compartir con el cliente: navegación, filtros y botones. */
 @media print {
+  /* Colores más oscuros solo para impresión: el gris clarito que se ve
+     bien en pantalla (bordes, grillas, texto secundario) queda casi
+     invisible al imprimir/exportar a PDF — es la causa de que las
+     líneas de grilla y textos tenues "desaparezcan" en el PDF. */
+  :root { --border:#aaa8a0; --muted:#555; }
   .topbar, .sidebar, .overlay, .toast { display:none !important; }
   .main { display:block !important; overflow:visible !important; }
   .page { padding:0 !important; }
   button, .fb, input[type="date"], select { display:none !important; }
-  .chart-wrap, .kpibig-card, .kpi { break-inside:avoid; }
+  .kpibig-card, .kpi { break-inside:avoid; }
   body { background:#fff !important; }
+  /* Las grillas de 2/3 columnas (gráficos chicos uno al lado del otro)
+     se apilan en una sola columna para que no queden diminutas/recortadas
+     en el ancho de una hoja. */
+  [style*="display:grid"] { display:block !important; }
+  [style*="display:grid"] > div { margin-bottom:10px; }
+  svg { max-width:100%; }
 }
 </style>
 </head>
@@ -4341,6 +4352,7 @@ function renderTranspKPIs(data, viajes) {
           };
         });
         var maxValCam = Math.max.apply(null, seriesCam.reduce(function(s,ser){ return s.concat(ser.arr); },[0]));
+        var sinDatosCam = maxValCam <= 0;
         if (maxValCam <= 0) maxValCam = 1;
         var padLc=42, padRc=10, padTc=10, padBc=22, svgWc=600, svgHc=210;
         function pxc(i){ return padLc + (ejesCam.length<=1?0:(i/(ejesCam.length-1))*(svgWc-padLc-padRc)); }
@@ -4362,7 +4374,6 @@ function renderTranspKPIs(data, viajes) {
         var linesHtmlc = seriesCam.map(function(ser){
           var pts = ser.arr.map(function(v,i){ return pxc(i).toFixed(1)+','+pyc(v).toFixed(1); }).join(' ');
           var dots = ser.arr.map(function(v,i){
-            if (!v) return '';
             var mLbl = mMesFiltradoCam ? ejesCam[i] : (meses[ejesCam[i]] ? meses[ejesCam[i]].label : ejesCam[i]);
             return '<circle cx="'+pxc(i).toFixed(1)+'" cy="'+pyc(v).toFixed(1)+'" r="3" fill="'+ser.color+'"><title>'+ser.matricula+' '+mLbl+': '+fmt$(v)+'</title></circle>';
           }).join('');
@@ -4373,6 +4384,7 @@ function renderTranspKPIs(data, viajes) {
         }).join('');
         html += '<div class="chart-wrap" style="margin-top:12px">'
           + '<h4 style="margin:0 0 8px">'+tituloCam+'</h4>'
+          + (sinDatosCam ? '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Todavía no hay ingresos cargados para este período — el gráfico muestra las líneas en US$ 0.</div>' : '')
           + '<div style="overflow-x:auto"><svg viewBox="0 0 '+svgWc+' '+svgHc+'" style="width:100%;max-width:'+svgWc+'px;height:auto;display:block">'
           + gridHtmlc + linesHtmlc + xLabelsHtmlc
           + '</svg></div>'
