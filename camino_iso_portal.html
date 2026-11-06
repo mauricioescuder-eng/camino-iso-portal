@@ -4646,7 +4646,7 @@ function openDrillThrough(type, filterKey, filterVal) {
     cols  = ['Fecha','Matrícula','Destino','Tipo carga','Ton','Tarifa','Km'];
     rows  = data.map(function(v){ return [
       v['fecha viaje']||v['timestamp']||'', v['matricula']||'', v['destino']||'',
-      v['tipo de carga']||'', fmtN(v['toneladas'],1), fmt$(v['tarifa']), fmtN(v['km recorridos'])
+      v['tipo de carga']||'', fmtN(v['toneladas'],1), fmtMon(toUYU(v['tarifa'], v['moneda']), _vistaMon === 'USD' ? 'USD' : 'UYU', 2), fmtN(v['km recorridos'])
     ]; });
 
   } else if (type === 'combustible') {
@@ -6103,6 +6103,16 @@ function renderTranspTabla(data, tipo) {
         if (c === 'ingreso') v = ingresoViaje(r);
         if (v === null || v === undefined || v === '') v = '—';
         else if (c === 'precio litro' && typeof v === 'number') v = fmtMon(v, r['moneda'], 1);
+        else if (c === 'tarifa' && typeof v === 'number') {
+          // La tarifa es un valor por unidad (por tonelada, por viaje) —
+          // redondearla a pesos enteros (como el resto de las columnas de
+          // plata, que son totales) le hace perder precisión real: a lo
+          // largo de muchas toneladas/viajes esa diferencia se nota. Se
+          // muestra siempre con 2 decimales, sea la moneda que sea.
+          var vConvT = _monedaActual === 'original' ? v
+            : (_monedaActual === 'USD' ? toUSD(v, r['moneda']) : toUYU(v, r['moneda']));
+          v = fmtMon(vConvT, monedaMostrada, 2);
+        }
         else if (typeof v === 'number' && monedaCols.indexOf(c) >= 0) {
           var vConv = _monedaActual === 'original' ? v
             : (_monedaActual === 'USD' ? toUSD(v, r['moneda']) : toUYU(v, r['moneda']));
