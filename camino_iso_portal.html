@@ -2127,6 +2127,57 @@ function nViajesDe(v) {
   return parseFloat(v['n_viajes']) || 1;
 }
 
+// ── Km real (reporte de GPS) ───────────────────────────────────────
+// El "Km recorridos" que carga el chofer en cada viaje suele ser solo
+// un tramo (ida a la carga), no el total real que hizo el camión — por
+// eso el cliente carga a mano, una vez por mes, el reporte de su GPS en
+// la hoja "Km_GPS" (columnas: Mes [AAAA-MM], Matrícula, Km). Donde haya
+// un valor de GPS para un camión+mes, se usa ESE como el km real de ese
+// camión en ese mes; donde todavía no se cargó el GPS de ese mes, se
+// cae a sumar el "Km recorridos" de los viajes (mejor que nada).
+function kmGPSMapa() {
+  var map = {};
+  (window._transpKmGPSArr || []).forEach(function(g) {
+    var mat = String(g['matricula'] || '').trim();
+    var mes = String(g['mes'] || '').trim();
+    if (!mat || !mes) return;
+    map[mat] = map[mat] || {};
+    map[mat][mes] = parseFloat(g['km']) || 0;
+  });
+  return map;
+}
+// Km real por camión para un conjunto de viajes ya filtrado — agrupa
+// por matrícula+mes y reemplaza la suma de "Km recorridos" por el dato
+// de GPS donde exista.
+function kmRealPorCamionMes(viajesFiltrados) {
+  var gps = kmGPSMapa();
+  var grupos = {};
+  (viajesFiltrados || []).forEach(function(v) {
+    var mat = String(v['matricula'] || '').trim();
+    if (!mat) return;
+    var f = v['fecha viaje'] || v['timestamp'] || '';
+    var m = String(f).match(/^(\d{4}-\d{2})/);
+    if (!m) return;
+    var mes = m[1];
+    grupos[mat] = grupos[mat] || {};
+    grupos[mat][mes] = (grupos[mat][mes] || 0) + (parseFloat(v['km recorridos']) || 0);
+  });
+  var porCamion = {};
+  Object.keys(grupos).forEach(function(mat) {
+    porCamion[mat] = 0;
+    Object.keys(grupos[mat]).forEach(function(mes) {
+      var tieneGPS = gps[mat] && gps[mat][mes] !== undefined;
+      porCamion[mat] += tieneGPS ? gps[mat][mes] : grupos[mat][mes];
+    });
+  });
+  return porCamion;
+}
+// Km real total (todos los camiones) para un conjunto de viajes ya filtrado.
+function kmRealTotal(viajesFiltrados) {
+  var porCamion = kmRealPorCamionMes(viajesFiltrados);
+  return Object.keys(porCamion).reduce(function(s, mat){ return s + porCamion[mat]; }, 0);
+}
+
 function fmtMon(n, moneda, dec) {
   var v = parseFloat(n) || 0;
   if (moneda && moneda.toString().toUpperCase() === 'USD')
@@ -2149,6 +2200,22 @@ function ensureFlotaLoaded(cb) {
     cb();
   }, function() {
     window._transpFlotaArr = window._transpFlotaArr || [];
+    cb();
+  });
+}
+
+// Trae el reporte de GPS cargado a mano (hoja "Km_GPS") a memoria si
+// todavía no se cargó en esta sesión — usado por kmRealTotal()/
+// kmRealPorCamionMes() para calcular el km real por camión y mes.
+function ensureKmGPSLoaded(cb) {
+  if (window._transpKmGPSArr) { cb(); return; }
+  callTranspAPI({action: 'kmGPS'}, function(kmGPS) {
+    window._transpKmGPSArr = Array.isArray(kmGPS) ? kmGPS : [];
+    cb();
+  }, function() {
+    // Si todavía no existe la hoja "Km_GPS" (o falla la carga), seguimos
+    // con el km de los viajes nomás.
+    window._transpKmGPSArr = window._transpKmGPSArr || [];
     cb();
   });
 }
@@ -2231,7 +2298,9 @@ function loadTransporte(vista, btn) {
               window._transpMantArr  = mantArr;
               window._transpFlotaArr = flotaArr;
               window._transpFijosArr = fijosArr;
-              renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:fijosArr}, viajesArr);
+              ensureKmGPSLoaded(function() {
+                renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:fijosArr}, viajesArr);
+              });
             }, function() {
               renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:[]}, viajesArr);
             });
@@ -2263,17 +2332,24 @@ function loadTransporte(vista, btn) {
       // tabla quedaba vacía.
       var _accionApiTransp = (vista === 'tabla-fijos') ? 'costosFijos' : vista;
       callTranspAPI({action: _accionApiTransp}, function(data) {
-        if (vista === 'viajes')              renderTranspTabla(data, 'viajes');
+        // 'viajes'/'combustible'/'mantenimientos' calculan km real (GPS)
+        // en vez de la suma de "Km recorridos" de los viajes — necesitan
+        // el reporte de GPS en memoria antes de renderizar.
+        if (vista === 'viajes') {
+          ensureKmGPSLoaded(function(){ renderTranspTabla(data, 'viajes'); });
+        }
         else if (vista === 'combustible') {
-          // Si los viajes ya están en memoria los usamos; si no, los traemos para calcular km
-          if (window._transpViajesRaw && window._transpViajesRaw.length > 0) {
-            renderTranspTabla(data, 'combustible');
-          } else {
-            callTranspAPI({action: 'viajes'}, function(vData) {
-              window._transpViajesRaw = Array.isArray(vData) ? vData : [];
+          ensureKmGPSLoaded(function() {
+            // Si los viajes ya están en memoria los usamos; si no, los traemos para calcular km
+            if (window._transpViajesRaw && window._transpViajesRaw.length > 0) {
               renderTranspTabla(data, 'combustible');
-            }, function() { renderTranspTabla(data, 'combustible'); });
-          }
+            } else {
+              callTranspAPI({action: 'viajes'}, function(vData) {
+                window._transpViajesRaw = Array.isArray(vData) ? vData : [];
+                renderTranspTabla(data, 'combustible');
+              }, function() { renderTranspTabla(data, 'combustible'); });
+            }
+          });
         }
         else if (vista === 'mantenimientos') {
           // Para calcular "cuánto falta para el próximo mantenimiento" con
@@ -2283,14 +2359,16 @@ function loadTransporte(vista, btn) {
           // hace falta window._transpFlotaArr, que no depende de haber
           // visitado antes el Dashboard.
           ensureFlotaLoaded(function() {
-            if (window._transpCombArr && window._transpCombArr.length > 0) {
-              renderTranspTabla(data, 'mantenimientos');
-            } else {
-              callTranspAPI({action:'combustible'}, function(cData) {
-                window._transpCombArr = Array.isArray(cData) ? cData : [];
+            ensureKmGPSLoaded(function() {
+              if (window._transpCombArr && window._transpCombArr.length > 0) {
                 renderTranspTabla(data, 'mantenimientos');
-              }, function(){ renderTranspTabla(data, 'mantenimientos'); });
-            }
+              } else {
+                callTranspAPI({action:'combustible'}, function(cData) {
+                  window._transpCombArr = Array.isArray(cData) ? cData : [];
+                  renderTranspTabla(data, 'mantenimientos');
+                }, function(){ renderTranspTabla(data, 'mantenimientos'); });
+              }
+            });
           });
         }
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
@@ -3870,8 +3948,10 @@ function renderTranspKPIs(data, viajes) {
   }
 
   // ── MÉTRICAS GLOBALES (alineadas con DAX Power BI) ────────────
-  // DAX: Km totales = SUM(Operaciones[Km_Recorridos])
-  var totalKm  = viajes.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); },0);
+  // DAX: Km totales = SUM(Operaciones[Km_Recorridos]) — usa el km real
+  // (reporte de GPS cargado a mano) cuando hay dato para ese camión+mes,
+  // ver kmRealTotal().
+  var totalKm  = kmRealTotal(viajes);
   // DAX: Toneladas Totales = SUM(Operaciones[Toneladas])
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
@@ -3939,12 +4019,15 @@ function renderTranspKPIs(data, viajes) {
     var m = v['matricula'] || 'Sin matrícula';
     if (!byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0, _diasSet:{}};
     byTruck[m].viajes  += nViajesDe(v);
-    byTruck[m].km       += parseFloat(v['km recorridos'])||0;
     byTruck[m].ton      += parseFloat(v['toneladas'])||0;
     byTruck[m].ingresos += toUYU(ingresoViaje(v), v['moneda']);
     var fvDia = String(v['fecha viaje']||v['timestamp']||'').slice(0,10);
     if (fvDia) byTruck[m]._diasSet[fvDia] = true;
   });
+  // Km real por camión (GPS si hay, si no la suma de "Km recorridos" de
+  // sus viajes) — ver kmRealPorCamionMes().
+  var _kmRealPorCamionDash = kmRealPorCamionMes(viajes);
+  Object.keys(byTruck).forEach(function(m){ byTruck[m].km = _kmRealPorCamionDash[m] || 0; });
 
   // ── Período usado como base para "% de días activos" ──────────
   // Si hay un mes elegido en el filtro, la base es ese mes (o los días
@@ -5223,14 +5306,14 @@ function renderTranspTabla(data, tipo) {
   var indicHtml = '';
   if (rows.length > 0) {
     if (tipo === 'viajes') {
-      var totKm = 0, totTon = 0, totIng = 0, totViat = 0, totPeaj = 0;
+      var totTon = 0, totIng = 0, totViat = 0, totPeaj = 0;
       rows.forEach(function(r){
-        totKm   += parseFloat(r['km recorridos'])||0;
         totTon  += parseFloat(r['toneladas'])||0;
         totIng  += toUYU(ingresoViaje(r), r['moneda']);
         totViat += toUYU(parseFloat(r['viaticos'])||0, r['moneda']);
         totPeaj += toUYU(parseFloat(r['peajes'])||0, r['moneda']);
       });
+      var totKm = kmRealTotal(rows);
       // ── Costos por KM (DAX: Costo por KM = DIVIDE(Total Costos, Total Km)) ──
       var _combArr  = window._transpCombArr  || [];
       var _mantArr  = window._transpMantArr  || [];
@@ -5478,7 +5561,7 @@ function renderTranspTabla(data, tipo) {
         if (_rango.hasta && f > _rango.hasta) return false;
         return true;
       });
-      var totKm = _viajesEnPeriodoMant.reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); }, 0);
+      var totKm = kmRealTotal(_viajesEnPeriodoMant);
       var costoPorKmMant = totKm > 0 ? totCosto / totKm : 0;
 
       // Camiones sin correctivos: % camiones de flota sin correctivos en el período
@@ -5883,8 +5966,9 @@ function renderTranspTabla(data, tipo) {
     } else if (tipo === 'combustible') {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
-      // Km desde viajes para calcular rendimiento
-      var _viajesKm = (window._transpViajesRaw || []).reduce(function(s,v){ return s+(parseFloat(v['km recorridos'])||0); }, 0);
+      // Km desde viajes para calcular rendimiento (real, no el cargado por
+      // el chofer — ver kmRealTotal())
+      var _viajesKm = kmRealTotal(window._transpViajesRaw || []);
       var _lPor100km  = _viajesKm > 0 ? (totLt / _viajesKm * 100) : 0;
       var _kmPorL     = totLt    > 0 ? (_viajesKm / totLt)        : 0;
       var _combPorKm  = _viajesKm > 0 ? (totFactura / _viajesKm)  : 0;
