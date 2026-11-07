@@ -3709,7 +3709,11 @@ async function exportarViajesExcel() {
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'viajes_' + new Date().toISOString().substring(0,10) + '.xlsx';
+  // El nombre del archivo refleja los filtros activos (matrícula/chofer),
+  // para no confundir un export filtrado con el de todos los viajes.
+  var _nombreFiltros = [window._transpFiltroMatricula['viajes'], window._transpFiltroChofer['viajes']]
+    .filter(Boolean).map(function(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_'); }).join('_');
+  a.download = 'viajes' + (_nombreFiltros ? '_' + _nombreFiltros : '') + '_' + new Date().toISOString().substring(0,10) + '.xlsx';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -5255,6 +5259,8 @@ function exportarDocumentacionExcel() {
 var _MES_CAMPO_POR_TIPO = {viajes: 'fecha viaje', combustible: 'fecha factura', mantenimientos: 'fecha'};
 window._transpFiltroRango = window._transpFiltroRango || {};
 window._transpFiltroMoneda = window._transpFiltroMoneda || {};
+window._transpFiltroMatricula = window._transpFiltroMatricula || {};
+window._transpFiltroChofer = window._transpFiltroChofer || {};
 var _mesFiltroHtml = '';
 
 // Cambia la moneda en la que se muestra TODA la tabla (cada fila
@@ -5279,14 +5285,38 @@ function renderTranspTabla(data, tipo) {
     window._transpTablaFull = window._transpTablaFull || {};
     window._transpTablaFull[tipo] = rows;
     var _rango = window._transpFiltroRango[tipo] || {desde:'', hasta:''};
+    var _filtroMat = window._transpFiltroMatricula[tipo] || '';
+    var _filtroChofer = window._transpFiltroChofer[tipo] || '';
     var _inpStyle = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px';
+
+    // Las opciones de Matrícula/Chofer salen siempre del set COMPLETO
+    // (no del ya filtrado), para que no se vayan achicando a medida que
+    // se aplican otros filtros — son tres filtros independientes entre sí.
+    var _matsDisp = Array.from(new Set(rows.map(function(r){ return r['matricula']||''; }).filter(Boolean))).sort();
+    var _selMatHtml = '<select id="transp-filtro-matricula" style="'+_inpStyle+'" onchange="filtrarTranspPorMatriculaChofer(\''+tipo+'\')"><option value="">Todas las matrículas</option>'
+      + _matsDisp.map(function(m){ return '<option value="'+m+'"'+(m===_filtroMat?' selected':'')+'>'+m+'</option>'; }).join('')
+      + '</select>';
+
+    var _choferHtml = '';
+    if (tipo === 'viajes') {
+      var _choferesDisp = Array.from(new Set(rows.map(function(r){ return r['chofer']||''; }).filter(Boolean))).sort();
+      _choferHtml = '<select id="transp-filtro-chofer" style="'+_inpStyle+'" onchange="filtrarTranspPorMatriculaChofer(\''+tipo+'\')"><option value="">Todos los choferes</option>'
+        + _choferesDisp.map(function(c){ return '<option value="'+c+'"'+(c===_filtroChofer?' selected':'')+'>'+c+'</option>'; }).join('')
+        + '</select>';
+    }
+
+    var _hayFiltrosTransp = _rango.desde || _rango.hasta || _filtroMat || _filtroChofer;
+
     _mesFiltroHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px;flex-wrap:wrap">'
       + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Desde:</span>'
       + '<input type="date" id="transp-rango-desde" value="'+_rango.desde+'" onchange="filtrarTranspPorRango(\''+tipo+'\')" style="'+_inpStyle+'">'
       + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Hasta:</span>'
       + '<input type="date" id="transp-rango-hasta" value="'+_rango.hasta+'" onchange="filtrarTranspPorRango(\''+tipo+'\')" style="'+_inpStyle+'">'
-      + (_rango.desde || _rango.hasta ? '<button onclick="limpiarRangoTransp(\''+tipo+'\')" style="'+_inpStyle+';background:#f1f5f9;border-color:#cbd5e1;cursor:pointer">✕ Limpiar</button>' : '')
+      + _selMatHtml
+      + _choferHtml
+      + (_hayFiltrosTransp ? '<button onclick="limpiarRangoTransp(\''+tipo+'\')" style="'+_inpStyle+';background:#f1f5f9;border-color:#cbd5e1;cursor:pointer">✕ Limpiar filtros</button>' : '')
       + '</div>';
+
     if (_rango.desde || _rango.hasta) {
       rows = rows.filter(function(r){
         var f = String(r[_campoMes] || r['timestamp'] || '').substring(0,10);
@@ -5296,6 +5326,8 @@ function renderTranspTabla(data, tipo) {
         return true;
       });
     }
+    if (_filtroMat)    rows = rows.filter(function(r){ return (r['matricula']||'') === _filtroMat; });
+    if (_filtroChofer) rows = rows.filter(function(r){ return (r['chofer']||'')    === _filtroChofer; });
   }
   // Guardamos también el subconjunto ya filtrado (lo que se ve en
   // pantalla) para que "Exportar a Excel" exporte exactamente eso.
@@ -6419,8 +6451,18 @@ function filtrarTranspPorRango(tipo) {
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
 }
+function filtrarTranspPorMatriculaChofer(tipo) {
+  var matSel    = document.getElementById('transp-filtro-matricula');
+  var choferSel = document.getElementById('transp-filtro-chofer');
+  window._transpFiltroMatricula[tipo] = matSel    ? matSel.value    : '';
+  window._transpFiltroChofer[tipo]    = choferSel ? choferSel.value : '';
+  var full = (window._transpTablaFull || {})[tipo] || [];
+  renderTranspTabla(full, tipo);
+}
 function limpiarRangoTransp(tipo) {
-  window._transpFiltroRango[tipo] = {desde:'', hasta:''};
+  window._transpFiltroRango[tipo]     = {desde:'', hasta:''};
+  window._transpFiltroMatricula[tipo] = '';
+  window._transpFiltroChofer[tipo]    = '';
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
 }
