@@ -402,6 +402,8 @@ tr:hover td{background:#faf9f6}
             <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
             <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
             <button class="fb" onclick="window.print()" title="Abre el diálogo de impresión — ahí elegís 'Guardar como PDF' para descargarlo">🖨️ Descargar / Imprimir</button>
+            <button class="fb" onclick="document.getElementById('gps-file-input').click()" title="Subí el reporte 'Recorrido x Unidad' en Excel de cada camión — se suma el Km del mes solo">📡 Cargar reporte GPS</button>
+            <input type="file" id="gps-file-input" accept=".xlsx" multiple style="display:none" onchange="onSeleccionArchivosGPS(this.files)">
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
             <span>Ver en:</span>
@@ -506,6 +508,18 @@ tr:hover td{background:#faf9f6}
       <button class="btn-s" onclick="guardarEditarMantenimiento()">Guardar cambios</button>
     </div>
     <div id="me-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
+<div class="overlay" id="ov-gps">
+  <div class="modal" style="max-width:680px">
+    <h3>📡 Cargar reporte de GPS</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Se leyó la Matrícula y el Mes del archivo — revisalos antes de guardar (podés corregirlos acá si hace falta) y apretá "Guardar todo". El Km total se calcula solo, sumando todos los viajes del reporte.</div>
+    <div id="gps-body"></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeGPSModal()">Cancelar</button>
+      <button class="btn-s" onclick="guardarTodosGPS()">Guardar todo</button>
+    </div>
+    <div id="gps-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -3635,6 +3649,176 @@ function exportarOrdenesCompraExcel() {
   URL.revokeObjectURL(url);
 }
 
+// ── Carga del reporte de GPS ("Recorrido x Unidad", exportado en Excel
+// desde MAQSAT) — en vez de pedirle al cliente que edite la planilla a
+// mano, lee el archivo acá mismo, suma el Km de todos los viajes del
+// reporte y lo manda al backend. Si la columna/fila cambia de lugar en
+// una exportación futura, esto se adapta solo porque busca el
+// encabezado "Kilometraje" en vez de asumir una columna fija.
+var _gpsArchivosParseados = [];
+
+// Saca el texto plano de una celda de ExcelJS — el texto con negrita/
+// tamaño especial viene como {richText:[...]} en vez de un string
+// derecho, y las celdas con hyperlink (como "Posición inicial", que
+// linkea a Google Maps) lo envuelven una vuelta más adentro de .text.
+function _gpsCellText(cell) {
+  var v = cell.value;
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  if (v.richText) return v.richText.map(function(rt){ return rt.text; }).join('');
+  if (v.text) return _gpsCellText({value: v.text});
+  return String(v);
+}
+
+// Lee un archivo .xlsx de "Recorrido x Unidad" y devuelve
+// {matricula, mes, km, viajes}. Tira una excepción con un mensaje para
+// mostrar si no encuentra lo que necesita (no es ese reporte, viene
+// vacío, etc.).
+async function parseReporteGPS(file) {
+  var buf = await file.arrayBuffer();
+  var wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  var ws = wb.worksheets[0];
+  if (!ws) throw new Error('El archivo no tiene hojas.');
+
+  // La fila de encabezado es la que tiene una celda que empieza con
+  // "Kilometraje" (puede venir separada en varias líneas tipo "Kilo
+  // metr aje" — por eso se compara sin espacios).
+  var headerRow = -1, kmCol = -1;
+  for (var r = 1; r <= Math.min(ws.rowCount, 20); r++) {
+    var row = ws.getRow(r);
+    for (var c = 1; c <= 12; c++) {
+      var t = _gpsCellText(row.getCell(c)).replace(/\s+/g, '').toLowerCase();
+      if (t.indexOf('kilo') === 0) { headerRow = r; kmCol = c; break; }
+    }
+    if (headerRow > 0) break;
+  }
+  if (headerRow < 0) throw new Error('No se encontró la columna "Kilometraje" — ¿es el reporte "Recorrido x Unidad"?');
+
+  // Matrícula: la primera celda corta de columna A, antes del
+  // encabezado, que no sea el título del reporte ni "Viajes".
+  var matricula = '';
+  for (var r2 = 1; r2 < headerRow; r2++) {
+    var t2 = _gpsCellText(ws.getRow(r2).getCell(1)).trim();
+    if (t2 && t2.length < 20 && t2.indexOf('.') < 0 && t2.toLowerCase().indexOf('recorrido') < 0 && t2.toLowerCase() !== 'viajes') {
+      matricula = t2;
+    }
+  }
+  matricula = matricula.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+  // Suma de Km: una fila por viaje, con fecha en la columna A ("día.mes.
+  // año" — a veces el año queda partido en dos líneas tipo "20\n26" por
+  // el ancho de columna, por eso se saca el espacio/salto de línea
+  // antes de buscar el patrón) y "N.NN km" en la columna de Kilometraje.
+  // Las filas que no son de viaje (pie "Página X de Y", etc.) no
+  // matchean ninguno de los dos patrones y se saltean solas.
+  var total = 0, nViajes = 0, mesesCount = {};
+  var lastRow = ws.actualRowCount || ws.rowCount;
+  for (var rr = headerRow + 1; rr <= lastRow; rr++) {
+    var row2 = ws.getRow(rr);
+    var fechaStr = _gpsCellText(row2.getCell(1)).replace(/\s+/g, '');
+    var mFecha = fechaStr.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    var kmStr = _gpsCellText(row2.getCell(kmCol)).replace(/\s+/g, '');
+    var mKm = kmStr.match(/^(\d+(?:\.\d+)?)km$/);
+    if (!mFecha || !mKm) continue;
+    total += parseFloat(mKm[1]);
+    nViajes++;
+    var mesFila = mFecha[3] + '-' + mFecha[2];
+    mesesCount[mesFila] = (mesesCount[mesFila] || 0) + 1;
+  }
+  if (nViajes === 0) throw new Error('No se encontraron viajes con Km en el archivo.');
+
+  // El mes del reporte es el que más se repite entre los viajes (por si
+  // algún viaje puntual cae justo en el borde del mes anterior/siguiente).
+  var mesElegido = Object.keys(mesesCount).sort(function(a,b){ return mesesCount[b]-mesesCount[a]; })[0];
+
+  return { matricula: matricula, mes: mesElegido, km: Math.round(total * 100) / 100, viajes: nViajes };
+}
+
+async function onSeleccionArchivosGPS(fileList) {
+  var files = Array.prototype.slice.call(fileList || []);
+  if (!files.length) return;
+  _gpsArchivosParseados = [];
+  for (var i = 0; i < files.length; i++) {
+    try {
+      var parsed = await parseReporteGPS(files[i]);
+      parsed.nombreArchivo = files[i].name;
+      _gpsArchivosParseados.push(parsed);
+    } catch (e) {
+      _gpsArchivosParseados.push({ nombreArchivo: files[i].name, error: e.message || 'No se pudo leer el archivo.' });
+    }
+  }
+  document.getElementById('gps-file-input').value = ''; // para poder volver a elegir el mismo archivo si hace falta
+  renderGPSModal();
+}
+
+function renderGPSModal() {
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:var(--gray)">'
+    + th('Archivo') + th('Matrícula') + th('Mes') + th('Viajes','r') + th('Km total','r')
+    + '</tr></thead><tbody>';
+  _gpsArchivosParseados.forEach(function(p, i) {
+    if (p.error) {
+      html += '<tr><td style="padding:6px 8px;font-size:12px" colspan="5"><strong>' + p.nombreArchivo + '</strong>: <span style="color:#a32d2d">' + p.error + '</span></td></tr>';
+      return;
+    }
+    html += '<tr>'
+      + '<td style="padding:6px 8px;font-size:11px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + p.nombreArchivo + '">' + p.nombreArchivo + '</td>'
+      + '<td style="padding:6px 8px"><input type="text" value="' + p.matricula + '" id="gps-mat-' + i + '" style="width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
+      + '<td style="padding:6px 8px"><input type="month" value="' + p.mes + '" id="gps-mes-' + i + '" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
+      + '<td style="padding:6px 8px;text-align:right">' + p.viajes + '</td>'
+      + '<td style="padding:6px 8px;text-align:right;font-weight:600">' + fmtN(p.km, 1) + ' km</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('gps-body').innerHTML = html;
+  document.getElementById('gps-msg').textContent = '';
+  document.getElementById('ov-gps').classList.add('open');
+}
+
+function closeGPSModal() {
+  document.getElementById('ov-gps').classList.remove('open');
+}
+
+function guardarTodosGPS() {
+  var msgEl = document.getElementById('gps-msg');
+  var pendientes = [];
+  _gpsArchivosParseados.forEach(function(p, i) {
+    if (p.error) return;
+    var matEl = document.getElementById('gps-mat-' + i);
+    var mesEl = document.getElementById('gps-mes-' + i);
+    var mat = matEl ? matEl.value.trim().toUpperCase() : p.matricula;
+    var mes = mesEl ? mesEl.value : p.mes;
+    if (!mat || !mes) return;
+    pendientes.push({ matricula: mat, mes: mes, km: p.km });
+  });
+  if (!pendientes.length) {
+    msgEl.textContent = 'No hay nada para guardar — revisá Matrícula y Mes.';
+    msgEl.style.color = '#a32d2d';
+    return;
+  }
+  msgEl.textContent = 'Guardando ' + pendientes.length + '...';
+  msgEl.style.color = 'var(--muted)';
+  var ok = 0, fail = 0;
+  function siguiente(idx) {
+    if (idx >= pendientes.length) {
+      msgEl.textContent = ok + ' guardado' + (ok === 1 ? '' : 's') + (fail ? ', ' + fail + ' con error' : '') + '.';
+      msgEl.style.color = fail ? '#a32d2d' : '#0f6e56';
+      window._transpKmGPSArr = null; // se vuelve a traer de la API la próxima vez que haga falta
+      if (!fail) { toast(ok + ' camión' + (ok === 1 ? '' : 'es') + ' actualizado' + (ok === 1 ? '' : 's') + ' con su Km real.'); setTimeout(closeGPSModal, 1200); }
+      return;
+    }
+    var p = pendientes[idx];
+    callTranspAPI({ action: 'saveKmGPS', matricula: p.matricula, mes: p.mes, km: p.km }, function() {
+      ok++; siguiente(idx + 1);
+    }, function() {
+      fail++; siguiente(idx + 1);
+    });
+  }
+  siguiente(0);
+}
+
 // Exporta la tabla de Viajes (lo que está visible: filtrado por rango de
 // fechas si hay uno activo) a un .xlsx real, con el logo de CAMINO
 // Gestión & Datos arriba. Usa ExcelJS (a diferencia de los otros export
@@ -6471,6 +6655,7 @@ function closeModal(){ document.getElementById('overlay').classList.remove('open
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
+document.getElementById('ov-gps').addEventListener('click',function(e){ if(e.target===this) closeGPSModal(); });
 // Precargar config al abrir la página
 loadConfig();
 </script>
