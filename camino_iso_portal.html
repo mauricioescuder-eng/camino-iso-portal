@@ -5731,10 +5731,15 @@ function renderTranspTabla(data, tipo) {
             if (!v) return '';
             return '<circle cx="'+pxv(i).toFixed(1)+'" cy="'+pyv(v).toFixed(1)+'" r="3" fill="'+ser.color+'"><title>'+ser.matricula+' '+ejesDiaV[i]+': '+fmtN(v,0)+' viaje'+(v===1?'':'s')+'</title></circle>';
           }).join('');
-          return '<polyline points="'+pts+'" fill="none" stroke="'+ser.color+'" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>' + dots;
+          // Agrupadas en un <g> por matrícula para poder resaltar/apagar
+          // una serie entera (línea + puntos) de una — ver toggleViajesDiaCamionSel().
+          return '<g class="viajes-dia-serie" data-mat="'+ser.matricula+'" data-color="'+ser.color+'">'
+            + '<polyline points="'+pts+'" fill="none" stroke="'+ser.color+'" stroke-width="2" stroke-linejoin="round" opacity="0.9"/>' + dots
+            + '</g>';
         }).join('');
         var legendHtmlv = seriesV.map(function(ser){
-          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:10px"><span style="width:14px;height:3px;background:'+ser.color+';display:inline-block;border-radius:2px"></span>'+ser.matricula+'</span>';
+          return '<span class="viajes-dia-legend-item" data-mat="'+ser.matricula+'" data-color="'+ser.color+'" onclick="toggleViajesDiaCamionSel(this)" title="Tocá para resaltar solo este camión" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:4px;padding:3px 6px;border-radius:5px">'
+            + '<span class="viajes-dia-swatch" style="width:14px;height:3px;background:'+ser.color+';display:inline-block;border-radius:2px"></span>'+ser.matricula+'</span>';
         }).join('');
         indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
           + '<h4 style="margin:0 0 8px;font-size:13px">📈 Viajes por día y por camión</h4>'
@@ -6649,6 +6654,50 @@ function limpiarRangoTransp(tipo) {
   window._transpFiltroChofer[tipo]    = '';
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
+}
+
+// Resalta un camión del gráfico "Viajes por día y por camión" al tocar
+// su nombre en la leyenda: esa línea queda en su color real (más
+// gruesa y al frente, por si se cruza con otra) y el resto pasa a gris
+// para poder seguir uno solo con la vista. Tocar el mismo de nuevo
+// (o cualquier otro) saca el resaltado. No vuelve a pedir datos ni
+// rearma el gráfico — solo cambia los colores ya dibujados.
+function toggleViajesDiaCamionSel(legendEl) {
+  var wrap = legendEl.closest('.chart-wrap');
+  if (!wrap) return;
+  var mat = legendEl.getAttribute('data-mat');
+  var actual = wrap.getAttribute('data-sel-mat') || '';
+  var nuevo = actual === mat ? '' : mat;
+  wrap.setAttribute('data-sel-mat', nuevo);
+
+  var svg = wrap.querySelector('svg');
+  var GRIS = '#d9d9d9';
+  wrap.querySelectorAll('.viajes-dia-serie').forEach(function(g) {
+    var esSel = !nuevo || g.getAttribute('data-mat') === nuevo;
+    var color = g.getAttribute('data-color');
+    g.querySelectorAll('polyline').forEach(function(p) {
+      p.setAttribute('stroke', esSel ? color : GRIS);
+      p.setAttribute('opacity', esSel ? '0.9' : '0.6');
+      p.setAttribute('stroke-width', (nuevo && esSel) ? '3' : '2');
+    });
+    g.querySelectorAll('circle').forEach(function(c) {
+      c.setAttribute('fill', esSel ? color : GRIS);
+    });
+    // La serie resaltada se trae al frente del SVG, para que no quede
+    // tapada por otra línea si se cruzan.
+    if (nuevo && g.getAttribute('data-mat') === nuevo && svg) svg.appendChild(g);
+  });
+  wrap.querySelectorAll('.viajes-dia-legend-item').forEach(function(item) {
+    var matItem = item.getAttribute('data-mat');
+    var colorItem = item.getAttribute('data-color');
+    var esSelItem = !nuevo || matItem === nuevo;
+    var esActivo = nuevo && matItem === nuevo;
+    var swatch = item.querySelector('.viajes-dia-swatch');
+    if (swatch) swatch.style.background = esSelItem ? colorItem : GRIS;
+    item.style.opacity = esSelItem ? '1' : '0.55';
+    item.style.fontWeight = esActivo ? '700' : '400';
+    item.style.background = esActivo ? 'var(--gray)' : 'transparent';
+  });
 }
 
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
