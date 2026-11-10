@@ -3800,10 +3800,10 @@ function guardarTodosGPS() {
   }
   msgEl.textContent = 'Guardando ' + pendientes.length + '...';
   msgEl.style.color = 'var(--muted)';
-  var ok = 0, fail = 0;
+  var ok = 0, fail = 0, errores = [];
   function siguiente(idx) {
     if (idx >= pendientes.length) {
-      msgEl.textContent = ok + ' guardado' + (ok === 1 ? '' : 's') + (fail ? ', ' + fail + ' con error' : '') + '.';
+      msgEl.innerHTML = ok + ' guardado' + (ok === 1 ? '' : 's') + (fail ? ', ' + fail + ' con error:<br>' + errores.join('<br>') : '') + '.';
       msgEl.style.color = fail ? '#a32d2d' : '#0f6e56';
       window._transpKmGPSArr = null; // se vuelve a traer de la API la próxima vez que haga falta
       if (!fail) { toast(ok + ' camión' + (ok === 1 ? '' : 'es') + ' actualizado' + (ok === 1 ? '' : 's') + ' con su Km real.'); setTimeout(closeGPSModal, 1200); }
@@ -3812,8 +3812,13 @@ function guardarTodosGPS() {
     var p = pendientes[idx];
     callTranspAPI({ action: 'saveKmGPS', matricula: p.matricula, mes: p.mes, km: p.km }, function() {
       ok++; siguiente(idx + 1);
-    }, function() {
-      fail++; siguiente(idx + 1);
+    }, function(data) {
+      fail++;
+      // Sin esto el único rastro del error era "con error", a secas — no
+      // se podía saber si era que faltaba actualizar el backend, un
+      // problema de conexión, u otra cosa.
+      errores.push(p.matricula + ': ' + ((data && data.error) ? data.error : 'no se pudo conectar con el servidor'));
+      siguiente(idx + 1);
     });
   }
   siguiente(0);
