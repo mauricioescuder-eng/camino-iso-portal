@@ -6193,8 +6193,22 @@ function renderTranspTabla(data, tipo) {
       var totLt = 0, totFactura = 0;
       rows.forEach(function(r){ totLt += parseFloat(r['litros'])||0; totFactura += parseFloat(r['total'])||0; });
       // Km desde viajes para calcular rendimiento (real, no el cargado por
-      // el chofer — ver kmRealTotal())
-      var _viajesKm = kmRealTotal(window._transpViajesRaw || []);
+      // el chofer — ver kmRealTotal()) — filtrado por lo mismo que ya
+      // filtra esta pestaña (rango de fechas / matrícula): si no, el
+      // litraje queda acotado a lo filtrado pero el km seguía siendo el
+      // de TODA la flota en TODO el período, dando un consumo sin sentido
+      // apenas se filtra Combustible por un camión o una fecha.
+      var _viajesParaKm = (window._transpViajesRaw || []).filter(function(v) {
+        if (_filtroMat && (v['matricula']||'') !== _filtroMat) return false;
+        if (_rango.desde || _rango.hasta) {
+          var fv = String(v['fecha viaje'] || v['timestamp'] || '').substring(0,10);
+          if (!fv) return false;
+          if (_rango.desde && fv < _rango.desde) return false;
+          if (_rango.hasta && fv > _rango.hasta) return false;
+        }
+        return true;
+      });
+      var _viajesKm = kmRealTotal(_viajesParaKm);
       var _lPor100km  = _viajesKm > 0 ? (totLt / _viajesKm * 100) : 0;
       var _kmPorL     = totLt    > 0 ? (_viajesKm / totLt)        : 0;
       var _combPorKm  = _viajesKm > 0 ? (totFactura / _viajesKm)  : 0;
