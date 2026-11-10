@@ -6267,8 +6267,13 @@ function renderTranspTabla(data, tipo) {
         var mat = String(r['matricula'] || '').trim() || '—';
         _porCamionLt[mat] = (_porCamionLt[mat] || 0) + (parseFloat(r['litros']) || 0);
       });
+      // Km real por camión (GPS si hay, si no la suma de "Km recorridos" de
+      // sus viajes — ver kmRealPorCamionMes()), mismo filtro ya aplicado
+      // arriba, para poder sacar el consumo (L/100km) de cada camión y no
+      // solo el total de litros cargados.
+      var _kmPorCamionComb = kmRealPorCamionMes(_viajesParaKm);
       var _camionesLt = Object.keys(_porCamionLt)
-        .map(function(m){ return {matricula: m, litros: _porCamionLt[m]}; })
+        .map(function(m){ return {matricula: m, litros: _porCamionLt[m], km: _kmPorCamionComb[m] || 0}; })
         .sort(function(a,b){ return b.litros - a.litros; });
       var _camionesHtml = '';
       if (_camionesLt.length > 0) {
@@ -6276,10 +6281,14 @@ function renderTranspTabla(data, tipo) {
           + '<h4 style="margin:0 0 12px;font-size:13px">🚚 Combustible por camión</h4>'
           + '<div style="display:flex;flex-wrap:wrap;gap:12px">'
           + _camionesLt.map(function(c) {
+              var consumoHtml = c.km > 0
+                ? fmtN(c.litros / c.km * 100, 1) + ' L/100km · ' + fmtN(c.km / c.litros, 2) + ' km/L'
+                : 'Sin Km cargado (ver reporte GPS)';
               return '<div style="flex:1 1 120px;min-width:120px;background:var(--gray);border-radius:10px;padding:16px;text-align:center">'
                 + '<div style="font-size:30px;line-height:1">🚚</div>'
                 + '<div style="font-weight:700;font-size:13px;margin-top:8px">' + c.matricula + '</div>'
                 + '<div style="color:#F07820;font-weight:700;font-size:16px;margin-top:2px">' + fmtN(c.litros,0) + ' L</div>'
+                + '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + consumoHtml + '</div>'
                 + '</div>';
             }).join('')
           + '</div></div>';
