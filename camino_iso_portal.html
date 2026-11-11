@@ -4412,6 +4412,18 @@ function renderTranspKPIs(data, viajes) {
   var tipoArr = Object.keys(porTipo).map(function(k){ return {tipo:k, ton:porTipo[k]}; })
                   .sort(function(a,b){ return b.ton-a.ton; });
 
+  // ── Agrupar ingreso por tipo de carga (qué carga trae más plata,
+  // no solo cuál pesa más) — ya en la moneda de vista elegida.
+  var porTipoIng = {};
+  var porTipoIngTon = {};
+  viajes.forEach(function(v) {
+    var t = v['tipo de carga'] || 'Otro';
+    porTipoIng[t] = (porTipoIng[t] || 0) + toUYU(ingresoViaje(v), v['moneda']);
+    porTipoIngTon[t] = (porTipoIngTon[t] || 0) + (parseFloat(v['toneladas'])||0);
+  });
+  var tipoIngArr = Object.keys(porTipoIng).map(function(k){ return {tipo:k, ing:porTipoIng[k], ton:porTipoIngTon[k]}; })
+                     .sort(function(a,b){ return b.ing-a.ing; });
+
   // ── Preservar valores de filtros activos ──────────────────────
   var savedPer  = document.getElementById('tf-periodo')  ? document.getElementById('tf-periodo').value  : '';
   var savedMat  = document.getElementById('tf-matricula') ? document.getElementById('tf-matricula').value : '';
@@ -4501,10 +4513,17 @@ function renderTranspKPIs(data, viajes) {
     if (savedTipo && document.getElementById('tf-tipo'))      document.getElementById('tf-tipo').value      = savedTipo;
   }, 0);
 
-  // ── FILA 2: Torta tipo de carga + Barras ingresos + Barras toneladas ──
-  html += '<div style="display:grid;grid-template-columns:1fr 1.4fr 1.4fr;gap:12px;margin-bottom:12px">';
+  // ── FILA 2: Torta tipo de carga (toneladas) + Torta tipo de carga (ingreso) ──
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
 
-  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Por Tipo de Carga 🔍</h4>' + svgDonutTipo(tipoArr) + '</div>';
+  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Por Tipo de Carga (Toneladas) 🔍</h4>' + svgDonutTipo(tipoArr) + '</div>';
+  html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Por Tipo de Carga (Ingreso) 🔍</h4>' + svgDonutTipoIngreso(tipoIngArr) + '</div>';
+
+  html += '</div>';
+
+  // ── FILA 2B: Barras viajes/toneladas por mes + Barras gastos por mes ──
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
+
   html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Viajes y Toneladas por Mes 🔍</h4>' + svgBarrasDual(mesesArr) + '</div>';
   html += '<div class="chart-wrap chart-wrap-click" style="margin:0" onclick="openChartModal(this)"><h4>Gastos por Mes 🔍</h4>' + svgBarrasApiladas(gastosArr) + '</div>';
 
@@ -5068,6 +5087,35 @@ function svgDonut(areas) {
   return svgDonutGen(areas.map(function(a){ return {label:a.area||'?', val:parseFloat(a.costo)||0}; }));
 }
 
+// Mismos colores para un tipo de carga en los dos donuts (toneladas e
+// ingreso) y en cualquier otro gráfico que se agregue más adelante.
+var TIPO_COLORS_CARGA = {
+  'Soja':                   '#D4AC0D',
+  'Maíz':                   '#F5A623',
+  'Maiz':                   '#F5A623',
+  'Trigo':                  '#C8A850',
+  'Girasol':                '#FFD700',
+  'Ganado':                 '#8B4513',
+  'Fertilizante':           '#27AE60',
+  'Materiales construcción':'#7f8c8d',
+  'Materiales construccion':'#7f8c8d',
+  'Combustible':            '#E74C3C',
+  'Contenedor':             '#2980B9',
+  'General':                '#8E44AD',
+  'Piedra':                 '#616A6B',
+  'Tosca':                  '#C2B280',
+  'Otro':                   '#95A5A6'
+};
+var TIPO_COLORS_FALLBACK = ['#4472c4','#ed7d31','#a9d18e','#ffc000','#5b9bd5','#70ad47','#c00000','#7030a0'];
+function coloresPorTipoCarga(tipos) {
+  var fi = 0;
+  var map = {};
+  tipos.forEach(function(t) {
+    map[t] = TIPO_COLORS_CARGA[t] || TIPO_COLORS_FALLBACK[fi++ % TIPO_COLORS_FALLBACK.length];
+  });
+  return map;
+}
+
 function svgDonutTipo(tipoArr) {
   if (!tipoArr || tipoArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de viajes</div>';
   // El donut se arma pesando por Toneladas — si los viajes cargados no
@@ -5078,28 +5126,24 @@ function svgDonutTipo(tipoArr) {
   if (totalTonTipo <= 0) {
     return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Hay viajes cargados, pero sin Toneladas — completá ese campo para ver el gráfico.</div>';
   }
-  var TIPO_COLORS = {
-    'Soja':                   '#D4AC0D',
-    'Maíz':                   '#F5A623',
-    'Maiz':                   '#F5A623',
-    'Trigo':                  '#C8A850',
-    'Girasol':                '#FFD700',
-    'Ganado':                 '#8B4513',
-    'Fertilizante':           '#27AE60',
-    'Materiales construcción':'#7f8c8d',
-    'Materiales construccion':'#7f8c8d',
-    'Combustible':            '#E74C3C',
-    'Contenedor':             '#2980B9',
-    'General':                '#8E44AD',
-    'Piedra':                 '#616A6B',
-    'Tosca':                  '#C2B280',
-    'Otro':                   '#95A5A6'
-  };
-  var FALLBACK = ['#4472c4','#ed7d31','#a9d18e','#ffc000','#5b9bd5','#70ad47','#c00000','#7030a0'];
-  var fi = 0;
+  var colores = coloresPorTipoCarga(tipoArr.map(function(t){ return t.tipo; }));
   return svgDonutGen(tipoArr.map(function(t){
-    var color = TIPO_COLORS[t.tipo] || FALLBACK[fi++ % FALLBACK.length];
-    return {label:t.tipo, val:t.ton, color:color};
+    return {label:t.tipo, val:t.ton, color:colores[t.tipo], extra: fmtN(t.ton,0)+' t'};
+  }));
+}
+
+// Mismo donut, pero pesado por Ingreso (ya convertido a la moneda de
+// vista por quien llama) en vez de por Toneladas — para ver qué tipo
+// de carga le trae más plata a la empresa, no solo cuál pesa más.
+function svgDonutTipoIngreso(tipoIngArr) {
+  if (!tipoIngArr || tipoIngArr.length === 0) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Sin datos de viajes</div>';
+  var totalIngTipo = tipoIngArr.reduce(function(s,t){ return s+(parseFloat(t.ing)||0); },0);
+  if (totalIngTipo <= 0) {
+    return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Hay viajes cargados, pero sin Ingreso calculado — revisá Tarifa/Toneladas para ver el gráfico.</div>';
+  }
+  var colores = coloresPorTipoCarga(tipoIngArr.map(function(t){ return t.tipo; }));
+  return svgDonutGen(tipoIngArr.map(function(t){
+    return {label:t.tipo, val:t.ing, color:colores[t.tipo], extra: fmtN(t.ton||0,0)+' t'};
   }));
 }
 
@@ -5124,8 +5168,10 @@ function svgDonutGen(items) {
     var lg = slice > Math.PI ? 1 : 0;
     var col = a.color || COLORS[i % COLORS.length];
     var pct = Math.round((v/total)*100);
-    svgPaths += '<path d="M '+xi1+' '+yi1+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+lg+' 1 '+x2+' '+y2+' L '+xi2+' '+yi2+' A '+rI+' '+rI+' 0 '+lg+' 0 '+xi1+' '+yi1+' Z" fill="'+col+'"><title>'+a.label+': '+pct+'%</title></path>';
-    legend += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:4px"><div style="width:9px;height:9px;border-radius:2px;background:'+col+';flex-shrink:0"></div><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.label+'</span><strong style="margin-left:auto;flex-shrink:0">'+pct+'%</strong></div>';
+    var tituloExtra = a.extra ? (' ('+a.extra+')') : '';
+    svgPaths += '<path d="M '+xi1+' '+yi1+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+lg+' 1 '+x2+' '+y2+' L '+xi2+' '+yi2+' A '+rI+' '+rI+' 0 '+lg+' 0 '+xi1+' '+yi1+' Z" fill="'+col+'"><title>'+a.label+': '+pct+'%'+tituloExtra+'</title></path>';
+    var extraHtml = a.extra ? '<span style="color:var(--muted);flex-shrink:0;font-size:10px">'+a.extra+'</span>' : '';
+    legend += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;margin-bottom:4px"><div style="width:9px;height:9px;border-radius:2px;background:'+col+';flex-shrink:0"></div><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+a.label+'</span>'+extraHtml+'<strong style="margin-left:auto;flex-shrink:0">'+pct+'%</strong></div>';
     angle += slice;
   });
   return '<div style="display:flex;align-items:center;gap:10px">'
