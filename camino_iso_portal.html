@@ -2140,6 +2140,11 @@ function ingresoViaje(v) {
 function nViajesDe(v) {
   return parseFloat(v['n_viajes']) || 1;
 }
+// Estado de facturación de un viaje (columna "Facturado" del backend,
+// creada sola la primera vez que se marca uno desde la tabla).
+function facturadoDe(v) {
+  return !!(v && v['facturado']);
+}
 
 // ── Km real (reporte de GPS) ───────────────────────────────────────
 // El "Km recorridos" que carga el chofer en cada viaje suele ser solo
@@ -3868,7 +3873,7 @@ async function exportarViajesExcel() {
   ws.getRow(5).height = 10;
 
   var headerRowIdx = 6;
-  var headers = ['Fecha','Matrícula','Chofer','Origen','Destino','Carga','Toneladas','Km','Peajes','Viáticos','Tarifa','Moneda','Ingreso','Equiv. $U','Remito'];
+  var headers = ['Fecha','Matrícula','Chofer','Origen','Destino','Carga','Toneladas','Km','Peajes','Viáticos','Tarifa','Moneda','Ingreso','Equiv. $U','Remito','Facturado'];
   var headerRow = ws.getRow(headerRowIdx);
   headerRow.values = headers;
   headerRow.eachCell(function(cell){
@@ -3883,14 +3888,14 @@ async function exportarViajesExcel() {
       r['fecha viaje']||'', r['matricula']||'', r['chofer']||'', r['origen']||'', r['destino']||'',
       r['tipo de carga']||'', parseFloat(r['toneladas'])||0, parseFloat(r['km recorridos'])||0,
       parseFloat(r['peajes'])||0, parseFloat(r['viaticos'])||0, parseFloat(r['tarifa'])||0,
-      r['moneda']||'UYU', ing, toUYU(ing, r['moneda']), r['remito']||''
+      r['moneda']||'UYU', ing, toUYU(ing, r['moneda']), r['remito']||'', facturadoDe(r) ? 'Sí' : 'Pendiente'
     ]);
     if (i % 2 === 1) {
       row.eachCell(function(cell){ cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF5F5F3'} }; });
     }
   });
 
-  var anchoCols = [12,12,16,14,14,12,11,9,10,10,10,8,11,11,12];
+  var anchoCols = [12,12,16,14,14,12,11,9,10,10,10,8,11,11,12,11];
   anchoCols.forEach(function(w, idx){ ws.getColumn(idx+1).width = w; });
 
   var buffer = await wb.xlsx.writeBuffer();
@@ -5496,6 +5501,10 @@ window._transpFiltroRango = window._transpFiltroRango || {};
 window._transpFiltroMoneda = window._transpFiltroMoneda || {};
 window._transpFiltroMatricula = window._transpFiltroMatricula || {};
 window._transpFiltroChofer = window._transpFiltroChofer || {};
+// Por defecto la tabla de Viajes solo muestra la última semana
+// cargada (con un botón "Ver más" para traer el resto) — se guarda
+// acá para que el estado sobreviva entre repintados.
+window._transpVerTodoViajes = window._transpVerTodoViajes || false;
 var _mesFiltroHtml = '';
 
 // Cambia la moneda en la que se muestra TODA la tabla (cada fila
@@ -5650,6 +5659,36 @@ function renderTranspTabla(data, tipo) {
         + kpi('Viajes / camión / día', fmtN(_viajesPorCamionDia,2), _numUnidadesV+' camión'+(_numUnidadesV===1?'':'es')+' · '+_diasActivos+' día'+(_diasActivos===1?'':'s'), '#7B3F00')
         + kpi('% Ocupación de flota',  fmtN(_ocupacionFlotaPct,0)+'%', _numUnidadesV+'/'+_flotaTotalV+' camiones con viaje', _ocupacionFlotaPct>=70?'#0f6e56':'#a32d2d')
         + '</div>';
+
+      // ── Facturación de Viajes — cuántos viajes del período ya están
+      // marcados como Facturados (columna clickeable de la tabla) vs
+      // Pendientes de facturar, y cuánto ingreso representa cada uno.
+      var _facturadosV  = rows.filter(facturadoDe);
+      var _pendientesV  = rows.filter(function(r){ return !facturadoDe(r); });
+      var _totFacturadoV = _facturadosV.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); },0);
+      var _totPendienteV = _pendientesV.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); },0);
+      var _pctFacturadoV = rows.length > 0 ? Math.round(_facturadosV.length / rows.length * 100) : 0;
+      indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+        + '<h4 style="margin:0;font-size:13px">🧾 Facturación de Viajes</h4>'
+        + '<span style="font-size:11px;color:var(--muted)">'+rows.length+' viaje'+(rows.length===1?'':'s')+' en el período</span>'
+        + '</div>'
+        + '<div style="height:10px;border-radius:5px;overflow:hidden;display:flex;background:var(--gray);margin-bottom:12px">'
+        + '<div style="width:'+_pctFacturadoV+'%;background:#1E6B2E"></div>'
+        + '<div style="width:'+(100-_pctFacturadoV)+'%;background:#c0392b"></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+        + '<div style="padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
+        + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">✅ FACTURADOS</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+_facturadosV.length+' viaje'+(_facturadosV.length===1?'':'s')+' <span style="font-size:12px;font-weight:600">('+_pctFacturadoV+'%)</span></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+fmt$(_totFacturadoV)+'</div>'
+        + '</div>'
+        + '<div style="padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
+        + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">⏳ PENDIENTES</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+_pendientesV.length+' viaje'+(_pendientesV.length===1?'':'s')+' <span style="font-size:12px;font-weight:600">('+(100-_pctFacturadoV)+'%)</span></div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+fmt$(_totPendienteV)+'</div>'
+        + '</div>'
+        + '</div></div>';
 
       // ── Control de Proceso ────────────────────────────────────────
       // Calcular ingreso por viaje para cada registro (todos, incluidos tarifa=0).
@@ -6361,7 +6400,7 @@ function renderTranspTabla(data, tipo) {
   agregarBotonesDescargaCharts(document.getElementById('transp-indicadores'));
 
   var colMap = {
-    viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito'],
+    viajes:         ['fecha viaje','moneda','matricula','chofer','origen','destino','tipo de carga','toneladas','km recorridos','peajes','viaticos','tarifa','ingreso','remito','facturado'],
     combustible:    ['fecha factura','proveedor','matricula','litros','precio litro','total','factura'],
     mantenimientos: ['fecha','tipo','moneda','matricula','area','detalle','km equipo','proximo_km','taller','costo','factura'],
     flota:          ['matricula','marca','modelo','año','tipo','propietario','chasis','motor'],
@@ -6377,7 +6416,8 @@ function renderTranspTabla(data, tipo) {
     'tipo':'Tipo','area':'Área','litros':'Litros','proveedor':'Proveedor',
     'chofer habitual':'Chofer hab.','ano':'Año','moneda':'Mon.',
     'marca':'Marca','año':'Año','propietario':'Propietario','chasis':'N° Chasis','motor':'N° Motor',
-    'proximo_km':'Próx. mant. (km)','rubro':'Rubro','monto':'Monto','clasificacion':'Clasificación'
+    'proximo_km':'Próx. mant. (km)','rubro':'Rubro','monto':'Monto','clasificacion':'Clasificación',
+    'facturado':'Facturación'
   };
   var monedaCols = ['peajes','viaticos','tarifa','ingreso','total','costo','precio litro','monto'];
 
@@ -6483,6 +6523,16 @@ function renderTranspTabla(data, tipo) {
         var v = r[c];
         if (c === 'moneda') {
           html += '<td style="padding:6px 8px">' + badgeMon(monedaMostrada) + '</td>';
+          return;
+        }
+        if (c === 'facturado') {
+          var _fFact = facturadoDe(r);
+          var _filaViaje = r['_fila'] || 0;
+          html += '<td style="padding:6px 8px;text-align:center">'
+            + '<button onclick="toggleFacturadoViaje('+_filaViaje+','+(!_fFact)+',this)"'
+            + (_filaViaje ? '' : ' disabled title="No se pudo identificar la fila de este viaje"')
+            + ' style="padding:3px 10px;border-radius:12px;border:1px solid '+(_fFact?'#1E6B2E':'#c0392b')+';background:'+(_fFact?'#e8f5e9':'#fdecea')+';color:'+(_fFact?'#1E6B2E':'#c0392b')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'
+            + (_fFact ? '✅ Facturado' : '⏳ Pendiente') + '</button></td>';
           return;
         }
         if (c === 'ingreso') v = ingresoViaje(r);
@@ -6608,8 +6658,40 @@ function renderTranspTabla(data, tipo) {
           + _theadHtml + buildFilasHtml(grupo) + '</table></div></div>';
       });
     } else {
+      // ── Viajes: por defecto solo se muestra la última semana cargada
+      // (no la semana calendario, sino los últimos 7 días con datos),
+      // con un botón "Ver más" para traer el resto sin volver a pedirle
+      // nada al servidor. Si hay un filtro de fecha explícito (Desde/
+      // Hasta), se respeta ese rango entero sin recortar nada más.
+      var filasTabla = rows;
+      var _masInfoHtml = '';
+      if (tipo === 'viajes' && !_hayFiltrosTransp) {
+        var _fechasArrV = rows.map(function(r){ return String(r['fecha viaje']||r['timestamp']||'').substring(0,10); }).filter(Boolean);
+        var _maxFechaV = _fechasArrV.length ? _fechasArrV.reduce(function(a,b){ return b>a?b:a; }) : '';
+        if (_maxFechaV) {
+          if (!window._transpVerTodoViajes) {
+            var _corteV = new Date(_maxFechaV + 'T00:00:00');
+            _corteV.setDate(_corteV.getDate() - 6);
+            var _corteStrV = _corteV.toISOString().substring(0,10);
+            filasTabla = rows.filter(function(r){
+              var f = String(r['fecha viaje']||r['timestamp']||'').substring(0,10);
+              return f >= _corteStrV;
+            });
+            var _ocultosV = rows.length - filasTabla.length;
+            if (_ocultosV > 0) {
+              _masInfoHtml = '<div style="padding:10px 0;text-align:center">'
+                + '<button onclick="verMasViajes()" style="padding:6px 16px;border-radius:6px;border:1px solid #1E6B2E;background:#fff;color:#1E6B2E;font-size:12px;cursor:pointer;font-weight:700">Ver los otros '+_ocultosV+' viaje'+(_ocultosV===1?'':'s')+' ▾</button>'
+                + '</div>';
+            }
+          } else {
+            _masInfoHtml = '<div style="padding:10px 0;text-align:center">'
+              + '<button onclick="verMenosViajes()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12px;cursor:pointer">Ver solo la última semana ▴</button>'
+              + '</div>';
+          }
+        }
+      }
       html = monedaToggleHtml + '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-        + _theadHtml + buildFilasHtml(rows) + '</table></div>';
+        + _theadHtml + buildFilasHtml(filasTabla) + '</table></div>' + _masInfoHtml;
     }
   }
   document.getElementById('transp-contenido').innerHTML = html;
@@ -6734,6 +6816,39 @@ function limpiarRangoTransp(tipo) {
   window._transpFiltroChofer[tipo]    = '';
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
+}
+
+// Expandir/colapsar la tabla de Viajes entre "solo la última semana"
+// (la vista por defecto) y el listado completo del período filtrado.
+// No vuelve a pedir nada al servidor — repinta con lo que ya está en
+// memoria (window._transpTablaFull['viajes']).
+function verMasViajes() {
+  window._transpVerTodoViajes = true;
+  var full = (window._transpTablaFull || {})['viajes'] || [];
+  renderTranspTabla(full, 'viajes');
+}
+function verMenosViajes() {
+  window._transpVerTodoViajes = false;
+  var full = (window._transpTablaFull || {})['viajes'] || [];
+  renderTranspTabla(full, 'viajes');
+}
+
+// Marca/desmarca un viaje como Facturado — lo identifica por su fila
+// real en la hoja (r['_fila'], que getViajes devuelve igual que
+// getMantenimientos). Actualiza en memoria y repinta sin volver a
+// pedirle todo de nuevo a la API.
+function toggleFacturadoViaje(fila, nuevoEstado, btn) {
+  if (!fila) { toast('No se pudo identificar este viaje para marcarlo.', true); return; }
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  callTranspAPI({action:'setFacturadoViaje', fila: fila, facturado: nuevoEstado ? '1' : '0'}, function(data) {
+    var full = (window._transpTablaFull || {})['viajes'] || [];
+    full.forEach(function(r){ if (r['_fila'] === fila) r['facturado'] = nuevoEstado; });
+    (window._transpViajesRaw || []).forEach(function(r){ if (r['_fila'] === fila) r['facturado'] = nuevoEstado; });
+    renderTranspTabla(full, 'viajes');
+  }, function(data) {
+    toast('No se pudo actualizar: ' + ((data && data.error) || 'no se pudo conectar con el servidor'), true);
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  });
 }
 
 // Resalta un camión del gráfico "Viajes por día y por camión" al tocar
