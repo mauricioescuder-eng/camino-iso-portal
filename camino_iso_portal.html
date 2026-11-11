@@ -5625,17 +5625,23 @@ function renderTranspTabla(data, tipo) {
 
       var n = ingPorViaje.length;
       if (n > 0) {
-        // Promedios consistentes con los KPI cards (usa todos los viajes)
-        var avgIng = totIng / n;
-        var avgKm  = totKm  / n;
-        var avgTon = totTon / n;
-        var arriba    = ingPorViaje.filter(function(v){ return v.ing >= avgIng; });
-        var abajo     = ingPorViaje.filter(function(v){ return v.ing <  avgIng; });
         // El % y el conteo de "viajes" se arman sumando nv (cantidad real
         // de viajes de cada registro) en vez de contar registros — un
-        // registro de feedlot con "Cantidad de viajes" cargada representa
-        // varios viajes, no uno solo.
+        // registro de feedlot/corral con "Cantidad de viajes" cargada
+        // representa varios viajes, no uno solo.
         var totalViajesCtrl = ingPorViaje.reduce(function(s,v){ return s+v.nv; },0);
+        // El promedio hay que sacarlo dividiendo por la cantidad REAL de
+        // viajes (totalViajesCtrl), no por la cantidad de FILAS (n): cada
+        // v.ing/v.km/v.ton de arriba ya está "por viaje" (dividido por nv),
+        // así que comparar eso contra totIng/n (sin dividir por nv) inflaba
+        // muchísimo el promedio apenas había registros de feedlot/corral
+        // con varios viajes combinados en un ingreso grande — terminaba
+        // marcando casi todos los viajes como "por debajo del promedio".
+        var avgIng = totIng / totalViajesCtrl;
+        var avgKm  = totKm  / totalViajesCtrl;
+        var avgTon = totTon / totalViajesCtrl;
+        var arriba    = ingPorViaje.filter(function(v){ return v.ing >= avgIng; });
+        var abajo     = ingPorViaje.filter(function(v){ return v.ing <  avgIng; });
         var arribaViajes = arriba.reduce(function(s,v){ return s+v.nv; },0);
         var abajoViajes  = abajo.reduce(function(s,v){ return s+v.nv; },0);
         var pctArriba = (arribaViajes / totalViajesCtrl * 100).toFixed(0);
