@@ -5080,6 +5080,59 @@ function openCtrlDrill(grupo) {
   document.getElementById('dt-overlay').classList.add('open');
 }
 
+// Detalle de la tarjeta "Facturación de Viajes" — qué viajes puntuales
+// componen el grupo de Facturados o Pendientes (mismo panel compartido
+// que usa openCtrlDrill). Cada fila trae su propio botón para marcar/
+// desmarcar sin tener que cerrar el panel y buscarlo en la tabla.
+function openFacturacionDrill(grupo) {
+  if (!document.getElementById('dt-panel')) {
+    var ov = document.createElement('div'); ov.id='dt-overlay'; ov.onclick=closeDrillThrough; document.body.appendChild(ov);
+    var panel = document.createElement('div'); panel.id='dt-panel';
+    panel.innerHTML='<div id="dt-header"><span id="dt-title"></span><button id="dt-close" onclick="closeDrillThrough()">✕</button></div><div id="dt-body"></div>';
+    document.body.appendChild(panel);
+  }
+  var titulo = grupo === 'facturados' ? '✅ Viajes facturados' : '⏳ Viajes pendientes de facturar';
+  var color  = grupo === 'facturados' ? '#1E6B2E' : '#c0392b';
+  document.getElementById('dt-title').textContent = titulo;
+  document.getElementById('dt-title').style.color = color;
+  renderFacturacionDrillBody(grupo);
+  document.getElementById('dt-panel').classList.add('open');
+  document.getElementById('dt-overlay').classList.add('open');
+}
+function renderFacturacionDrillBody(grupo) {
+  var lista = grupo === 'facturados' ? (window._factFacturados||[]) : (window._factPendientes||[]);
+  var color = grupo === 'facturados' ? '#1E6B2E' : '#c0392b';
+  var totalIng = lista.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); }, 0);
+  var html = '<div id="dt-count" style="color:'+color+'">'+lista.length+' viaje'+(lista.length===1?'':'s')+' · Total: '+fmt$(totalIng)+'</div>';
+  html += '<table><thead><tr>'
+    + '<th>Fecha</th><th>Matrícula</th><th>Origen</th><th>Destino</th><th>Carga</th><th style="text-align:right">Ton</th><th style="text-align:right">Ingreso</th><th></th>'
+    + '</tr></thead><tbody>';
+  lista.slice().sort(function(a,b){
+    var fa = a['fecha viaje']||a['timestamp']||'', fb = b['fecha viaje']||b['timestamp']||'';
+    return fa < fb ? 1 : (fa > fb ? -1 : 0);
+  }).forEach(function(r){
+    var ing = toUYU(ingresoViaje(r), r['moneda']);
+    var _fFact = facturadoDe(r);
+    var _filaViaje = r['_fila'] || 0;
+    html += '<tr>'
+      + '<td>'+(r['fecha viaje']||'—')+'</td>'
+      + '<td>'+(r['matricula']||'—')+'</td>'
+      + '<td>'+(r['origen']||'—')+'</td>'
+      + '<td>'+(r['destino']||'—')+'</td>'
+      + '<td>'+(r['tipo de carga']||'—')+'</td>'
+      + '<td style="text-align:right">'+fmtN(parseFloat(r['toneladas'])||0,1)+'</td>'
+      + '<td style="text-align:right;font-weight:700">'+fmt$(ing)+'</td>'
+      + '<td style="text-align:right">'
+      + '<button onclick="toggleFacturadoViaje('+_filaViaje+','+(!_fFact)+',this,\''+grupo+'\')"'
+      + (_filaViaje ? '' : ' disabled title="No se pudo identificar la fila de este viaje"')
+      + ' style="padding:3px 10px;border-radius:12px;border:1px solid '+(_fFact?'#1E6B2E':'#c0392b')+';background:'+(_fFact?'#e8f5e9':'#fdecea')+';color:'+(_fFact?'#1E6B2E':'#c0392b')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'
+      + (_fFact ? '✅ Facturado' : '⏳ Pendiente') + '</button>'
+      + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('dt-body').innerHTML = html;
+}
+
 function tipoMant(area) {
   var _AV = ['neumático','neumatico','cubiertas','gomería','gomeria','eléctrico','electrico','electricista','sistema eléctrico','sistema electrico'];
   var a = String(area||'').toLowerCase();
@@ -5668,6 +5721,10 @@ function renderTranspTabla(data, tipo) {
       var _totFacturadoV = _facturadosV.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); },0);
       var _totPendienteV = _pendientesV.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); },0);
       var _pctFacturadoV = rows.length > 0 ? Math.round(_facturadosV.length / rows.length * 100) : 0;
+      // Guardar en globales para el drill-through (ver openFacturacionDrill) —
+      // mismo patrón que _ctrlArriba/_ctrlAbajo del Control de Proceso.
+      window._factFacturados = _facturadosV;
+      window._factPendientes = _pendientesV;
       indicHtml += '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
         + '<h4 style="margin:0;font-size:13px">🧾 Facturación de Viajes</h4>'
@@ -5678,13 +5735,13 @@ function renderTranspTabla(data, tipo) {
         + '<div style="width:'+(100-_pctFacturadoV)+'%;background:#c0392b"></div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-        + '<div style="padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
-        + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">✅ FACTURADOS</div>'
+        + '<div onclick="openFacturacionDrill(\'facturados\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#e8f5e9;border:1px solid #1E6B2E">'
+        + '<div style="font-size:10px;font-weight:700;color:#1E6B2E;margin-bottom:4px">✅ FACTURADOS <span style="float:right;font-weight:400">Ver → </span></div>'
         + '<div style="font-size:18px;font-weight:800;color:#1E6B2E">'+_facturadosV.length+' viaje'+(_facturadosV.length===1?'':'s')+' <span style="font-size:12px;font-weight:600">('+_pctFacturadoV+'%)</span></div>'
         + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+fmt$(_totFacturadoV)+'</div>'
         + '</div>'
-        + '<div style="padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
-        + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">⏳ PENDIENTES</div>'
+        + '<div onclick="openFacturacionDrill(\'pendientes\')" class="kpi-drillable" style="cursor:pointer;padding:10px 14px;border-radius:8px;background:#fdecea;border:1px solid #c0392b">'
+        + '<div style="font-size:10px;font-weight:700;color:#c0392b;margin-bottom:4px">⏳ PENDIENTES <span style="float:right;font-weight:400">Ver → </span></div>'
         + '<div style="font-size:18px;font-weight:800;color:#c0392b">'+_pendientesV.length+' viaje'+(_pendientesV.length===1?'':'s')+' <span style="font-size:12px;font-weight:600">('+(100-_pctFacturadoV)+'%)</span></div>'
         + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+fmt$(_totPendienteV)+'</div>'
         + '</div>'
@@ -6836,8 +6893,11 @@ function verMenosViajes() {
 // Marca/desmarca un viaje como Facturado — lo identifica por su fila
 // real en la hoja (r['_fila'], que getViajes devuelve igual que
 // getMantenimientos). Actualiza en memoria y repinta sin volver a
-// pedirle todo de nuevo a la API.
-function toggleFacturadoViaje(fila, nuevoEstado, btn) {
+// pedirle todo de nuevo a la API. drillGrupo (opcional) es 'facturados'
+// o 'pendientes' cuando el click vino del panel de detalle de la
+// tarjeta "Facturación de Viajes" (ver openFacturacionDrill) — así,
+// además de repintar la tabla, se refresca ese panel abierto.
+function toggleFacturadoViaje(fila, nuevoEstado, btn, drillGrupo) {
   if (!fila) { toast('No se pudo identificar este viaje para marcarlo.', true); return; }
   if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
   callTranspAPI({action:'setFacturadoViaje', fila: fila, facturado: nuevoEstado ? '1' : '0'}, function(data) {
@@ -6845,6 +6905,7 @@ function toggleFacturadoViaje(fila, nuevoEstado, btn) {
     full.forEach(function(r){ if (r['_fila'] === fila) r['facturado'] = nuevoEstado; });
     (window._transpViajesRaw || []).forEach(function(r){ if (r['_fila'] === fila) r['facturado'] = nuevoEstado; });
     renderTranspTabla(full, 'viajes');
+    if (drillGrupo) renderFacturacionDrillBody(drillGrupo);
   }, function(data) {
     toast('No se pudo actualizar: ' + ((data && data.error) || 'no se pudo conectar con el servidor'), true);
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
