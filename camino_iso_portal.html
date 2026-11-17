@@ -484,6 +484,35 @@ tr:hover td{background:#faf9f6}
     <div id="nr-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
+<div class="overlay" id="ov-neu-editar">
+  <div class="modal">
+    <h3>Editar neumático</h3>
+    <div class="fg"><label>N° Neumático</label><input type="text" id="ne-numero"></div>
+    <div class="fg"><label>Matrícula</label><select id="ne-matricula"></select></div>
+    <div class="fg"><label>Posición</label><select id="ne-posicion"></select></div>
+    <div class="fg"><label>Fecha instalación</label><input type="date" id="ne-fecha-inst"></div>
+    <div class="fg"><label>Km instalación</label><input type="number" id="ne-km-inst" placeholder="0"></div>
+    <div class="fg"><label>Costo</label><input type="number" id="ne-costo" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Moneda</label><select id="ne-moneda"><option value="UYU">Pesos (UYU)</option><option value="USD">Dólares (USD)</option></select></div>
+    <div class="fg"><label>Proveedor</label><input type="text" id="ne-proveedor"></div>
+    <div class="fg"><label>Observaciones</label><textarea id="ne-observaciones" rows="2"></textarea></div>
+    <div style="font-size:11px;color:var(--muted);margin:8px 0 4px;border-top:1px dashed var(--border);padding-top:8px">Datos de retiro — dejalos vacíos si el neumático sigue activo, o corregilos si se cargó mal.</div>
+    <div class="fg"><label>Fecha de retiro</label><input type="date" id="ne-fecha-ret"></div>
+    <div class="fg"><label>Km de retiro</label><input type="number" id="ne-km-ret" placeholder="0"></div>
+    <div class="fg"><label>Motivo de retiro</label><select id="ne-motivo-ret">
+      <option value="">— Sin retirar —</option>
+      <option value="Desgaste normal">Desgaste normal</option>
+      <option value="Pinchazo">Pinchazo</option>
+      <option value="Rotura / corte">Rotura / corte</option>
+      <option value="Otro">Otro</option>
+    </select></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeEditarNeumatico()">Cancelar</button>
+      <button class="btn-s" onclick="guardarEditarNeumatico()">Guardar cambios</button>
+    </div>
+    <div id="ne-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
 <div class="overlay" id="ov-mant-editar">
   <div class="modal">
     <h3>Editar mantenimiento <span id="me-numero" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
@@ -3425,6 +3454,16 @@ function guardarGastoInfraestructura() {
   });
 }
 
+// Opciones de Posición para instalar/editar un neumático — compartidas
+// entre el formulario de alta y el de edición.
+var _POSICIONES_NEU = [
+  'Delantero izq.','Delantero der.',
+  'Tracción izq. 1','Tracción izq. 2','Tracción izq. 3','Tracción izq. 4',
+  'Tracción der. 1','Tracción der. 2','Tracción der. 3','Tracción der. 4',
+  'Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo',
+  'Auxilio'
+];
+
 function renderNeumaticos(data) {
   var rows = Array.isArray(data) ? data : [];
   window._transpNeumaticos = rows;
@@ -3450,14 +3489,7 @@ function renderNeumaticos(data) {
   var matOpts = matriculas.length
     ? matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('')
     : '<option value="">— Sin camiones cargados en Flota —</option>';
-  var posiciones = [
-    'Delantero izq.','Delantero der.',
-    'Tracción izq. 1','Tracción izq. 2','Tracción izq. 3','Tracción izq. 4',
-    'Tracción der. 1','Tracción der. 2','Tracción der. 3','Tracción der. 4',
-    'Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo',
-    'Auxilio'
-  ];
-  var posOpts = posiciones.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
+  var posOpts = _POSICIONES_NEU.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
 
   var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
     + '<h3 style="margin:0 0 16px;font-size:15px">+ Instalar neumático</h3>'
@@ -3492,9 +3524,8 @@ function renderNeumaticos(data) {
     var retiroTxt = r.activo ? '—' : (r.fecha_retiro+' · '+fmtN(r.km_retiro,0)+' km');
     var kmRecTxt  = r.km_recorridos > 0 ? fmtN(r.km_recorridos,0)+' km' : '—';
     var costoKmTxt = r.km_recorridos > 0 ? fmt$(toUYU(r.costo,r.moneda)/r.km_recorridos)+'/km' : '—';
-    var accion = r.activo
-      ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button>'
-      : '—';
+    var accion = (r.activo ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button> ' : '')
+      + '<button class="edit-btn" onclick="abrirEditarNeumatico(\''+r.id+'\')">✏️ Editar</button>';
     return '<tr>'
       + '<td>'+(r.numero||'—')+'</td>'
       + '<td>'+r.matricula+'</td>'
@@ -3550,6 +3581,90 @@ function guardarNeumatico() {
   }, function() {
     msg.style.color = '#c0392b';
     msg.textContent = 'Error de conexión.';
+  });
+}
+
+// ── Editar un neumático ya cargado — por cualquier error de carga
+// (matrícula, posición, costo, fecha de retiro, etc.), sin tener que
+// borrarlo y volver a cargarlo. Se identifica por su id (UUID) y
+// permite corregir tanto los datos de instalación como los de
+// retiro — dejando estos últimos vacíos se puede "reactivar" un
+// neumático que se retiró por error.
+var _neuEditId = null;
+function abrirEditarNeumatico(id) {
+  var r = (window._transpNeumaticos || []).find(function(x){ return x.id === id; });
+  if (!r) { toast('No se encontró ese neumático.', true); return; }
+  _neuEditId = id;
+
+  var matriculas = (window._transpFlotaArr || []).map(function(f){ return String(f['matrícula']||f['matricula']||'').trim(); }).filter(Boolean);
+  if (r.matricula && matriculas.indexOf(r.matricula) < 0) matriculas.push(r.matricula);
+  document.getElementById('ne-matricula').innerHTML = matriculas.map(function(m){
+    return '<option value="'+m+'"'+(m===r.matricula?' selected':'')+'>'+m+'</option>';
+  }).join('');
+
+  var posiciones = _POSICIONES_NEU.slice();
+  if (r.posicion && posiciones.indexOf(r.posicion) < 0) posiciones.push(r.posicion);
+  document.getElementById('ne-posicion').innerHTML = posiciones.map(function(p){
+    return '<option value="'+p+'"'+(p===r.posicion?' selected':'')+'>'+p+'</option>';
+  }).join('');
+
+  document.getElementById('ne-numero').value       = r.numero || '';
+  document.getElementById('ne-fecha-inst').value   = r.fecha_instalacion || '';
+  document.getElementById('ne-km-inst').value      = r.km_instalacion || '';
+  document.getElementById('ne-costo').value        = r.costo || '';
+  document.getElementById('ne-moneda').value       = r.moneda || 'UYU';
+  document.getElementById('ne-proveedor').value    = r.proveedor || '';
+  document.getElementById('ne-observaciones').value= r.observaciones || '';
+  document.getElementById('ne-fecha-ret').value    = r.activo ? '' : (r.fecha_retiro || '');
+  document.getElementById('ne-km-ret').value       = r.activo ? '' : (r.km_retiro || '');
+  document.getElementById('ne-motivo-ret').value   = r.activo ? '' : (r.motivo_retiro || '');
+  document.getElementById('ne-msg').textContent    = '';
+  document.getElementById('ov-neu-editar').classList.add('open');
+}
+function closeEditarNeumatico() {
+  document.getElementById('ov-neu-editar').classList.remove('open');
+  _neuEditId = null;
+}
+function guardarEditarNeumatico() {
+  var numero    = document.getElementById('ne-numero').value;
+  var matricula = document.getElementById('ne-matricula').value;
+  var posicion  = document.getElementById('ne-posicion').value;
+  var fechaInst = document.getElementById('ne-fecha-inst').value;
+  var kmInst    = document.getElementById('ne-km-inst').value;
+  var costo     = document.getElementById('ne-costo').value;
+  var moneda    = document.getElementById('ne-moneda').value;
+  var proveedor = document.getElementById('ne-proveedor').value;
+  var obs       = document.getElementById('ne-observaciones').value;
+  var fechaRet  = document.getElementById('ne-fecha-ret').value;
+  var kmRet     = document.getElementById('ne-km-ret').value;
+  var motivoRet = document.getElementById('ne-motivo-ret').value;
+  var msg       = document.getElementById('ne-msg');
+
+  if (!numero || !matricula || !fechaInst || !kmInst || !costo) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá N° de neumático, matrícula, fecha y km de instalación, y costo.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+
+  callTranspAPI({
+    action: 'updateNeumatico', id: _neuEditId,
+    numero: numero, matricula: matricula, posicion: posicion,
+    fecha_instalacion: fechaInst, km_instalacion: kmInst, costo: costo, moneda: moneda, proveedor: proveedor, observaciones: obs,
+    fecha_retiro: fechaRet, km_retiro: kmRet, motivo_retiro: motivoRet
+  }, function(resp) {
+    if (resp && resp.ok) {
+      closeEditarNeumatico();
+      toast('✓ Neumático actualizado');
+      loadTransporte('neumaticos');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar: ' + ((resp && resp.error) || 'intentá de nuevo');
+    }
+  }, function(resp) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'No se pudo conectar: ' + ((resp && resp.error) || 'intentá de nuevo');
   });
 }
 
@@ -7168,6 +7283,7 @@ function toggleViajesDiaCamionSel(legendEl) {
 function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
 document.getElementById('overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
+document.getElementById('ov-neu-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
 document.getElementById('ov-gps').addEventListener('click',function(e){ if(e.target===this) closeGPSModal(); });
 document.getElementById('ov-doc-nuevo').addEventListener('click',function(e){ if(e.target===this) closeDocNuevo(); });
