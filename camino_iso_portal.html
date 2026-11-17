@@ -4082,6 +4082,40 @@ function renderTranspKPIs(data, viajes) {
   viajes = viajes || [];
   var tc = getTc();
 
+  // ── Filtro de fechas del Dashboard (Desde/Hasta) ──────────────
+  // El Dashboard principal, a diferencia de las tablas de Viajes/
+  // Combustible/Mantenimientos, no tenía forma de acotar el período —
+  // mostraba siempre todo lo cargado. Se filtra acá mismo, una sola
+  // vez, reasignando "viajes" y los arrays de data.combArr/mantArr/
+  // fijosArr (NO los globales window._transp*Arr, que siguen
+  // completos para que las otras pestañas sigan teniendo sus propios
+  // filtros independientes) — así el resto de esta función, que lee
+  // esos mismos arrays una y otra vez más abajo, queda automáticamente
+  // filtrado sin tener que tocar cada sección.
+  window._transpFiltroRango = window._transpFiltroRango || {};
+  var _rangoDash = window._transpFiltroRango['kpis'] || {desde:'', hasta:''};
+  var _dashFiltroActivo = !!(_rangoDash.desde || _rangoDash.hasta);
+  function _enRangoDash(fechaStr) {
+    var f = String(fechaStr||'').substring(0,10);
+    if (!f) return false;
+    if (_rangoDash.desde && f < _rangoDash.desde) return false;
+    if (_rangoDash.hasta && f > _rangoDash.hasta) return false;
+    return true;
+  }
+  if (_dashFiltroActivo) {
+    viajes = viajes.filter(function(v){ return _enRangoDash(v['fecha viaje']||v['timestamp']); });
+    data.combArr  = (data.combArr  || window._transpCombArr  || []).filter(function(c){ return _enRangoDash(c['fecha factura']||c['timestamp']); });
+    data.mantArr  = (data.mantArr  || window._transpMantArr  || []).filter(function(m){ return _enRangoDash(m['fecha']||m['timestamp']); });
+    data.fijosArr = (data.fijosArr || window._transpFijosArr || []).filter(function(f){ return _enRangoDash(f['fecha']); });
+  }
+  var _dashRangoHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px;flex-wrap:wrap">'
+    + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Desde:</span>'
+    + '<input type="date" id="dash-rango-desde" value="'+_rangoDash.desde+'" onchange="filtrarDashboardPorRango()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px">'
+    + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Hasta:</span>'
+    + '<input type="date" id="dash-rango-hasta" value="'+_rangoDash.hasta+'" onchange="filtrarDashboardPorRango()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px">'
+    + (_dashFiltroActivo ? '<button onclick="limpiarRangoDashboard()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;cursor:pointer;font-size:13px">✕ Limpiar filtro</button>' : '')
+    + '</div>';
+
   // ── Vista de moneda del Dashboard (US$ por defecto) — se redefinen acá,
   // SOLO dentro de esta función, toUYU/fmt$/fmtMillones (variables/funciones
   // locales con el mismo nombre que las globales le ganan a esas en todo el
@@ -4157,20 +4191,24 @@ function renderTranspKPIs(data, viajes) {
   // DAX: Costo total = Variable + Cuasi variable + Fijo (ya incluidos en data.costoTotal)
   var costosPorMat = data.costosPorMatricula || {};
   var totalCosto = parseFloat(data.costoTotal) || 0;
-  // Fallback: si costoTotal es 0 (ej. costosFijos hizo timeout), recalcular desde arrays disponibles
-  if (!totalCosto) {
+  // Recalcular desde los arrays disponibles si costoTotal vino en 0 (ej.
+  // costosFijos hizo timeout) O si hay un filtro de fechas activo — en
+  // ese caso data.costoTotal/costosPorMatricula son el total SIN
+  // filtrar (se calculan una sola vez en loadTransporte), así que hay
+  // que rehacerlos acá a partir de data.combArr/mantArr/fijosArr, que
+  // ya vienen filtrados por el bloque de arriba.
+  if (!totalCosto || _dashFiltroActivo) {
+    totalCosto = 0;
+    costosPorMat = {};
     var combArr0b = data.combArr || window._transpCombArr || [];
     var mantArr0b = data.mantArr || window._transpMantArr || [];
     var fijosArr0b = data.fijosArr || window._transpFijosArr || [];
     combArr0b.forEach(function(c){ totalCosto += toUYU(c['total'], 'UYU'); });
     mantArr0b.forEach(function(m){ totalCosto += toUYU(m['costo'], m['moneda']); });
     fijosArr0b.forEach(function(f){ totalCosto += toUYU(f['monto'], f['moneda']); });
-    // Reconstruir costosPorMat también
-    if (!Object.keys(costosPorMat).length) {
-      combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['total'], 'UYU'); });
-      mantArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['costo'], c['moneda']); });
-      fijosArr0b.forEach(function(c){ var m=c['matrícula']||c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['monto'], c['moneda']); });
-    }
+    combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['total'], 'UYU'); });
+    mantArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['costo'], c['moneda']); });
+    fijosArr0b.forEach(function(c){ var m=c['matrícula']||c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['monto'], c['moneda']); });
   }
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
@@ -4284,7 +4322,7 @@ function renderTranspKPIs(data, viajes) {
     + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea', '', 'openDrillThrough("viajes")')
     + kpiBig('Gasoil', fmtN(totalLitros,0) + ' L', '#1565c0', '#e3f2fd', fmtN(litrosPorKm,1) + ' L/100km', 'openDrillThrough("combustible")')
     + '</div>';
-  document.getElementById('transp-indicadores').innerHTML = kpiHtml;
+  document.getElementById('transp-indicadores').innerHTML = _dashRangoHtml + kpiHtml;
 
   // ── Agrupar viajes por mes ─────────────────────────────────────
   // Se prueba primero el recorte por texto ("yyyy-mm-dd" → año/mes tal
@@ -6858,6 +6896,34 @@ function filtrarTranspPorRango(tipo) {
   window._transpFiltroRango[tipo] = {desde: desde, hasta: hasta};
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
+}
+// Cambia el rango de fechas del Dashboard principal (Desde/Hasta) y
+// vuelve a pintar con los datos ya cargados (sin pedirle nada de
+// nuevo a la API) — mismo patrón que filtrarTranspPorRango() para
+// las tablas de Viajes/Combustible/Mantenimientos.
+function filtrarDashboardPorRango() {
+  var desde = document.getElementById('dash-rango-desde').value;
+  var hasta = document.getElementById('dash-rango-hasta').value;
+  window._transpFiltroRango['kpis'] = {desde: desde, hasta: hasta};
+  renderTranspKPIs({
+    costosPorMatricula: window._transpCostosPorMat || {},
+    costoTotal:         window._transpCostosTotal  || 0,
+    combArr:            window._transpCombArr  || [],
+    mantArr:            window._transpMantArr  || [],
+    flotaArr:           window._transpFlotaArr || [],
+    fijosArr:           window._transpFijosArr || []
+  }, window._transpViajesRaw || []);
+}
+function limpiarRangoDashboard() {
+  window._transpFiltroRango['kpis'] = {desde:'', hasta:''};
+  renderTranspKPIs({
+    costosPorMatricula: window._transpCostosPorMat || {},
+    costoTotal:         window._transpCostosTotal  || 0,
+    combArr:            window._transpCombArr  || [],
+    mantArr:            window._transpMantArr  || [],
+    flotaArr:           window._transpFlotaArr || [],
+    fijosArr:           window._transpFijosArr || []
+  }, window._transpViajesRaw || []);
 }
 function filtrarTranspPorMatriculaChofer(tipo) {
   var matSel    = document.getElementById('transp-filtro-matricula');
