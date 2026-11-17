@@ -3450,7 +3450,13 @@ function renderNeumaticos(data) {
   var matOpts = matriculas.length
     ? matriculas.map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('')
     : '<option value="">— Sin camiones cargados en Flota —</option>';
-  var posiciones = ['Delantero izq.','Delantero der.','Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo','Auxilio'];
+  var posiciones = [
+    'Delantero izq.','Delantero der.',
+    'Tracción izq. 1','Tracción izq. 2','Tracción izq. 3','Tracción izq. 4',
+    'Tracción der. 1','Tracción der. 2','Tracción der. 3','Tracción der. 4',
+    'Trasero izq. interno','Trasero izq. externo','Trasero der. interno','Trasero der. externo',
+    'Auxilio'
+  ];
   var posOpts = posiciones.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join('');
 
   var formHtml = '<div class="card" style="padding:20px;margin-bottom:16px">'
