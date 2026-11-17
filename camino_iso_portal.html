@@ -389,20 +389,20 @@ tr:hover td{background:#faf9f6}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
           <div id="transp-filtros" style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="fb active" onclick="loadTransporte('kpis',this)">📊 Dashboard</button>
-            <button class="fb" onclick="loadTransporte('viajes',this)">🚛 Viajes</button>
-            <button class="fb" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
-            <button class="fb" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
-            <button class="fb" onclick="loadTransporte('flota',this)">🚚 Flota</button>
-            <button class="fb" onclick="loadTransporte('documentacion',this)">📄 Documentación</button>
-            <button class="fb" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
-            <button class="fb" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
-            <button class="fb" onclick="loadTransporte('infraestructura',this)">🏗️ Infraestructura</button>
+            <button class="fb active" id="tab-dashboard" onclick="loadTransporte('kpis',this)">📊 Dashboard</button>
+            <button class="fb" id="tab-viajes" onclick="loadTransporte('viajes',this)">🚛 Viajes</button>
+            <button class="fb" id="tab-combustible" onclick="loadTransporte('combustible',this)">⛽ Combustible</button>
+            <button class="fb" id="tab-mantenimientos" onclick="loadTransporte('mantenimientos',this)">🔧 Mantenimientos</button>
+            <button class="fb" id="tab-flota" onclick="loadTransporte('flota',this)">🚚 Flota</button>
+            <button class="fb" id="tab-documentacion" onclick="loadTransporte('documentacion',this)">📄 Documentación</button>
+            <button class="fb" id="tab-costos-fijos" onclick="loadTransporte('costos-fijos',this)">💰 Costos Fijos</button>
+            <button class="fb" id="tab-ver-fijos" onclick="loadTransporte('tabla-fijos',this)">📋 Ver Fijos</button>
+            <button class="fb" id="tab-infraestructura" onclick="loadTransporte('infraestructura',this)">🏗️ Infraestructura</button>
             <button class="fb" id="tab-neumaticos" style="display:none" onclick="loadTransporte('neumaticos',this)">🛞 Neumáticos</button>
             <button class="fb" id="tab-ordenes" style="display:none" onclick="loadTransporte('ordenesCompra',this)">📝 Órdenes de Compra</button>
             <button class="fb" onclick="refrescarTransporte()" title="Forzar datos actualizados (por si acaban de cargar algo)">🔄 Actualizar</button>
             <button class="fb" onclick="window.print()" title="Abre el diálogo de impresión — ahí elegís 'Guardar como PDF' para descargarlo">🖨️ Descargar / Imprimir</button>
-            <button class="fb" onclick="document.getElementById('gps-file-input').click()" title="Subí el reporte 'Recorrido x Unidad' en Excel de cada camión — se suma el Km del mes solo">📡 Cargar reporte GPS</button>
+            <button class="fb" id="tab-gps-upload" onclick="document.getElementById('gps-file-input').click()" title="Subí el reporte 'Recorrido x Unidad' en Excel de cada camión — se suma el Km del mes solo">📡 Cargar reporte GPS</button>
             <input type="file" id="gps-file-input" accept=".xlsx" multiple style="display:none" onchange="onSeleccionArchivosGPS(this.files)">
           </div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
@@ -522,6 +522,30 @@ tr:hover td{background:#faf9f6}
     <div id="gps-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
+<div class="overlay" id="ov-doc-nuevo">
+  <div class="modal">
+    <h3>Agregar documento</h3>
+    <div class="fg"><label>Tipo de registro</label>
+      <select id="dn-entidad" onchange="toggleDocNuevoEntidad()">
+        <option value="camion">Camión</option>
+        <option value="chofer">Chofer</option>
+      </select>
+    </div>
+    <div class="fg" id="dn-campo-matricula"><label>Matrícula del camión</label><input type="text" id="dn-matricula"></div>
+    <div class="fg" id="dn-campo-chofer" style="display:none"><label>Nombre del chofer</label><input type="text" id="dn-chofer"></div>
+    <div class="fg"><label>Tipo de documento</label><input type="text" id="dn-tipo" placeholder="Ej: Seguro, VTV, Libreta de conducir..."></div>
+    <div class="fg"><label>N° de documento</label><input type="text" id="dn-numero"></div>
+    <div class="fg" id="dn-campo-proveedor"><label>Proveedor / Aseguradora</label><input type="text" id="dn-proveedor"></div>
+    <div class="fg"><label>Fecha de emisión</label><input type="date" id="dn-emision"></div>
+    <div class="fg"><label>Fecha de vencimiento</label><input type="date" id="dn-vencimiento"></div>
+    <div class="fg"><label>Observaciones</label><textarea id="dn-observaciones" rows="2"></textarea></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeDocNuevo()">Cancelar</button>
+      <button class="btn-s" onclick="guardarDocNuevo()">Guardar</button>
+    </div>
+    <div id="dn-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -601,6 +625,13 @@ function toast(msg, err){
 
 // Clientes de Transporte que el admin puede ver desde el selector "Viendo: ...".
 // Para agregar un cliente nuevo: sumá una fila acá con su nombre y la URL de su Apps Script.
+// "tabsVisibles" es opcional — si no se pone (o es null), se ven todas las
+// pestañas de Transporte (comportamiento de siempre). Si se pone un array de
+// claves, solo se muestran esas pestañas — para clientes a los que por ahora
+// solo se les gestiona una parte (ej. un cliente que solo necesita
+// Mantenimientos + Documentación, sin Viajes ni Combustible). Claves válidas:
+// 'dashboard','viajes','combustible','mantenimientos','flota','documentacion',
+// 'costos-fijos','ver-fijos','infraestructura'.
 var _TRANSP_CLIENTES = [
   { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec' },
   { nombre: 'PRUEBA', clienteId: 'prueba', apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec' }
@@ -724,16 +755,49 @@ function startApp(){
   loadAll();
 }
 
-// Muestra/oculta las pestañas propias de un cliente (hoy: Jorajuria) según a quién esté viendo la sesión
+// Mapeo de clave de módulo (las que se ponen en tabsVisibles de
+// _TRANSP_CLIENTES) al id real del botón de esa pestaña.
+var _TRANSP_TAB_IDS = {
+  'dashboard':       'tab-dashboard',
+  'viajes':          'tab-viajes',
+  'combustible':     'tab-combustible',
+  'mantenimientos':  'tab-mantenimientos',
+  'flota':           'tab-flota',
+  'documentacion':   'tab-documentacion',
+  'costos-fijos':    'tab-costos-fijos',
+  'ver-fijos':       'tab-ver-fijos',
+  'infraestructura': 'tab-infraestructura'
+};
+// Cliente de Transporte que se está viendo ahora mismo (sesión de un
+// cliente propio, o admin viendo uno desde el selector "Viendo: ...").
+function clienteTranspActual() {
+  var cid = session.clienteid || session._viendoClienteId || '';
+  return _TRANSP_CLIENTES.find(function(c){ return c.clienteId === cid; }) || null;
+}
+// Muestra/oculta las pestañas de Transporte según el cliente que se
+// esté viendo: por defecto se ven todas, salvo que ese cliente tenga
+// "tabsVisibles" definido en _TRANSP_CLIENTES (ver comentario ahí
+// arriba) — ahí se ocultan todas las que no estén en esa lista,
+// incluidas Neumáticos/Órdenes de Compra.
 function actualizarTabsTransporteEspecificos() {
   var esJorajuria = session.clienteid === 'jorajuria' || session._viendoClienteId === 'jorajuria';
+  var cli = clienteTranspActual();
+  var restriccion = cli && cli.tabsVisibles;
+  Object.keys(_TRANSP_TAB_IDS).forEach(function(key) {
+    var el = document.getElementById(_TRANSP_TAB_IDS[key]);
+    if (!el) return;
+    el.style.display = (!restriccion || restriccion.indexOf(key) >= 0) ? '' : 'none';
+  });
+  var tabGps = document.getElementById('tab-gps-upload');
+  if (tabGps) tabGps.style.display = (!restriccion || restriccion.indexOf('viajes') >= 0) ? '' : 'none';
   var tabNeu = document.getElementById('tab-neumaticos');
-  if (tabNeu) tabNeu.style.display = esJorajuria ? '' : 'none';
+  if (tabNeu) tabNeu.style.display = (esJorajuria && !restriccion) ? '' : 'none';
   var tabOrd = document.getElementById('tab-ordenes');
   // El admin puede emitir órdenes de compra sin depender de qué cliente de
   // Transporte esté viendo en el selector (antes solo aparecía con Jorajuria
-  // seleccionada).
-  if (tabOrd) tabOrd.style.display = (esJorajuria || session.rol === 'admin') ? '' : 'none';
+  // seleccionada) — salvo que ese cliente tenga el alcance acotado con
+  // tabsVisibles, en cuyo caso se respeta esa restricción.
+  if (tabOrd) tabOrd.style.display = ((esJorajuria || session.rol === 'admin') && !restriccion) ? '' : 'none';
 }
 
 // Admin: cambia a qué cliente de Transporte está viendo el portal
@@ -747,7 +811,15 @@ function cambiarClienteTransporte(apiUrl) {
   window._transpNeumaticos = window._transpOrdenes = null;
   actualizarTabsTransporteEspecificos();
   if (document.getElementById('page-transporte').classList.contains('active')) {
-    loadTransporte('kpis', document.querySelector('#transp-filtros .fb'));
+    // Si este cliente tiene el alcance acotado (tabsVisibles) y no incluye
+    // el Dashboard (que queda oculto), arrancar directo en la primera
+    // pestaña que sí tenga visible, en vez de un Dashboard que no existe.
+    var _restriccionCli = cli && cli.tabsVisibles;
+    var _vistaInicial = (_restriccionCli && _restriccionCli.indexOf('dashboard') < 0 && _restriccionCli.length)
+      ? (_restriccionCli[0] === 'ver-fijos' ? 'tabla-fijos' : _restriccionCli[0])
+      : 'kpis';
+    var _btnInicial = document.getElementById(_TRANSP_TAB_IDS[_restriccionCli && _restriccionCli[0]]) || document.querySelector('#transp-filtros .fb');
+    loadTransporte(_vistaInicial, _btnInicial);
   }
 }
 
@@ -5440,6 +5512,69 @@ function cambiarTipoFiltroDoc(sel){
   pintarDocumentacion();
 }
 
+// ── Agregar un documento (camión o chofer) con su vencimiento,
+// directo desde el portal — antes había que escribirlo a mano en la
+// hoja Doc_Camiones/Doc_Choferes.
+function toggleDocNuevoEntidad() {
+  var esCamion = document.getElementById('dn-entidad').value === 'camion';
+  document.getElementById('dn-campo-matricula').style.display = esCamion ? '' : 'none';
+  document.getElementById('dn-campo-chofer').style.display    = esCamion ? 'none' : '';
+  document.getElementById('dn-campo-proveedor').style.display = esCamion ? '' : 'none';
+}
+function abrirDocNuevo() {
+  document.getElementById('dn-entidad').value = 'camion';
+  ['dn-matricula','dn-chofer','dn-tipo','dn-numero','dn-proveedor','dn-emision','dn-vencimiento','dn-observaciones'].forEach(function(id){
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('dn-msg').textContent = '';
+  toggleDocNuevoEntidad();
+  document.getElementById('ov-doc-nuevo').classList.add('open');
+}
+function closeDocNuevo() {
+  document.getElementById('ov-doc-nuevo').classList.remove('open');
+}
+function guardarDocNuevo() {
+  var esCamion = document.getElementById('dn-entidad').value === 'camion';
+  var tipo = document.getElementById('dn-tipo').value.trim();
+  var vencimiento = document.getElementById('dn-vencimiento').value;
+  var msg = document.getElementById('dn-msg');
+  var idEntidad = esCamion ? 'dn-matricula' : 'dn-chofer';
+  if (!tipo || !vencimiento || !document.getElementById(idEntidad).value.trim()) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'Completá ' + (esCamion ? 'Matrícula' : 'Chofer') + ', Tipo de documento y Fecha de vencimiento.';
+    return;
+  }
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  var params = {
+    action: esCamion ? 'saveDocCamion' : 'saveDocChofer',
+    tipo: tipo,
+    numero: document.getElementById('dn-numero').value.trim(),
+    fecha_emision: document.getElementById('dn-emision').value,
+    fecha_vencimiento: vencimiento,
+    observaciones: document.getElementById('dn-observaciones').value.trim()
+  };
+  if (esCamion) {
+    params.matricula = document.getElementById('dn-matricula').value.trim();
+    params.proveedor = document.getElementById('dn-proveedor').value.trim();
+  } else {
+    params.chofer = document.getElementById('dn-chofer').value.trim();
+  }
+  callTranspAPI(params, function(data) {
+    if (data && data.ok) {
+      closeDocNuevo();
+      toast('✓ Documento agregado');
+      renderDocumentacion();
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar: ' + ((data && data.error) || 'intentá de nuevo');
+    }
+  }, function(data) {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'No se pudo conectar: ' + ((data && data.error) || 'intentá de nuevo');
+  });
+}
+
 function renderDocumentacion() {
   var cont = document.getElementById('transp-contenido');
   var ind  = document.getElementById('transp-indicadores');
@@ -5524,8 +5659,10 @@ function pintarDocumentacion() {
     + '<button class="fb'+(_docFiltro==='proximos'?' active':'')+'" onclick="cambiarFiltroDoc(\'proximos\',this)">⚠️ Próximos a vencer</button>'
     + tipoSelectHtml
     + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="edit-btn" onclick="abrirDocNuevo()">➕ Agregar documento</button>'
     + '<button class="edit-btn" onclick="exportarDocumentacionExcel()">📊 Exportar a Excel</button>'
-    + '</div>';
+    + '</div></div>';
 
   var html = tabsHtml
     + buildTable('Documentación de Camiones', dcRows, ['Matrícula','Tipo','N° Documento','Proveedor / Aseg.','Emisión','Vencimiento'], '🚛')
@@ -7027,6 +7164,7 @@ document.getElementById('overlay').addEventListener('click',function(e){ if(e.ta
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
 document.getElementById('ov-gps').addEventListener('click',function(e){ if(e.target===this) closeGPSModal(); });
+document.getElementById('ov-doc-nuevo').addEventListener('click',function(e){ if(e.target===this) closeDocNuevo(); });
 // Precargar config al abrir la página
 loadConfig();
 </script>
