@@ -663,6 +663,9 @@ function toast(msg, err){
 // 'costos-fijos','ver-fijos','infraestructura'.
 var _TRANSP_CLIENTES = [
   { nombre: 'Transporte Jorajuria', clienteId: 'jorajuria', apiUrl: 'https://script.google.com/macros/s/AKfycbzR1ajUZ3WHf_UjjsGlm7F0hERrAZsmO1_QsljFXhnuE-oyQnVYH04z_IKyvo3ah6VL/exec' },
+  // Alcance acotado: solo le gestionamos Flota + Mantenimientos +
+  // Documentación (vencimientos) por ahora, nada de Viajes/Combustible.
+  { nombre: 'Transporte Gerardo López', clienteId: 'gerardolopez', apiUrl: 'https://script.google.com/macros/s/AKfycbw7hPi2qlx9_nI02gUtn3WUn5VAEXQkSFH3_4_kypObimFChsvHSGRlhc7qcbEAcI7u/exec', tabsVisibles: ['flota','mantenimientos','documentacion'] },
   { nombre: 'PRUEBA', clienteId: 'prueba', apiUrl: 'https://script.google.com/macros/s/AKfycbwP-DcmcbnpOtA_TCyX8DsF7Yj6kMRHYo_PNV8gXA1deSDEuBzMSzmMuZKUiRJU8UEv/exec' }
 ];
 
