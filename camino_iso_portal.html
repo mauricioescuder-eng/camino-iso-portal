@@ -490,6 +490,8 @@ tr:hover td{background:#faf9f6}
     <div class="fg"><label>N° Neumático</label><input type="text" id="ne-numero"></div>
     <div class="fg"><label>Matrícula</label><select id="ne-matricula"></select></div>
     <div class="fg"><label>Posición</label><select id="ne-posicion"></select></div>
+    <div class="fg"><label>Tipo</label><input type="text" id="ne-tipo" placeholder="Ej: Firestone Duratrac"></div>
+    <div class="fg"><label>Rodado</label><input type="text" id="ne-rodado" placeholder="Ej: 295/80 R22.5"></div>
     <div class="fg"><label>Fecha instalación</label><input type="date" id="ne-fecha-inst"></div>
     <div class="fg"><label>Km instalación</label><input type="number" id="ne-km-inst" placeholder="0"></div>
     <div class="fg"><label>Costo</label><input type="number" id="ne-costo" placeholder="0" step="0.01"></div>
@@ -3516,6 +3518,12 @@ function renderNeumaticos(data) {
     + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">PROVEEDOR</label>'
     + '<input type="text" id="nn-proveedor" placeholder="Ej: Gomería Central" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
     + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">TIPO</label>'
+    + '<input type="text" id="nn-tipo" placeholder="Ej: Firestone Duratrac" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '<div><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">RODADO</label>'
+    + '<input type="text" id="nn-rodado" placeholder="Ej: 295/80 R22.5" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>'
+    + '</div>'
     + '<button onclick="guardarNeumatico()" style="padding:10px 20px;background:#1E6B2E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Guardar</button>'
     + ' <span id="nn-msg" style="font-size:13px;margin-left:10px"></span>'
     + '</div>';
@@ -3533,6 +3541,8 @@ function renderNeumaticos(data) {
       + '<td>'+(r.numero||'—')+'</td>'
       + '<td>'+r.matricula+'</td>'
       + '<td>'+r.posicion+'</td>'
+      + '<td>'+(r.tipo||'—')+'</td>'
+      + '<td>'+(r.rodado||'—')+'</td>'
       + '<td>'+r.fecha_instalacion+' · '+fmtN(r.km_instalacion,0)+' km</td>'
       + '<td>'+fmtMon(r.costo, r.moneda)+'</td>'
       + '<td>'+badgeMon(r.moneda)+'</td>'
@@ -3545,8 +3555,8 @@ function renderNeumaticos(data) {
   }).join('');
 
   var tableHtml = '<div class="card" style="overflow-x:auto">'
-    + '<table><thead><tr><th>N° Neumático</th><th>Matrícula</th><th>Posición</th><th>Instalación</th><th>Costo</th><th>Mon.</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
-    + '<tbody>' + (rowsHtml || '<tr><td colspan="11" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
+    + '<table><thead><tr><th>N° Neumático</th><th>Matrícula</th><th>Posición</th><th>Tipo</th><th>Rodado</th><th>Instalación</th><th>Costo</th><th>Mon.</th><th>Estado</th><th>Retiro</th><th>Km recorridos</th><th>$/km</th><th></th></tr></thead>'
+    + '<tbody>' + (rowsHtml || '<tr><td colspan="13" class="loading">Sin neumáticos registrados todavía.</td></tr>') + '</tbody></table></div>';
 
   document.getElementById('transp-contenido').innerHTML = formHtml + tableHtml;
 }
@@ -3560,6 +3570,8 @@ function guardarNeumatico() {
   var costo     = document.getElementById('nn-costo').value;
   var moneda    = document.getElementById('nn-moneda').value;
   var proveedor = document.getElementById('nn-proveedor').value;
+  var tipo      = document.getElementById('nn-tipo').value;
+  var rodado    = document.getElementById('nn-rodado').value;
   var msg       = document.getElementById('nn-msg');
 
   if (!numero || !matricula || !fecha || !km || !costo) {
@@ -3572,7 +3584,8 @@ function guardarNeumatico() {
 
   callTranspAPI({
     action: 'saveNeumatico', numero: numero, matricula: matricula, posicion: posicion,
-    fecha_instalacion: fecha, km_instalacion: km, costo: costo, moneda: moneda, proveedor: proveedor
+    fecha_instalacion: fecha, km_instalacion: km, costo: costo, moneda: moneda, proveedor: proveedor,
+    tipo: tipo, rodado: rodado
   }, function(resp) {
     if (resp && resp.ok) {
       toast('✓ Neumático instalado');
@@ -3612,6 +3625,8 @@ function abrirEditarNeumatico(id) {
   }).join('');
 
   document.getElementById('ne-numero').value       = r.numero || '';
+  document.getElementById('ne-tipo').value         = r.tipo || '';
+  document.getElementById('ne-rodado').value       = r.rodado || '';
   document.getElementById('ne-fecha-inst').value   = r.fecha_instalacion || '';
   document.getElementById('ne-km-inst').value      = r.km_instalacion || '';
   document.getElementById('ne-costo').value        = r.costo || '';
@@ -3632,6 +3647,8 @@ function guardarEditarNeumatico() {
   var numero    = document.getElementById('ne-numero').value;
   var matricula = document.getElementById('ne-matricula').value;
   var posicion  = document.getElementById('ne-posicion').value;
+  var tipo      = document.getElementById('ne-tipo').value;
+  var rodado    = document.getElementById('ne-rodado').value;
   var fechaInst = document.getElementById('ne-fecha-inst').value;
   var kmInst    = document.getElementById('ne-km-inst').value;
   var costo     = document.getElementById('ne-costo').value;
@@ -3653,7 +3670,7 @@ function guardarEditarNeumatico() {
 
   callTranspAPI({
     action: 'updateNeumatico', id: _neuEditId,
-    numero: numero, matricula: matricula, posicion: posicion,
+    numero: numero, matricula: matricula, posicion: posicion, tipo: tipo, rodado: rodado,
     fecha_instalacion: fechaInst, km_instalacion: kmInst, costo: costo, moneda: moneda, proveedor: proveedor, observaciones: obs,
     fecha_retiro: fechaRet, km_retiro: kmRet, motivo_retiro: motivoRet
   }, function(resp) {
