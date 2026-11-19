@@ -4321,9 +4321,15 @@ function renderTranspKPIs(data, viajes) {
   var _vistaMon = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
   var _pfx = _vistaMon === 'USD' ? 'US$ ' : '$U ';
   var toUYU = (_vistaMon === 'USD') ? toUSD : window.toUYU;
-  function fmt$(n) {
+  // dec (opcional): cantidad de decimales — por defecto 0, como siempre
+  // (totales grandes como Ingresos/Costo total). Los valores "por km"
+  // (costo_por_km) suelen ser menores a 1, así que redondeados a 0
+  // decimales terminan mostrando "US$ 0" o "US$ 1" sin ninguna
+  // precisión real — esos se llaman con dec=2.
+  function fmt$(n, dec) {
     var v = parseFloat(n) || 0;
-    return _pfx + v.toLocaleString('es-UY', {minimumFractionDigits:0, maximumFractionDigits:0});
+    var d = dec === undefined ? 0 : dec;
+    return _pfx + v.toLocaleString('es-UY', {minimumFractionDigits:d, maximumFractionDigits:d});
   }
   function fmtMillones(n) {
     var v = parseFloat(n) || 0;
@@ -4513,7 +4519,7 @@ function renderTranspKPIs(data, viajes) {
   // ── FILA 1: 5 KPI grandes estilo Power BI (click → drill-through) ───
   var kpiHtml = '<div class="kpibig-grid">'
     + kpiBig('Ingresos Totales', fmt$(totalIng), '#0f6e56', '#e8f5e9', 'Prom. ' + fmt$(avgIngTon) + '/ton · ' + fmt$(avgIngViaje) + '/viaje', 'openDrillThrough("viajes")')
-    + kpiBig('Costo total', fmt$(totalCosto), '#c0392b', '#fdecea', 'Prom. ' + fmt$(costoPorKm) + '/km', 'openDrillThrough("costos")')
+    + kpiBig('Costo total', fmt$(totalCosto), '#c0392b', '#fdecea', 'Prom. ' + fmt$(costoPorKm, 2) + '/km', 'openDrillThrough("costos")')
     + kpiBig('Margen', fmt$(margen), margen>=0?'#0f6e56':'#c0392b', margen>=0?'#e8f5e9':'#fdecea', '', 'openDrillThrough("viajes")')
     + kpiBig('% Margen', pct.toFixed(1) + ' %', colM, pct>=20?'#e8f5e9':pct>=10?'#fff8e1':'#fdecea', '', 'openDrillThrough("viajes")')
     + kpiBig('Gasoil', fmtN(totalLitros,0) + ' L', '#1565c0', '#e3f2fd', fmtN(litrosPorKm,1) + ' L/100km', 'openDrillThrough("combustible")')
@@ -4834,7 +4840,7 @@ function renderTranspKPIs(data, viajes) {
         + td('<strong>' + c.matricula + '</strong>' + badge)
         + td(fmtN(c.viajes),'r') + td(fmtN(c.km),'r') + td(fmtN(c.ton),'r')
         + td(fmt$(c.ingresos),'r') + td(fmt$(c.costo_directo),'r')
-        + td(fmt$(c.costo_por_km),'r') + td(fmt$(c.margen),'r')
+        + td(fmt$(c.costo_por_km, 2),'r') + td(fmt$(c.margen),'r')
         + '<td style="padding:8px;text-align:right;font-weight:700;color:'+col+'">' + c.pct_margen.toFixed(1) + '%</td>'
         + td(fmtN(c.dias_activos),'r')
         + '<td style="padding:8px;text-align:right;font-weight:700;color:'+colDias+'">' + (c.pct_dias_activos===null?'—':c.pct_dias_activos.toFixed(0)+'%') + '</td></tr>';
