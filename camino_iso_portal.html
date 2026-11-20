@@ -2260,6 +2260,11 @@ function facturadoDe(v) {
 // un valor de GPS para un camión+mes, se usa ESE como el km real de ese
 // camión en ese mes; donde todavía no se cargó el GPS de ese mes, se
 // cae a sumar el "Km recorridos" de los viajes (mejor que nada).
+// Si un camión tiene varios reportes de GPS cargados para el mismo mes
+// (ej. uno quincenal y después el resto del mes), se SUMAN en vez de
+// pisarse — cada carga es una fila propia en la hoja (ver saveKmGPS en
+// el backend, que ahora distingue cada carga por su rango de fechas
+// real, no solo por el mes).
 function kmGPSMapa() {
   var map = {};
   (window._transpKmGPSArr || []).forEach(function(g) {
@@ -2267,24 +2272,46 @@ function kmGPSMapa() {
     var mes = String(g['mes'] || '').trim();
     if (!mat || !mes) return;
     map[mat] = map[mat] || {};
-    map[mat][mes] = parseFloat(g['km']) || 0;
+    map[mat][mes] = (map[mat][mes] || 0) + (parseFloat(g['km']) || 0);
   });
   return map;
 }
-// Km recorridos por un camión desde un mes dado (inclusive) hasta el
+// Km recorridos por un camión desde una fecha dada (inclusive) hasta el
 // último reporte de GPS cargado — lo usa Neumáticos para saber cuánto
 // anduvo el camión (y por lo tanto la cubierta puesta) desde que se
 // instaló, sin tener que esperar a que se retire para tener un número.
-// El reporte de GPS solo tiene granularidad mensual (no por día), así
-// que el mes de instalación se cuenta completo aunque se haya puesto
-// a mitad de mes — es una aproximación, no el km exacto de esa cubierta.
+// Si el reporte cargado tiene su rango real (Fecha Desde/Hasta — los
+// reportes nuevos lo traen; ver parseReporteGPS), se prorratea el
+// tramo que cruza la fecha de instalación asumiendo un ritmo diario
+// parejo dentro de ESE reporte puntual — cuanto más seguido se suba el
+// reporte (ej. quincenal en vez de mensual), más corto y preciso queda
+// ese prorrateo. Los reportes viejos sin ese rango (cargados antes de
+// este cambio) se siguen aproximando contando el mes completo.
 function kmGPSDesdeFecha(matricula, fechaDesde) {
-  var mesDesde = String(fechaDesde || '').substring(0, 7); // 'AAAA-MM'
-  if (!mesDesde) return 0;
-  var porMes = kmGPSMapa()[matricula] || {};
-  return Object.keys(porMes).reduce(function(s, mes) {
-    return mes >= mesDesde ? s + (porMes[mes] || 0) : s;
-  }, 0);
+  var fechaDesdeStr = String(fechaDesde || '').substring(0, 10);
+  if (!fechaDesdeStr) return 0;
+  var mesDesdeStr = fechaDesdeStr.substring(0, 7);
+  var total = 0;
+  (window._transpKmGPSArr || []).forEach(function(g) {
+    if (String(g['matricula'] || '').trim() !== matricula) return;
+    var km = parseFloat(g['km']) || 0;
+    if (km <= 0) return;
+    var fd = String(g['fecha_desde'] || '').substring(0, 10);
+    var fh = String(g['fecha_hasta'] || '').substring(0, 10);
+    if (fd && fh) {
+      if (fh < fechaDesdeStr) return; // todo el reporte es anterior a la instalación
+      if (fd >= fechaDesdeStr) { total += km; return; } // todo el reporte es posterior (o del mismo día)
+      // El reporte cruza la fecha de instalación: prorratea por día.
+      var diasTotal = Math.round((new Date(fh) - new Date(fd)) / 86400000) + 1;
+      var diasUtiles = Math.round((new Date(fh) - new Date(fechaDesdeStr)) / 86400000) + 1;
+      if (diasTotal > 0) total += km * Math.max(0, Math.min(1, diasUtiles / diasTotal));
+    } else {
+      // Reporte viejo sin rango de fechas — aproximación por mes, como antes.
+      var mes = String(g['mes'] || '').trim();
+      if (mes && mes >= mesDesdeStr) total += km;
+    }
+  });
+  return total;
 }
 // Km real por camión para un conjunto de viajes ya filtrado — agrupa
 // por matrícula+mes y reemplaza la suma de "Km recorridos" por el dato
@@ -3958,6 +3985,7 @@ async function parseReporteGPS(file) {
   // Las filas que no son de viaje (pie "Página X de Y", etc.) no
   // matchean ninguno de los dos patrones y se saltean solas.
   var total = 0, nViajes = 0, mesesCount = {};
+  var fechaMin = null, fechaMax = null;
   var lastRow = ws.actualRowCount || ws.rowCount;
   for (var rr = headerRow + 1; rr <= lastRow; rr++) {
     var row2 = ws.getRow(rr);
@@ -3970,6 +3998,13 @@ async function parseReporteGPS(file) {
     nViajes++;
     var mesFila = mFecha[3] + '-' + mFecha[2];
     mesesCount[mesFila] = (mesesCount[mesFila] || 0) + 1;
+    // Fecha exacta de este viaje (AAAA-MM-DD) — se guarda el mínimo y el
+    // máximo de todo el archivo para saber el rango real que cubre el
+    // reporte (no solo el mes), y así poder sumar varias cargas
+    // parciales de un mismo mes sin que se pisen entre sí.
+    var fechaFila = mFecha[3] + '-' + mFecha[2] + '-' + mFecha[1];
+    if (!fechaMin || fechaFila < fechaMin) fechaMin = fechaFila;
+    if (!fechaMax || fechaFila > fechaMax) fechaMax = fechaFila;
   }
   if (nViajes === 0) throw new Error('No se encontraron viajes con Km en el archivo.');
 
@@ -3977,7 +4012,7 @@ async function parseReporteGPS(file) {
   // algún viaje puntual cae justo en el borde del mes anterior/siguiente).
   var mesElegido = Object.keys(mesesCount).sort(function(a,b){ return mesesCount[b]-mesesCount[a]; })[0];
 
-  return { matricula: matricula, mes: mesElegido, km: Math.round(total * 100) / 100, viajes: nViajes };
+  return { matricula: matricula, mes: mesElegido, km: Math.round(total * 100) / 100, viajes: nViajes, fecha_desde: fechaMin, fecha_hasta: fechaMax };
 }
 
 async function onSeleccionArchivosGPS(fileList) {
@@ -4000,22 +4035,25 @@ async function onSeleccionArchivosGPS(fileList) {
 function renderGPSModal() {
   var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
     + '<thead><tr style="background:var(--gray)">'
-    + th('Archivo') + th('Matrícula') + th('Mes') + th('Viajes','r') + th('Km total','r')
+    + th('Archivo') + th('Matrícula') + th('Mes') + th('Desde') + th('Hasta') + th('Viajes','r') + th('Km total','r')
     + '</tr></thead><tbody>';
   _gpsArchivosParseados.forEach(function(p, i) {
     if (p.error) {
-      html += '<tr><td style="padding:6px 8px;font-size:12px" colspan="5"><strong>' + p.nombreArchivo + '</strong>: <span style="color:#a32d2d">' + p.error + '</span></td></tr>';
+      html += '<tr><td style="padding:6px 8px;font-size:12px" colspan="7"><strong>' + p.nombreArchivo + '</strong>: <span style="color:#a32d2d">' + p.error + '</span></td></tr>';
       return;
     }
     html += '<tr>'
       + '<td style="padding:6px 8px;font-size:11px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + p.nombreArchivo + '">' + p.nombreArchivo + '</td>'
       + '<td style="padding:6px 8px"><input type="text" value="' + p.matricula + '" id="gps-mat-' + i + '" style="width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
       + '<td style="padding:6px 8px"><input type="month" value="' + p.mes + '" id="gps-mes-' + i + '" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
+      + '<td style="padding:6px 8px"><input type="date" value="' + (p.fecha_desde||'') + '" id="gps-desde-' + i + '" title="Desde qué día cubre este reporte — así se puede sumar con otra carga del mismo mes sin pisarla" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
+      + '<td style="padding:6px 8px"><input type="date" value="' + (p.fecha_hasta||'') + '" id="gps-hasta-' + i + '" title="Hasta qué día cubre este reporte" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-family:Arial"></td>'
       + '<td style="padding:6px 8px;text-align:right">' + p.viajes + '</td>'
       + '<td style="padding:6px 8px;text-align:right;font-weight:600">' + fmtN(p.km, 1) + ' km</td>'
       + '</tr>';
   });
-  html += '</tbody></table></div>';
+  html += '</tbody></table></div>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px">💡 Si subís el reporte en varias partes del mismo mes (ej. quincenal), revisá que "Desde" y "Hasta" no se superpongan entre cargas — así el portal las suma en vez de pisarlas, y el cálculo por camión queda más preciso.</div>';
   document.getElementById('gps-body').innerHTML = html;
   document.getElementById('gps-msg').textContent = '';
   document.getElementById('ov-gps').classList.add('open');
@@ -4032,10 +4070,14 @@ function guardarTodosGPS() {
     if (p.error) return;
     var matEl = document.getElementById('gps-mat-' + i);
     var mesEl = document.getElementById('gps-mes-' + i);
+    var desdeEl = document.getElementById('gps-desde-' + i);
+    var hastaEl = document.getElementById('gps-hasta-' + i);
     var mat = matEl ? matEl.value.trim().toUpperCase() : p.matricula;
     var mes = mesEl ? mesEl.value : p.mes;
+    var desde = desdeEl ? desdeEl.value : p.fecha_desde;
+    var hasta = hastaEl ? hastaEl.value : p.fecha_hasta;
     if (!mat || !mes) return;
-    pendientes.push({ matricula: mat, mes: mes, km: p.km });
+    pendientes.push({ matricula: mat, mes: mes, km: p.km, fecha_desde: desde, fecha_hasta: hasta });
   });
   if (!pendientes.length) {
     msgEl.textContent = 'No hay nada para guardar — revisá Matrícula y Mes.';
@@ -4054,7 +4096,7 @@ function guardarTodosGPS() {
       return;
     }
     var p = pendientes[idx];
-    callTranspAPI({ action: 'saveKmGPS', matricula: p.matricula, mes: p.mes, km: p.km }, function() {
+    callTranspAPI({ action: 'saveKmGPS', matricula: p.matricula, mes: p.mes, km: p.km, fecha_desde: p.fecha_desde || '', fecha_hasta: p.fecha_hasta || '' }, function() {
       ok++; siguiente(idx + 1);
     }, function(data) {
       fail++;
