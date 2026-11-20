@@ -2387,6 +2387,21 @@ function ensureKmGPSLoaded(cb) {
   });
 }
 
+// Trae el registro de Neumáticos a memoria si todavía no se cargó en
+// esta sesión — se usa para sumar el costo de cada neumático al costo
+// directo por camión (Dashboard / Margen), igual que combustible,
+// mantenimientos y costos fijos.
+function ensureNeumaticosLoaded(cb) {
+  if (window._transpNeumaticosArr) { cb(); return; }
+  callTranspAPI({action: 'neumaticos'}, function(neu) {
+    window._transpNeumaticosArr = Array.isArray(neu) ? neu : [];
+    cb();
+  }, function() {
+    window._transpNeumaticosArr = window._transpNeumaticosArr || [];
+    cb();
+  });
+}
+
 // Fuerza a releer todo de la planilla (en vez del caché de 10 min) y
 // vuelve a cargar la pestaña actual. El caché ya se limpia solo cuando
 // entra un formulario nuevo (onFormSubmit en Apps Script) — este botón
@@ -2436,6 +2451,8 @@ function loadTransporte(vista, btn) {
             var flotaArr = Array.isArray(flota) ? flota : [];
             callTranspAPI({action:'costosFijos'}, function(fijos) {
               var fijosArr = Array.isArray(fijos) ? fijos : [];
+              ensureNeumaticosLoaded(function() {
+              var neumArr = window._transpNeumaticosArr || [];
               // Costos por matrícula: variable + cuasi-variable + fijo (para tabla por camión correcta).
               // Se convierte a la moneda de vista elegida (US$ por defecto) —
               // antes el combustible se sumaba crudo (sin convertir) y
@@ -2457,6 +2474,12 @@ function loadTransporte(vista, btn) {
                 var mat = f['matrícula'] || f['matricula'] || ''; if (!mat) return;
                 costosPorMat[mat] = (costosPorMat[mat]||0) + _convVistaK(f['monto'], f['moneda']);
               });
+              // Neumáticos → costo directo del camión (cuasi-variable, mismo
+              // criterio que los repuestos de Mantenimientos).
+              neumArr.forEach(function(n) {
+                var mat = n['matricula'] || ''; if (!mat) return;
+                costosPorMat[mat] = (costosPorMat[mat]||0) + _convVistaK(n['costo'], n['moneda']);
+              });
               // costoTotal incluye todo: var + cuasi + fijo (ya sin doble conteo en renderTranspKPIs)
               var costoTotal = Object.values(costosPorMat).reduce(function(s,v){return s+v;},0);
               window._transpCostosPorMat = costosPorMat;
@@ -2466,10 +2489,11 @@ function loadTransporte(vista, btn) {
               window._transpFlotaArr = flotaArr;
               window._transpFijosArr = fijosArr;
               ensureKmGPSLoaded(function() {
-                renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:fijosArr}, viajesArr);
+                renderTranspKPIs({costosPorMatricula:costosPorMat, costoTotal:costoTotal, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:fijosArr, neumaticosArr:neumArr}, viajesArr);
+              });
               });
             }, function() {
-              renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:[]}, viajesArr);
+              renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:combArr, mantArr:mantArr, flotaArr:flotaArr, fijosArr:[], neumaticosArr:[]}, viajesArr);
             });
           }, function() { renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[], fijosArr:[]}, viajesArr); });
         }, function(){ renderTranspKPIs({costosPorMatricula:{}, costoTotal:0, combArr:[], mantArr:[], flotaArr:[], fijosArr:[]}, viajesArr); });
@@ -2503,7 +2527,7 @@ function loadTransporte(vista, btn) {
         // en vez de la suma de "Km recorridos" de los viajes — necesitan
         // el reporte de GPS en memoria antes de renderizar.
         if (vista === 'viajes') {
-          ensureKmGPSLoaded(function(){ renderTranspTabla(data, 'viajes'); });
+          ensureKmGPSLoaded(function(){ ensureNeumaticosLoaded(function(){ renderTranspTabla(data, 'viajes'); }); });
         }
         else if (vista === 'combustible') {
           ensureKmGPSLoaded(function() {
@@ -3181,8 +3205,17 @@ function aplicarFiltrosTransp() {
     }
     return true;
   });
+  // Neumáticos filtrados por fecha de instalación (cuándo se cargó el
+  // costo) y matrícula, mismo criterio que combustible/mantenimientos.
+  var neumAll = window._transpNeumaticosArr || [];
+  var neumFilt = neumAll.filter(function(n) {
+    var fecha = n['fecha_instalacion'] || '';
+    if (per && !String(fecha).startsWith(per)) return false;
+    if (mat && n['matricula'] !== mat)          return false;
+    return true;
+  });
 
-  // Recalcular costosPorMatricula con los costos filtrados (comb + mant + fijos),
+  // Recalcular costosPorMatricula con los costos filtrados (comb + mant + fijos + neumáticos),
   // en la moneda de vista elegida (mismo criterio que loadTransporte).
   var _vMonF = (window._transpVistaMoneda === 'UYU') ? 'UYU' : 'USD';
   function _convVistaF(n, moneda) { return _vMonF === 'USD' ? toUSD(n, moneda) : toUYU(n, moneda); }
@@ -3199,6 +3232,10 @@ function aplicarFiltrosTransp() {
     var m2 = f['matrícula'] || f['matricula'] || ''; if (!m2) return;
     costosPorMat[m2] = (costosPorMat[m2]||0) + _convVistaF(f['monto'], f['moneda']);
   });
+  neumFilt.forEach(function(n) {
+    var m2 = n['matricula'] || ''; if (!m2) return;
+    costosPorMat[m2] = (costosPorMat[m2]||0) + _convVistaF(n['costo'], n['moneda']);
+  });
   var costoTotal = Object.values(costosPorMat).reduce(function(s,v){ return s+v; }, 0);
 
   // Filtrar flota por matrícula para costos fijos
@@ -3213,6 +3250,7 @@ function aplicarFiltrosTransp() {
     mantArr: mantFilt,
     flotaArr: flotaFilt,
     fijosArr: fijosArrFilt,
+    neumaticosArr: neumFilt,
     costosPorMatricula: costosPorMat,
     costoTotal: costoTotal
   });
@@ -4490,12 +4528,15 @@ function renderTranspKPIs(data, viajes) {
     var combArr0b = data.combArr || window._transpCombArr || [];
     var mantArr0b = data.mantArr || window._transpMantArr || [];
     var fijosArr0b = data.fijosArr || window._transpFijosArr || [];
+    var neumArr0b = data.neumaticosArr || window._transpNeumaticosArr || [];
     combArr0b.forEach(function(c){ totalCosto += toUYU(c['total'], 'UYU'); });
     mantArr0b.forEach(function(m){ totalCosto += toUYU(m['costo'], m['moneda']); });
     fijosArr0b.forEach(function(f){ totalCosto += toUYU(f['monto'], f['moneda']); });
+    neumArr0b.forEach(function(n){ totalCosto += toUYU(n['costo'], n['moneda']); });
     combArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['total'], 'UYU'); });
     mantArr0b.forEach(function(c){ var m=c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['costo'], c['moneda']); });
     fijosArr0b.forEach(function(c){ var m=c['matrícula']||c['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(c['monto'], c['moneda']); });
+    neumArr0b.forEach(function(n){ var m=n['matricula']||''; if(m) costosPorMat[m]=(costosPorMat[m]||0)+toUYU(n['costo'], n['moneda']); });
   }
   // DAX: Margen = [Ingresos Totales] - [Total Costos]
   var margen = totalIng - totalCosto;
@@ -4688,6 +4729,7 @@ function renderTranspKPIs(data, viajes) {
   var gastosM = {};
   var combArr = data.combArr || window._transpCombArr || [];
   var mantArr = data.mantArr || window._transpMantArr || [];
+  var neumArr = data.neumaticosArr || window._transpNeumaticosArr || [];
   function getMesKey(fecha) {
     var s = String(fecha||'').trim();
     var m = s.match(/^(\d{4})-(\d{2})/);
@@ -4721,6 +4763,13 @@ function renderTranspKPIs(data, viajes) {
     var mk = getMesKey(f['fecha']||''); if (!mk) return;
     if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
     gastosM[mk.key].variable += toUYU(f['monto'], f['moneda']);
+  });
+  // Neumáticos → Cuasi variable (mismo criterio que Repuestos de Mantenimientos),
+  // agrupado por mes de instalación (cuándo se cargó el costo real).
+  neumArr.forEach(function(n) {
+    var mk = getMesKey(n['fecha_instalacion']||''); if (!mk) return;
+    if (!gastosM[mk.key]) gastosM[mk.key] = {key:mk.key, label:mk.label, variable:0, cuasivariable:0};
+    gastosM[mk.key].cuasivariable += toUYU(n['costo'], n['moneda']);
   });
   // Agregar costo fijo por mes (real si hay registros, estimado como fallback)
   var allMesKeys = Object.keys(Object.assign({}, gastosM, meses));
@@ -4763,6 +4812,7 @@ function renderTranspKPIs(data, viajes) {
   // ── Estructura de costos ──────────────────────────────────────
   var combArrE = data.combArr || window._transpCombArr || [];
   var mantArrE = data.mantArr || window._transpMantArr || [];
+  var neumArrE = data.neumaticosArr || window._transpNeumaticosArr || [];
   var eVar = combArrE.reduce(function(s,c){return s+toUYU(c['total'], 'UYU');},0);
   mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='variable') eVar+=toUYU(m['costo'], m['moneda']); });
   // Viáticos y peajes de viajes → Variable
@@ -4772,6 +4822,8 @@ function renderTranspKPIs(data, viajes) {
   fijosArrVar.forEach(function(f){ eVar += toUYU(f['monto'], f['moneda']); });
   var eCuasi = 0;
   mantArrE.forEach(function(m){ if(tipoMant(m['area'])==='cuasivariable') eCuasi+=toUYU(m['costo'], m['moneda']); });
+  // Neumáticos → Cuasi variable
+  neumArrE.forEach(function(n){ eCuasi += toUYU(n['costo'], n['moneda']); });
   var eFijo = totalCostoFijoReal > 0 ? totalCostoFijoReal : (totalCosto - eVar - eCuasi);
   var pctV = totalCosto > 0 ? eVar/totalCosto*100 : 0;
   var pctQ = totalCosto > 0 ? eCuasi/totalCosto*100 : 0;
@@ -6037,15 +6089,17 @@ function renderTranspTabla(data, tipo) {
       var _combArr  = window._transpCombArr  || [];
       var _mantArr  = window._transpMantArr  || [];
       var _fijosArr = window._transpFijosArr || [];
+      var _neumArr  = window._transpNeumaticosArr || [];
       var _totComb     = _combArr.reduce(function(s,c){ return s+(parseFloat(c['total'])||0); },0);
       var _totMantVar  = _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='variable'     ? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
       var _totMantCuasi= _mantArr.reduce(function(s,m){ return tipoMant(m['area'])==='cuasivariable'? s+toUYU(parseFloat(m['costo'])||0,m['moneda']) : s; },0);
+      var _totNeum     = _neumArr.reduce(function(s,n){ return s+toUYU(parseFloat(n['costo'])||0, n['moneda']); },0);
       var _rubrosVarCF2 = ['Comisión por viaje'];
       function _esCFVar2(f){ var rb=f['rubro']||''; if(f['clasificacion']==='variable') return true; if(f['clasificacion']==='fijo') return false; return _rubrosVarCF2.indexOf(rb)>=0; }
       var _totComis    = _fijosArr.filter(_esCFVar2).reduce(function(s,f){ return s+toUYU(f['monto'], f['moneda']); },0);
       var _totFijo     = _fijosArr.filter(function(f){ return !_esCFVar2(f); }).reduce(function(s,f){ return s+toUYU(f['monto'], f['moneda']); },0);
       var _eVar  = _totComb + _totMantVar + totViat + totPeaj + _totComis;
-      var _eCuasi= _totMantCuasi;
+      var _eCuasi= _totMantCuasi + _totNeum;
       var _eFijo = _totFijo;
       var _totalCosto = _eVar + _eCuasi + _eFijo;
       // DAX: Costo por KM = DIVIDE(Total Costos, Total Km)
