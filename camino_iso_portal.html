@@ -2271,6 +2271,21 @@ function kmGPSMapa() {
   });
   return map;
 }
+// Km recorridos por un camión desde un mes dado (inclusive) hasta el
+// último reporte de GPS cargado — lo usa Neumáticos para saber cuánto
+// anduvo el camión (y por lo tanto la cubierta puesta) desde que se
+// instaló, sin tener que esperar a que se retire para tener un número.
+// El reporte de GPS solo tiene granularidad mensual (no por día), así
+// que el mes de instalación se cuenta completo aunque se haya puesto
+// a mitad de mes — es una aproximación, no el km exacto de esa cubierta.
+function kmGPSDesdeFecha(matricula, fechaDesde) {
+  var mesDesde = String(fechaDesde || '').substring(0, 7); // 'AAAA-MM'
+  if (!mesDesde) return 0;
+  var porMes = kmGPSMapa()[matricula] || {};
+  return Object.keys(porMes).reduce(function(s, mes) {
+    return mes >= mesDesde ? s + (porMes[mes] || 0) : s;
+  }, 0);
+}
 // Km real por camión para un conjunto de viajes ya filtrado — agrupa
 // por matrícula+mes y reemplaza la suma de "Km recorridos" por el dato
 // de GPS donde exista.
@@ -2498,7 +2513,7 @@ function loadTransporte(vista, btn) {
         }
         else if (vista === 'flota')           renderTranspTabla(data, 'flota');
         else if (vista === 'tabla-fijos')     renderTranspTabla(data, 'costosFijos');
-        else if (vista === 'neumaticos')      ensureFlotaLoaded(function(){ renderNeumaticos(data); });
+        else if (vista === 'neumaticos')      ensureFlotaLoaded(function(){ ensureKmGPSLoaded(function(){ renderNeumaticos(data); }); });
         else if (vista === 'ordenesCompra')   ensureFlotaLoaded(function(){ renderOrdenesCompra(data); });
       });
     }
@@ -3533,8 +3548,19 @@ function renderNeumaticos(data) {
       ? '<span class="badge b-activo">Activo</span>'
       : '<span class="badge b-inactivo">Retirado</span>';
     var retiroTxt = r.activo ? '—' : (r.fecha_retiro+' · '+fmtN(r.km_retiro,0)+' km');
-    var kmRecTxt  = r.km_recorridos > 0 ? fmtN(r.km_recorridos,0)+' km' : '—';
-    var costoKmTxt = r.km_recorridos > 0 ? fmt$(toUYU(r.costo,r.moneda)/r.km_recorridos)+'/km' : '—';
+    // Mientras el neumático sigue activo (no se retiró todavía), no hay
+    // un "km_recorridos" real del backend — se estima con el reporte de
+    // GPS del camión, sumando sus km desde el mes en que se instaló.
+    // Una vez retirado, se usa el km real (km_retiro - km_instalación),
+    // que es exacto y no depende de aproximar por mes.
+    var kmGpsActivo = r.activo ? kmGPSDesdeFecha(r.matricula, r.fecha_instalacion) : 0;
+    var kmParaCosto = r.activo ? kmGpsActivo : r.km_recorridos;
+    var kmRecTxt = r.activo
+      ? (kmGpsActivo > 0 ? fmtN(kmGpsActivo,0)+' km (GPS, desde instalación)' : 'Sin reporte GPS de ese camión')
+      : (r.km_recorridos > 0 ? fmtN(r.km_recorridos,0)+' km' : '—');
+    var costoKmTxt = kmParaCosto > 0
+      ? '$U ' + (toUYU(r.costo,r.moneda)/kmParaCosto).toLocaleString('es-UY',{minimumFractionDigits:2,maximumFractionDigits:2}) + '/km'
+      : '—';
     var accion = (r.activo ? '<button class="edit-btn" onclick="openRetiroNeumatico(\''+r.id+'\')">Retirar</button> ' : '')
       + '<button class="edit-btn" onclick="abrirEditarNeumatico(\''+r.id+'\')">✏️ Editar</button>';
     return '<tr>'
