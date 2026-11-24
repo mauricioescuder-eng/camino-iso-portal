@@ -536,6 +536,25 @@ tr:hover td{background:#faf9f6}
     <div id="me-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
+<div class="overlay" id="ov-fijo-editar">
+  <div class="modal">
+    <h3>Editar Costo Fijo</h3>
+    <div class="fg"><label>Fecha</label><input type="date" id="fe-fecha"></div>
+    <div class="fg"><label>Matrícula</label><input type="text" id="fe-matricula"></div>
+    <div class="fg"><label>Rubro</label><input type="text" id="fe-rubro"></div>
+    <div class="fg"><label>Detalle</label><input type="text" id="fe-detalle"></div>
+    <div class="fg"><label>Proveedor</label><input type="text" id="fe-proveedor"></div>
+    <div class="fg"><label>Monto</label><input type="number" id="fe-monto" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Moneda</label><select id="fe-moneda"><option value="UYU">Pesos (UYU)</option><option value="USD">Dólares (USD)</option></select></div>
+    <div class="fg"><label>Clasificación</label><select id="fe-clasificacion"><option value="fijo">Fijo</option><option value="variable">Variable</option></select></div>
+    <div class="fg"><label>Observaciones</label><textarea id="fe-observaciones" rows="2"></textarea></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeEditarCostoFijo()">Cancelar</button>
+      <button class="btn-s" onclick="guardarEditarCostoFijo()">Guardar cambios</button>
+    </div>
+    <div id="fe-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
 <div class="overlay" id="ov-gps">
   <div class="modal" style="max-width:680px">
     <h3>📡 Cargar reporte de GPS</h3>
@@ -6954,6 +6973,7 @@ function renderTranspTabla(data, tipo) {
     var showARS = (tipo === 'viajes' || tipo === 'mantenimientos');
     var arsLabel = _monedaActual === 'USD' ? 'USD equiv.' : 'UYU equiv.';
     var isMant = (tipo === 'mantenimientos');
+    var isFijos = (tipo === 'costosFijos');
     // N° de mantenimiento: estable aunque se filtre por fecha o se
     // cambie la moneda de la tabla — se arma una sola vez a partir de
     // TODOS los registros (sin filtrar), ordenados por fecha. Se
@@ -6990,6 +7010,7 @@ function renderTranspTabla(data, tipo) {
       + cols.map(function(c){ return th(labelMap[c]||c); }).join('')
       + (showARS ? th(arsLabel, 'r') : '')
       + (isMant ? th('Repuestos', 'r') : '')
+      + (isFijos ? th('Acciones', 'r') : '')
       + '</tr></thead>';
 
     // Arma el <tbody> de filas para una lista de registros de
@@ -7003,6 +7024,7 @@ function renderTranspTabla(data, tipo) {
     filas.forEach(function(r){
       var _mri = _mantRowSeq++;
       var tieneRep = isMant && r.repuestos && r.repuestos.length > 0;
+      if (isFijos) window._fijosRegistros[_mri] = r;
       // Cuando se eligió "Todo en $U"/"Todo en U$S", cada celda de
       // moneda se muestra convertida a esa única moneda, en vez de la
       // moneda original de esa fila.
@@ -7071,6 +7093,12 @@ function renderTranspTabla(data, tipo) {
       if (isMant) {
         html += '<td style="padding:6px 8px;text-align:right">'
           + (tieneRep ? fmt$(toUYU(r.costo_repuestos, r['moneda'])) : '<span style="color:var(--muted)">—</span>')
+          + '</td>';
+      }
+      if (isFijos) {
+        html += '<td style="padding:6px 8px;text-align:right;white-space:nowrap">'
+          + '<button class="edit-btn" onclick="abrirEditarCostoFijo('+_mri+')">✏️ Editar</button> '
+          + '<button class="edit-btn" onclick="borrarCostoFijo('+_mri+')" style="color:#c0392b;border-color:#f3c9c9">🗑️ Borrar</button>'
           + '</td>';
       }
       html += '</tr>';
@@ -7223,6 +7251,7 @@ function toggleMantRepuestosFila(i) {
 // se puede abrir el formulario de edición con los datos actuales sin
 // tener que volver a pedirlos al servidor.
 window._mantRegistros = window._mantRegistros || {};
+window._fijosRegistros = window._fijosRegistros || {};
 var _meEditandoIdx = null;
 function abrirEditarMantenimiento(i) {
   var r = window._mantRegistros[i];
@@ -7290,6 +7319,82 @@ function guardarEditarMantenimiento() {
     msg.textContent = 'No se pudo conectar. Intentá de nuevo.';
   });
 }
+
+// Editar/Borrar un Costo Fijo — mismo patrón que Editar Mantenimiento:
+// window._fijosRegistros se arma al pintar la tabla (en
+// renderTranspTabla), indexado por el mismo _mri de esa fila, para
+// poder abrir el formulario sin volver a pedir los datos al servidor.
+var _feEditandoIdx = null;
+function abrirEditarCostoFijo(i) {
+  var r = window._fijosRegistros[i];
+  if (!r) { toast('No se encontró el registro.', true); return; }
+  if (!r._fila) { toast('Este registro no tiene fila asociada — actualizá la página e intentá de nuevo.', true); return; }
+  _feEditandoIdx = i;
+  document.getElementById('fe-fecha').value = r['fecha'] || '';
+  document.getElementById('fe-matricula').value = r['matricula'] || '';
+  document.getElementById('fe-rubro').value = r['rubro'] || '';
+  document.getElementById('fe-detalle').value = r['detalle'] || '';
+  document.getElementById('fe-proveedor').value = r['proveedor'] || '';
+  document.getElementById('fe-monto').value = r['monto'] || '';
+  document.getElementById('fe-moneda').value = (r['moneda']||'UYU').toUpperCase() === 'USD' ? 'USD' : 'UYU';
+  document.getElementById('fe-clasificacion').value = (r['clasificacion']||'').toLowerCase() === 'variable' ? 'variable' : 'fijo';
+  document.getElementById('fe-observaciones').value = r['observaciones'] || '';
+  document.getElementById('fe-msg').textContent = '';
+  document.getElementById('ov-fijo-editar').classList.add('open');
+}
+function closeEditarCostoFijo() {
+  document.getElementById('ov-fijo-editar').classList.remove('open');
+  _feEditandoIdx = null;
+}
+function guardarEditarCostoFijo() {
+  if (_feEditandoIdx === null) return;
+  var r = window._fijosRegistros[_feEditandoIdx];
+  var msg = document.getElementById('fe-msg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  callTranspAPI({
+    action: 'updateCostoFijo',
+    fila: r._fila,
+    fecha: document.getElementById('fe-fecha').value,
+    matricula: document.getElementById('fe-matricula').value,
+    rubro: document.getElementById('fe-rubro').value,
+    detalle: document.getElementById('fe-detalle').value,
+    proveedor: document.getElementById('fe-proveedor').value,
+    monto: document.getElementById('fe-monto').value,
+    moneda: document.getElementById('fe-moneda').value,
+    clasificacion: document.getElementById('fe-clasificacion').value,
+    observaciones: document.getElementById('fe-observaciones').value
+  }, function(resp) {
+    if (resp && resp.ok) {
+      closeEditarCostoFijo();
+      toast('✓ Costo Fijo actualizado');
+      loadTransporte('tabla-fijos');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'No se pudo conectar. Intentá de nuevo.';
+  });
+}
+function borrarCostoFijo(i) {
+  var r = window._fijosRegistros[i];
+  if (!r) { toast('No se encontró el registro.', true); return; }
+  if (!r._fila) { toast('Este registro no tiene fila asociada — actualizá la página e intentá de nuevo.', true); return; }
+  if (!confirm('¿Borrar este Costo Fijo (' + (r['rubro']||'sin rubro') + ', ' + (r['fecha']||'') + ')? Esta acción no se puede deshacer.')) return;
+  callTranspAPI({ action: 'deleteCostoFijo', fila: r._fila }, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Costo Fijo borrado');
+      loadTransporte('tabla-fijos');
+    } else {
+      toast('Error al borrar. Intentá de nuevo.', true);
+    }
+  }, function() {
+    toast('No se pudo conectar. Intentá de nuevo.', true);
+  });
+}
+
 function toggleRepCamion(id) {
   var row = document.getElementById(id);
   if (!row) return;
@@ -7436,6 +7541,7 @@ document.getElementById('overlay').addEventListener('click',function(e){ if(e.ta
 document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ if(e.target===this) closeRetiroNeumatico(); });
 document.getElementById('ov-neu-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
+document.getElementById('ov-fijo-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarCostoFijo(); });
 document.getElementById('ov-gps').addEventListener('click',function(e){ if(e.target===this) closeGPSModal(); });
 document.getElementById('ov-doc-nuevo').addEventListener('click',function(e){ if(e.target===this) closeDocNuevo(); });
 // Precargar config al abrir la página
