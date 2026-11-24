@@ -5286,6 +5286,7 @@ function openDrillThrough(type, filterKey, filterVal) {
   var combArr = window._transpCombArr    || [];
   var mantArr = window._transpMantArr    || [];
   var fijosArr= window._transpFijosArr   || [];
+  var neumArr = window._transpNeumaticosArr || [];
 
   // Mismo criterio de vista de moneda que el Dashboard principal, para que
   // el detalle que abre este panel (drill-through) no muestre otra moneda
@@ -5355,12 +5356,16 @@ function openDrillThrough(type, filterKey, filterVal) {
 
   } else if (type === 'cuasivariable') {
     var data = mantArr.filter(function(m){ return inMes(m['fecha']||m['timestamp']) && tipoMant(m['area'])==='cuasivariable'; });
-    title = '🔵 Cuasi variable' + mesLabel + ' (' + data.length + ' registros)';
+    var dataNeu = neumArr.filter(function(n){ return inMes(n['fecha_instalacion']); });
+    title = '🔵 Cuasi variable' + mesLabel + ' (' + (data.length + dataNeu.length) + ' registros)';
     cols  = ['Fecha','Matrícula','Área','Proveedor','Monto'];
     rows  = data.map(function(m){ return [
       m['fecha']||m['timestamp']||'', m['matricula']||'', m['area']||'',
       m['proveedor']||m['taller']||'', fmt$(toUYU(m['costo'], m['moneda']))
-    ]; });
+    ]; }).concat(dataNeu.map(function(n){ return [
+      n['fecha_instalacion']||'', n['matricula']||'', 'Neumáticos',
+      n['proveedor']||'', fmt$(toUYU(n['costo'], n['moneda']))
+    ]; }));
 
   } else if (type === 'fijo') {
     var _rvCF = ['Comisión por viaje'];
@@ -5383,6 +5388,8 @@ function openDrillThrough(type, filterKey, filterVal) {
       .forEach(function(m){ allCosts.push({fecha:m['fecha']||m['timestamp']||'',mat:m['matricula']||'',desc:(m['area']||'')+(m['proveedor']?' - '+m['proveedor']:''),tipo:tipoMant(m['area'])==='variable'?'Variable':'Cuasi variable',monto:toUYU(m['costo'], m['moneda'])}); });
     fijosArr.filter(function(f){ return inMes(f['fecha']); })
       .forEach(function(f){ allCosts.push({fecha:f['fecha']||'',mat:f['matrícula']||f['matricula']||'',desc:(f['rubro']||'')+(f['detalle']?' - '+f['detalle']:''),tipo:_dtEsVar(f)?'Variable':'Fijo',monto:toUYU(f['monto'], f['moneda'])}); });
+    neumArr.filter(function(n){ return inMes(n['fecha_instalacion']); })
+      .forEach(function(n){ allCosts.push({fecha:n['fecha_instalacion']||'',mat:n['matricula']||'',desc:'Neumáticos'+(n['proveedor']?' - '+n['proveedor']:''),tipo:'Cuasi variable',monto:toUYU(n['costo'], n['moneda'])}); });
     allCosts.sort(function(a,b){ return a.fecha < b.fecha ? 1 : -1; });
     title = '💰 Costos' + mesLabel + ' (' + allCosts.length + ' registros)';
     cols  = ['Fecha','Matrícula','Descripción','Tipo','Monto'];
