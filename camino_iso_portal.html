@@ -6192,14 +6192,16 @@ function renderTranspTabla(data, tipo) {
       // ingreso de UN viaje contra ingreso de UN viaje, no un día entero
       // contra un viaje suelto.
       var ingPorViaje = rows.map(function(r){
+        var _nv = nViajesDe(r);
         return {
           fecha: r['fecha viaje'] || r['timestamp'] || '',
           mat:   r['matricula'] || '',
           dest:  r['destino'] || '',
-          ing:   toUYU(ingresoViaje(r), r['moneda']) / nViajesDe(r),
-          km:    parseFloat(r['km recorridos'])||0,
-          ton:   parseFloat(r['toneladas'])||0,
-          nv:    nViajesDe(r)
+          tipo:  r['tipo de carga'] || '',
+          ing:   toUYU(ingresoViaje(r), r['moneda']) / _nv,
+          km:    (parseFloat(r['km recorridos'])||0) / _nv,
+          ton:   (parseFloat(r['toneladas'])||0) / _nv,
+          nv:    _nv
         };
       });
 
