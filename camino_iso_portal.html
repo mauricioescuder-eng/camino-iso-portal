@@ -6893,7 +6893,7 @@ function renderTranspTabla(data, tipo) {
         + kpi('Registros',       rows.length,               'cargas',          '#185fa5')
         + kpi('Litros totales',  fmtN(totLt,0)+' L',        'acumulado',       '#F07820')
         + kpi('Costo total',     fmt$(totFactura),           'acumulado',       '#a32d2d')
-        + kpi('Consumo / km',    fmtN(_viajesKm>0?totLt/_viajesKm:0,2)+' L/km', fmtN(_lPor100km,1)+' L/100km · '+fmtN(_kmPorL,2)+' km/L', '#639922')
+        + kpi('Consumo',         fmtN(_lPor100km,1)+' L/100km', fmtN(_kmPorL,2)+' km/L', '#639922')
         + kpi('Costo comb. / km', fmt$(_combPorKm),          'Prom. $U '+(parseFloat(_precioProm)||0).toLocaleString('es-UY',{minimumFractionDigits:1,maximumFractionDigits:1})+'/L', '#854f0b')
         + '</div>'
         + _combChartHtml
