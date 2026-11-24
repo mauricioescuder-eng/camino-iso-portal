@@ -217,10 +217,6 @@ tr:hover td{background:#faf9f6}
     </div>
     <div class="login-field"><label>Usuario</label><input type="text" id="l-user" placeholder="Tu usuario" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()"/></div>
     <div class="login-field"><label>Contraseña</label><input type="password" id="l-pass" placeholder="Tu contraseña" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/></div>
-    <div style="display:flex;align-items:center;gap:8px;margin:12px 0"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">o accedé con PIN</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
-    <div class="login-field"><input type="password" id="l-pin" placeholder="PIN ••••" maxlength="10" inputmode="numeric"
-             style="font-size:22px;letter-spacing:6px;text-align:center"
-             onkeydown="if(event.key==='Enter')doLogin()"/></div>
     <button class="login-btn" onclick="doLogin()" id="login-btn">Ingresar</button>
     <div class="login-error" id="login-error"></div>
     <div id="admin-login-fields" style="display:none"></div>
@@ -684,16 +680,15 @@ function toggleAdminLogin(e) {
 }
 
 async function doLogin(){
-  var pin     = (document.getElementById('l-pin')  ? document.getElementById('l-pin').value.trim()  : '');
   var usuario = (document.getElementById('l-user') ? document.getElementById('l-user').value.trim() : '');
   var password= (document.getElementById('l-pass') ? document.getElementById('l-pass').value.trim() : '');
   var btn = document.getElementById('login-btn');
 
-  if (!pin && (!usuario || !password)) { showError('Ingresá tu PIN, o usuario y contraseña'); return; }
+  if (!usuario || !password) { showError('Ingresá tu usuario y contraseña'); return; }
 
   if (btn) btn.disabled = true;
   try {
-    var params = pin ? {action: 'login', pin: pin} : {action: 'login', usuario: usuario, password: password};
+    var params = {action: 'login', usuario: usuario, password: password};
     var resp = await callAPI(params);
     if (!resp || !resp.ok) {
       showError((resp && resp.error) || 'Usuario o contraseña incorrectos');
