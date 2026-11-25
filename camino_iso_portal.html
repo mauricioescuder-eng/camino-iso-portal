@@ -2342,6 +2342,17 @@ function kmRealPorCamionMes(viajesFiltrados) {
     grupos[mat] = grupos[mat] || {};
     grupos[mat][mes] = (grupos[mat][mes] || 0) + (parseFloat(v['km recorridos']) || 0);
   });
+  // Sumar también los meses que solo tienen reporte de GPS cargado pero
+  // ningún viaje todavía (ej. se sube el GPS de un mes antes de cargar
+  // sus viajes) — si no, ese km quedaba totalmente invisible en "Km
+  // recorridos" del Dashboard hasta que apareciera el primer viaje de
+  // ese mes, aunque el reporte ya estuviera bien guardado en la planilla.
+  Object.keys(gps).forEach(function(mat) {
+    grupos[mat] = grupos[mat] || {};
+    Object.keys(gps[mat]).forEach(function(mes) {
+      if (grupos[mat][mes] === undefined) grupos[mat][mes] = 0;
+    });
+  });
   var porCamion = {};
   Object.keys(grupos).forEach(function(mat) {
     porCamion[mat] = 0;
