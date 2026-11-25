@@ -5539,7 +5539,7 @@ function renderFacturacionDrillBody(grupo) {
   var totalIng = lista.reduce(function(s,r){ return s+toUYU(ingresoViaje(r), r['moneda']); }, 0);
   var html = '<div id="dt-count" style="color:'+color+'">'+lista.length+' viaje'+(lista.length===1?'':'s')+' · Total: '+fmt$(totalIng)+'</div>';
   html += '<table><thead><tr>'
-    + '<th>Fecha</th><th>Matrícula</th><th>Origen</th><th>Destino</th><th>Carga</th><th style="text-align:right">Ton</th><th style="text-align:right">Ingreso</th><th></th>'
+    + '<th>Fecha</th><th>Matrícula</th><th>Origen</th><th>Destino</th><th>Carga</th><th style="text-align:right">Ton</th><th style="text-align:right">Ingreso</th><th>Observaciones</th><th></th>'
     + '</tr></thead><tbody>';
   lista.slice().sort(function(a,b){
     var fa = a['fecha viaje']||a['timestamp']||'', fb = b['fecha viaje']||b['timestamp']||'';
@@ -5556,6 +5556,7 @@ function renderFacturacionDrillBody(grupo) {
       + '<td>'+(r['tipo de carga']||'—')+'</td>'
       + '<td style="text-align:right">'+fmtN(parseFloat(r['toneladas'])||0,1)+'</td>'
       + '<td style="text-align:right;font-weight:700">'+fmt$(ing)+'</td>'
+      + '<td style="font-size:11px;color:var(--muted)">'+(r['observaciones']||'—')+'</td>'
       + '<td style="text-align:right">'
       + '<button onclick="toggleFacturadoViaje('+_filaViaje+','+(!_fFact)+',this,\''+grupo+'\')"'
       + (_filaViaje ? '' : ' disabled title="No se pudo identificar la fila de este viaje"')
