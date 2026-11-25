@@ -4242,7 +4242,7 @@ async function exportarViajesExcel() {
   ws.getRow(5).height = 10;
 
   var headerRowIdx = 6;
-  var headers = ['Fecha','Matrícula','Chofer','Origen','Destino','Carga','Toneladas','Km','Peajes','Viáticos','Tarifa','Moneda','Ingreso','Equiv. $U','Remito','Facturado'];
+  var headers = ['Fecha','Matrícula','Chofer','Origen','Destino','Carga','Toneladas','Cant. viajes','Km','Peajes','Viáticos','Tarifa','Moneda','Ingreso','Equiv. $U','Remito','Facturado'];
   var headerRow = ws.getRow(headerRowIdx);
   headerRow.values = headers;
   headerRow.eachCell(function(cell){
@@ -4255,7 +4255,7 @@ async function exportarViajesExcel() {
     var ing = ingresoViaje(r);
     var row = ws.addRow([
       r['fecha viaje']||'', r['matricula']||'', r['chofer']||'', r['origen']||'', r['destino']||'',
-      r['tipo de carga']||'', parseFloat(r['toneladas'])||0, parseFloat(r['km recorridos'])||0,
+      r['tipo de carga']||'', parseFloat(r['toneladas'])||0, nViajesDe(r), parseFloat(r['km recorridos'])||0,
       parseFloat(r['peajes'])||0, parseFloat(r['viaticos'])||0, parseFloat(r['tarifa'])||0,
       r['moneda']||'UYU', ing, toUYU(ing, r['moneda']), r['remito']||'', facturadoDe(r) ? 'Sí' : 'Pendiente'
     ]);
@@ -4264,7 +4264,7 @@ async function exportarViajesExcel() {
     }
   });
 
-  var anchoCols = [12,12,16,14,14,12,11,9,10,10,10,8,11,11,12,11];
+  var anchoCols = [12,12,16,14,14,12,11,10,9,10,10,10,8,11,11,12,11];
   anchoCols.forEach(function(w, idx){ ws.getColumn(idx+1).width = w; });
 
   var buffer = await wb.xlsx.writeBuffer();
