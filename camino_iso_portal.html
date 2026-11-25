@@ -555,6 +555,32 @@ tr:hover td{background:#faf9f6}
     <div id="fe-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
   </div>
 </div>
+<div class="overlay" id="ov-viaje-editar">
+  <div class="modal">
+    <h3>Editar viaje</h3>
+    <div class="fg"><label>Fecha</label><input type="date" id="ve-fecha"></div>
+    <div class="fg"><label>Matrícula del camión</label><input type="text" id="ve-matricula"></div>
+    <div class="fg"><label>Chofer</label><input type="text" id="ve-chofer"></div>
+    <div class="fg"><label>Origen</label><input type="text" id="ve-origen"></div>
+    <div class="fg"><label>N° de corral (opcional, solo feedlot)</label><input type="text" id="ve-corral"></div>
+    <div class="fg"><label>Destino</label><input type="text" id="ve-destino"></div>
+    <div class="fg"><label>Tipo de carga</label><input type="text" id="ve-tipo-carga"></div>
+    <div class="fg"><label>Toneladas transportadas</label><input type="number" id="ve-toneladas" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Km recorridos</label><input type="number" id="ve-km" placeholder="0"></div>
+    <div class="fg"><label>Peajes</label><input type="number" id="ve-peajes" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Viáticos chofer</label><input type="number" id="ve-viaticos" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Tarifa acordada</label><input type="number" id="ve-tarifa" placeholder="0" step="0.01"></div>
+    <div class="fg"><label>Moneda</label><select id="ve-moneda"><option value="USD">Dólares (USD)</option><option value="UYU">Pesos (UYU)</option></select></div>
+    <div class="fg"><label>Cantidad de viajes (solo feedlot)</label><input type="number" id="ve-cantidad-viajes" placeholder="Dejar vacío si no aplica"></div>
+    <div class="fg"><label>Remito</label><input type="text" id="ve-remito"></div>
+    <div class="fg"><label>Observaciones</label><textarea id="ve-observaciones" rows="2"></textarea></div>
+    <div class="mactions">
+      <button class="btn-c" onclick="closeEditarViaje()">Cancelar</button>
+      <button class="btn-s" onclick="guardarEditarViaje()">Guardar cambios</button>
+    </div>
+    <div id="ve-msg" style="text-align:center;font-size:13px;min-height:18px;margin-top:8px"></div>
+  </div>
+</div>
 <div class="overlay" id="ov-gps">
   <div class="modal" style="max-width:680px">
     <h3>📡 Cargar reporte de GPS</h3>
@@ -6985,6 +7011,7 @@ function renderTranspTabla(data, tipo) {
     var arsLabel = _monedaActual === 'USD' ? 'USD equiv.' : 'UYU equiv.';
     var isMant = (tipo === 'mantenimientos');
     var isFijos = (tipo === 'costosFijos');
+    var isViajes = (tipo === 'viajes');
     // N° de mantenimiento: estable aunque se filtre por fecha o se
     // cambie la moneda de la tabla — se arma una sola vez a partir de
     // TODOS los registros (sin filtrar), ordenados por fecha. Se
@@ -7022,6 +7049,7 @@ function renderTranspTabla(data, tipo) {
       + (showARS ? th(arsLabel, 'r') : '')
       + (isMant ? th('Repuestos', 'r') : '')
       + (isFijos ? th('Acciones', 'r') : '')
+      + (isViajes ? th('Acciones', 'r') : '')
       + '</tr></thead>';
 
     // Arma el <tbody> de filas para una lista de registros de
@@ -7036,6 +7064,7 @@ function renderTranspTabla(data, tipo) {
       var _mri = _mantRowSeq++;
       var tieneRep = isMant && r.repuestos && r.repuestos.length > 0;
       if (isFijos) window._fijosRegistros[_mri] = r;
+      if (isViajes) window._viajesRegistros[_mri] = r;
       // Cuando se eligió "Todo en $U"/"Todo en U$S", cada celda de
       // moneda se muestra convertida a esa única moneda, en vez de la
       // moneda original de esa fila.
@@ -7110,6 +7139,12 @@ function renderTranspTabla(data, tipo) {
         html += '<td style="padding:6px 8px;text-align:right;white-space:nowrap">'
           + '<button class="edit-btn" onclick="abrirEditarCostoFijo('+_mri+')">✏️ Editar</button> '
           + '<button class="edit-btn" onclick="borrarCostoFijo('+_mri+')" style="color:#c0392b;border-color:#f3c9c9">🗑️ Borrar</button>'
+          + '</td>';
+      }
+      if (isViajes) {
+        html += '<td style="padding:6px 8px;text-align:right;white-space:nowrap">'
+          + '<button class="edit-btn" onclick="abrirEditarViaje('+_mri+')">✏️ Editar</button> '
+          + '<button class="edit-btn" onclick="borrarViaje('+_mri+')" style="color:#c0392b;border-color:#f3c9c9">🗑️ Borrar</button>'
           + '</td>';
       }
       html += '</tr>';
@@ -7263,6 +7298,7 @@ function toggleMantRepuestosFila(i) {
 // tener que volver a pedirlos al servidor.
 window._mantRegistros = window._mantRegistros || {};
 window._fijosRegistros = window._fijosRegistros || {};
+window._viajesRegistros = window._viajesRegistros || {};
 var _meEditandoIdx = null;
 function abrirEditarMantenimiento(i) {
   var r = window._mantRegistros[i];
@@ -7398,6 +7434,94 @@ function borrarCostoFijo(i) {
     if (resp && resp.ok) {
       toast('✓ Costo Fijo borrado');
       loadTransporte('tabla-fijos');
+    } else {
+      toast('Error al borrar. Intentá de nuevo.', true);
+    }
+  }, function() {
+    toast('No se pudo conectar. Intentá de nuevo.', true);
+  });
+}
+
+// Editar/Borrar un viaje — mismo patrón que Editar Costo Fijo:
+// window._viajesRegistros se arma al pintar la tabla (en
+// renderTranspTabla), indexado por el mismo _mri de esa fila.
+var _veEditandoIdx = null;
+function abrirEditarViaje(i) {
+  var r = window._viajesRegistros[i];
+  if (!r) { toast('No se encontró el registro.', true); return; }
+  if (!r._fila) { toast('Este registro no tiene fila asociada — actualizá la página e intentá de nuevo.', true); return; }
+  _veEditandoIdx = i;
+  document.getElementById('ve-fecha').value = r['fecha viaje'] || '';
+  document.getElementById('ve-matricula').value = r['matricula'] || '';
+  document.getElementById('ve-chofer').value = r['chofer'] || '';
+  document.getElementById('ve-origen').value = r['origen'] || '';
+  document.getElementById('ve-corral').value = r['numero_corral'] || '';
+  document.getElementById('ve-destino').value = r['destino'] || '';
+  document.getElementById('ve-tipo-carga').value = r['tipo de carga'] || '';
+  document.getElementById('ve-toneladas').value = r['toneladas'] || '';
+  document.getElementById('ve-km').value = r['km recorridos'] || '';
+  document.getElementById('ve-peajes').value = r['peajes'] || '';
+  document.getElementById('ve-viaticos').value = r['viaticos'] || '';
+  document.getElementById('ve-tarifa').value = r['tarifa'] || '';
+  document.getElementById('ve-moneda').value = (r['moneda']||'USD').toUpperCase() === 'UYU' ? 'UYU' : 'USD';
+  document.getElementById('ve-cantidad-viajes').value = r['cantidad_viajes'] || '';
+  document.getElementById('ve-remito').value = r['remito'] || '';
+  document.getElementById('ve-observaciones').value = r['observaciones'] || '';
+  document.getElementById('ve-msg').textContent = '';
+  document.getElementById('ov-viaje-editar').classList.add('open');
+}
+function closeEditarViaje() {
+  document.getElementById('ov-viaje-editar').classList.remove('open');
+  _veEditandoIdx = null;
+}
+function guardarEditarViaje() {
+  if (_veEditandoIdx === null) return;
+  var r = window._viajesRegistros[_veEditandoIdx];
+  var msg = document.getElementById('ve-msg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  callTranspAPI({
+    action: 'updateViaje',
+    fila: r._fila,
+    fecha: document.getElementById('ve-fecha').value,
+    matricula: document.getElementById('ve-matricula').value,
+    chofer: document.getElementById('ve-chofer').value,
+    origen: document.getElementById('ve-origen').value,
+    numero_corral: document.getElementById('ve-corral').value,
+    destino: document.getElementById('ve-destino').value,
+    tipo_carga: document.getElementById('ve-tipo-carga').value,
+    toneladas: document.getElementById('ve-toneladas').value,
+    km: document.getElementById('ve-km').value,
+    peajes: document.getElementById('ve-peajes').value,
+    viaticos: document.getElementById('ve-viaticos').value,
+    tarifa: document.getElementById('ve-tarifa').value,
+    moneda: document.getElementById('ve-moneda').value,
+    cantidad_viajes: document.getElementById('ve-cantidad-viajes').value,
+    remito: document.getElementById('ve-remito').value,
+    observaciones: document.getElementById('ve-observaciones').value
+  }, function(resp) {
+    if (resp && resp.ok) {
+      closeEditarViaje();
+      toast('✓ Viaje actualizado');
+      loadTransporte('viajes');
+    } else {
+      msg.style.color = '#c0392b';
+      msg.textContent = 'Error al guardar. Intentá de nuevo.';
+    }
+  }, function() {
+    msg.style.color = '#c0392b';
+    msg.textContent = 'No se pudo conectar. Intentá de nuevo.';
+  });
+}
+function borrarViaje(i) {
+  var r = window._viajesRegistros[i];
+  if (!r) { toast('No se encontró el registro.', true); return; }
+  if (!r._fila) { toast('Este registro no tiene fila asociada — actualizá la página e intentá de nuevo.', true); return; }
+  if (!confirm('¿Borrar este viaje (' + (r['matricula']||'') + ', ' + (r['fecha viaje']||'') + ', ' + (r['destino']||'') + ')? Esta acción no se puede deshacer.')) return;
+  callTranspAPI({ action: 'deleteViaje', fila: r._fila }, function(resp) {
+    if (resp && resp.ok) {
+      toast('✓ Viaje borrado');
+      loadTransporte('viajes');
     } else {
       toast('Error al borrar. Intentá de nuevo.', true);
     }
@@ -7553,6 +7677,7 @@ document.getElementById('ov-neu-retiro').addEventListener('click',function(e){ i
 document.getElementById('ov-neu-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarNeumatico(); });
 document.getElementById('ov-mant-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarMantenimiento(); });
 document.getElementById('ov-fijo-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarCostoFijo(); });
+document.getElementById('ov-viaje-editar').addEventListener('click',function(e){ if(e.target===this) closeEditarViaje(); });
 document.getElementById('ov-gps').addEventListener('click',function(e){ if(e.target===this) closeGPSModal(); });
 document.getElementById('ov-doc-nuevo').addEventListener('click',function(e){ if(e.target===this) closeDocNuevo(); });
 // Precargar config al abrir la página
