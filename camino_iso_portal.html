@@ -5070,6 +5070,35 @@ function renderTranspKPIs(data, viajes) {
     });
     html += '</tbody></table></div></div>';
 
+    // ── Gráfico de barras con la misma métrica/orden que la tabla de
+    // arriba — pensado para visualizar "de un vistazo" lo mismo que ya
+    // muestra la tabla, sin tener que leer números fila por fila. Cambia
+    // sola de métrica al tocar los botones "Ordenar por...".
+    var _camMetricCfg = {
+      margen:      { label: 'Margen',        get: function(c){ return c.margen; },              fmt: function(v){ return fmt$(v); },         color: function(v){ return v >= 0 ? '#0f6e56' : '#c0392b'; } },
+      costokm:     { label: '$/km',          get: function(c){ return c.costo_por_km; },         fmt: function(v){ return fmt$(v, 2); },      color: function(){ return '#854f0b'; } },
+      diasactivos: { label: '% Días activos',get: function(c){ return c.pct_dias_activos||0; },  fmt: function(v){ return v.toFixed(0)+'%'; },color: function(v){ return v >= 60 ? '#0f6e56' : v >= 30 ? '#b97c0a' : '#a32d2d'; } },
+      ingresos:    { label: 'Ingresos',      get: function(c){ return c.ingresos; },              fmt: function(v){ return fmt$(v); },         color: function(){ return '#185fa5'; } }
+    };
+    var _camMetric = _camMetricCfg[_transpOrdenCamiones] || _camMetricCfg.ingresos;
+    var _camMaxAbs = Math.max.apply(null, camionesOrden.map(function(c){ return Math.abs(_camMetric.get(c)); }).concat([1]));
+    var _camBarrasHtml = camionesOrden.map(function(c) {
+      var v = _camMetric.get(c);
+      var pctBar = Math.round(Math.abs(v) / _camMaxAbs * 100);
+      var col = _camMetric.color(v);
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        + '<div style="width:74px;font-size:12px;font-weight:600;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+c.matricula+'">'+c.matricula+'</div>'
+        + '<div style="flex:1;height:16px;background:var(--gray);border-radius:3px;overflow:hidden">'
+        + '<div style="width:'+pctBar+'%;height:100%;background:'+col+';border-radius:3px"></div></div>'
+        + '<div style="width:90px;font-size:12px;font-weight:700;text-align:right;color:'+col+';flex-shrink:0">'+_camMetric.fmt(v)+'</div>'
+        + '</div>';
+    }).join('');
+    html += '<div class="chart-wrap" style="margin-top:16px">'
+      + '<h4 style="margin:0 0 4px;font-size:13px">📊 ' + _camMetric.label + ' por camión</h4>'
+      + '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Misma métrica y orden que "Ordenar por..." de arriba.</div>'
+      + _camBarrasHtml
+      + '</div>';
+
     // ── Ingresos por camión (una línea por matrícula) ───────────────
     // Si hay un mes puntual elegido en el filtro "Período" de arriba,
     // se agrupa por DÍA dentro de ese mes (para ver cómo se movió cada
