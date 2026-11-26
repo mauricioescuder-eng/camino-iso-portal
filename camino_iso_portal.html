@@ -4476,6 +4476,7 @@ function renderTranspKPIs(data, viajes) {
     data.combArr  = (data.combArr  || window._transpCombArr  || []).filter(function(c){ return _enRangoDash(c['fecha factura']||c['timestamp']); });
     data.mantArr  = (data.mantArr  || window._transpMantArr  || []).filter(function(m){ return _enRangoDash(m['fecha']||m['timestamp']); });
     data.fijosArr = (data.fijosArr || window._transpFijosArr || []).filter(function(f){ return _enRangoDash(f['fecha']); });
+    data.neumaticosArr = (data.neumaticosArr || window._transpNeumaticosArr || []).filter(function(n){ return _enRangoDash(n['fecha_instalacion']); });
   }
   var _dashRangoHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px;flex-wrap:wrap">'
     + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Desde:</span>'
@@ -5363,7 +5364,19 @@ function openDrillThrough(type, filterKey, filterVal) {
 
   // mesKey = 'YYYY-MM' para filtrar por mes (viene de las barras del gráfico)
   var mesKey = filterKey || null;
-  function inMes(fecha) { return !mesKey || String(fecha||'').substring(0,7) === mesKey; }
+  // Además del mes del gráfico, este panel se abre siempre desde las
+  // tarjetas/gráficos del Dashboard — así que también tiene que respetar
+  // el filtro Desde/Hasta del Dashboard, o el detalle no va a coincidir
+  // con el monto de la tarjeta que lo abrió (ej. "Costo total" cerrado al
+  // 31/10 pero el detalle mostrando TODO lo cargado, de cualquier fecha).
+  var _rangoKpisDt = ((window._transpFiltroRango || {})['kpis']) || {desde:'', hasta:''};
+  function inMes(fecha) {
+    if (mesKey && String(fecha||'').substring(0,7) !== mesKey) return false;
+    var f = String(fecha||'').substring(0,10);
+    if (_rangoKpisDt.desde && (!f || f < _rangoKpisDt.desde)) return false;
+    if (_rangoKpisDt.hasta && (!f || f > _rangoKpisDt.hasta)) return false;
+    return true;
+  }
   var mesLabel = mesKey ? (' — ' + (mesKey.split('-')[1]|0 > 0 ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][(mesKey.split('-')[1]|0)-1] + ' ' + mesKey.split('-')[0] : mesKey)) : '';
 
   var title = '', rows = [], cols = [];
