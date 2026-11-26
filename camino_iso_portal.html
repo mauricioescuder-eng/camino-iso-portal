@@ -2355,7 +2355,11 @@ function kmGPSDesdeFecha(matricula, fechaDesde) {
 // Km real por camión para un conjunto de viajes ya filtrado — agrupa
 // por matrícula+mes y reemplaza la suma de "Km recorridos" por el dato
 // de GPS donde exista.
-function kmRealPorCamionMes(viajesFiltrados) {
+// rango (opcional): {desde,hasta} del filtro de fecha activo en la
+// pestaña que llama — sin esto, un camión sin viajes en el período
+// filtrado pero con GPS cargado de OTRO mes (pasado o futuro) metía ese
+// km igual, así que la tarjeta no se achicaba al filtrar por fecha.
+function kmRealPorCamionMes(viajesFiltrados, rango) {
   var gps = kmGPSMapa();
   var grupos = {};
   (viajesFiltrados || []).forEach(function(v) {
@@ -2376,6 +2380,7 @@ function kmRealPorCamionMes(viajesFiltrados) {
   Object.keys(gps).forEach(function(mat) {
     grupos[mat] = grupos[mat] || {};
     Object.keys(gps[mat]).forEach(function(mes) {
+      if (!_mesEnRango(mes, rango)) return;
       if (grupos[mat][mes] === undefined) grupos[mat][mes] = 0;
     });
   });
@@ -2389,9 +2394,25 @@ function kmRealPorCamionMes(viajesFiltrados) {
   });
   return porCamion;
 }
+// ¿El mes 'YYYY-MM' cae dentro del rango Desde/Hasta? El GPS se carga
+// por mes completo (no por día), así que se compara por solapamiento:
+// el mes entra si su último día no es anterior al Desde, y su primer
+// día no es posterior al Hasta.
+function _mesEnRango(mes, rango) {
+  if (!rango || (!rango.desde && !rango.hasta)) return true;
+  var partes = String(mes||'').split('-');
+  var anio = parseInt(partes[0],10), mesNum = parseInt(partes[1],10);
+  if (!anio || !mesNum) return true;
+  var ultimoDia = new Date(anio, mesNum, 0).getDate();
+  var mesInicio = mes + '-01';
+  var mesFin = mes + '-' + (ultimoDia<10?'0':'') + ultimoDia;
+  if (rango.desde && mesFin < rango.desde) return false;
+  if (rango.hasta && mesInicio > rango.hasta) return false;
+  return true;
+}
 // Km real total (todos los camiones) para un conjunto de viajes ya filtrado.
-function kmRealTotal(viajesFiltrados) {
-  var porCamion = kmRealPorCamionMes(viajesFiltrados);
+function kmRealTotal(viajesFiltrados, rango) {
+  var porCamion = kmRealPorCamionMes(viajesFiltrados, rango);
   return Object.keys(porCamion).reduce(function(s, mat){ return s + porCamion[mat]; }, 0);
 }
 
@@ -4559,7 +4580,7 @@ function renderTranspKPIs(data, viajes) {
   // DAX: Km totales = SUM(Operaciones[Km_Recorridos]) — usa el km real
   // (reporte de GPS cargado a mano) cuando hay dato para ese camión+mes,
   // ver kmRealTotal().
-  var totalKm  = kmRealTotal(viajes);
+  var totalKm  = kmRealTotal(viajes, _rangoDash);
   // DAX: Toneladas Totales = SUM(Operaciones[Toneladas])
   var totalTon = viajes.reduce(function(s,v){ return s+(parseFloat(v['toneladas'])||0); },0);
   // DAX: Ingresos Totales = SUM(Operaciones[Ingreso_Viaje])
@@ -4641,7 +4662,7 @@ function renderTranspKPIs(data, viajes) {
   });
   // Km real por camión (GPS si hay, si no la suma de "Km recorridos" de
   // sus viajes) — ver kmRealPorCamionMes().
-  var _kmRealPorCamionDash = kmRealPorCamionMes(viajes);
+  var _kmRealPorCamionDash = kmRealPorCamionMes(viajes, _rangoDash);
   // Camiones que no tuvieron NINGÚN viaje en el período pero sí tuvieron
   // gastos cargados (combustible/mantenimiento/costos fijos/neumáticos) o
   // reporte de GPS — sin esto desaparecían directamente de "Resultados
@@ -6183,7 +6204,7 @@ function renderTranspTabla(data, tipo) {
         totViat += toUYU(parseFloat(r['viaticos'])||0, r['moneda']);
         totPeaj += toUYU(parseFloat(r['peajes'])||0, r['moneda']);
       });
-      var totKm = kmRealTotal(rows);
+      var totKm = kmRealTotal(rows, _rango);
       // ── Costos por KM (DAX: Costo por KM = DIVIDE(Total Costos, Total Km)) ──
       var _combArr  = window._transpCombArr  || [];
       var _mantArr  = window._transpMantArr  || [];
@@ -6480,7 +6501,7 @@ function renderTranspTabla(data, tipo) {
         if (_rango.hasta && f > _rango.hasta) return false;
         return true;
       });
-      var totKm = kmRealTotal(_viajesEnPeriodoMant);
+      var totKm = kmRealTotal(_viajesEnPeriodoMant, _rango);
       var costoPorKmMant = totKm > 0 ? totCosto / totKm : 0;
 
       // Camiones sin correctivos: % camiones de flota sin correctivos en el período
@@ -6901,7 +6922,7 @@ function renderTranspTabla(data, tipo) {
         }
         return true;
       });
-      var _viajesKm = kmRealTotal(_viajesParaKm);
+      var _viajesKm = kmRealTotal(_viajesParaKm, _rango);
       var _lPor100km  = _viajesKm > 0 ? (totLt / _viajesKm * 100) : 0;
       var _kmPorL     = totLt    > 0 ? (_viajesKm / totLt)        : 0;
       var _combPorKm  = _viajesKm > 0 ? (totFactura / _viajesKm)  : 0;
@@ -6964,7 +6985,7 @@ function renderTranspTabla(data, tipo) {
       // sus viajes — ver kmRealPorCamionMes()), mismo filtro ya aplicado
       // arriba, para poder sacar el consumo (L/100km) de cada camión y no
       // solo el total de litros cargados.
-      var _kmPorCamionComb = kmRealPorCamionMes(_viajesParaKm);
+      var _kmPorCamionComb = kmRealPorCamionMes(_viajesParaKm, _rango);
       var _camionesLt = Object.keys(_porCamionLt)
         .map(function(m){ return {matricula: m, litros: _porCamionLt[m], km: _kmPorCamionComb[m] || 0}; })
         .sort(function(a,b){ return b.litros - a.litros; });
