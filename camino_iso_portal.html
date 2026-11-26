@@ -4642,6 +4642,13 @@ function renderTranspKPIs(data, viajes) {
   // Km real por camión (GPS si hay, si no la suma de "Km recorridos" de
   // sus viajes) — ver kmRealPorCamionMes().
   var _kmRealPorCamionDash = kmRealPorCamionMes(viajes);
+  // Camiones que no tuvieron NINGÚN viaje en el período pero sí tuvieron
+  // gastos cargados (combustible/mantenimiento/costos fijos/neumáticos) o
+  // reporte de GPS — sin esto desaparecían directamente de "Resultados
+  // por camión", aunque tuvieran costo real y margen negativo.
+  Object.keys(costosPorMat).concat(Object.keys(_kmRealPorCamionDash)).forEach(function(m) {
+    if (m && !byTruck[m]) byTruck[m] = {matricula:m, viajes:0, km:0, ton:0, ingresos:0, _diasSet:{}};
+  });
   Object.keys(byTruck).forEach(function(m){ byTruck[m].km = _kmRealPorCamionDash[m] || 0; });
 
   // ── Período usado como base para "% de días activos" ──────────
