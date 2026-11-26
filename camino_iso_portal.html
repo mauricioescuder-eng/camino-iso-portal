@@ -6054,6 +6054,8 @@ window._transpFiltroRango = window._transpFiltroRango || {};
 window._transpFiltroMoneda = window._transpFiltroMoneda || {};
 window._transpFiltroMatricula = window._transpFiltroMatricula || {};
 window._transpFiltroChofer = window._transpFiltroChofer || {};
+window._transpFiltroRubro = window._transpFiltroRubro || {};
+window._transpFiltroProveedor = window._transpFiltroProveedor || {};
 // Por defecto la tabla de Viajes solo muestra la última semana
 // cargada (con un botón "Ver más" para traer el resto) — se guarda
 // acá para que el estado sobreviva entre repintados.
@@ -6084,6 +6086,8 @@ function renderTranspTabla(data, tipo) {
     var _rango = window._transpFiltroRango[tipo] || {desde:'', hasta:''};
     var _filtroMat = window._transpFiltroMatricula[tipo] || '';
     var _filtroChofer = window._transpFiltroChofer[tipo] || '';
+    var _filtroRubro = window._transpFiltroRubro[tipo] || '';
+    var _filtroProveedor = window._transpFiltroProveedor[tipo] || '';
     var _inpStyle = 'padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px';
 
     // Las opciones de Matrícula/Chofer salen siempre del set COMPLETO
@@ -6102,7 +6106,20 @@ function renderTranspTabla(data, tipo) {
         + '</select>';
     }
 
-    var _hayFiltrosTransp = _rango.desde || _rango.hasta || _filtroMat || _filtroChofer;
+    var _rubroHtml = '';
+    var _provHtml = '';
+    if (tipo === 'costosFijos') {
+      var _rubrosDisp = Array.from(new Set(rows.map(function(r){ return r['rubro']||''; }).filter(Boolean))).sort();
+      _rubroHtml = '<select id="transp-filtro-rubro" style="'+_inpStyle+'" onchange="filtrarTranspPorMatriculaChofer(\''+tipo+'\')"><option value="">Todos los rubros</option>'
+        + _rubrosDisp.map(function(r){ return '<option value="'+r+'"'+(r===_filtroRubro?' selected':'')+'>'+r+'</option>'; }).join('')
+        + '</select>';
+      var _provsDisp = Array.from(new Set(rows.map(function(r){ return r['proveedor']||''; }).filter(Boolean))).sort();
+      _provHtml = '<select id="transp-filtro-proveedor" style="'+_inpStyle+'" onchange="filtrarTranspPorMatriculaChofer(\''+tipo+'\')"><option value="">Todas las personas/proveedores</option>'
+        + _provsDisp.map(function(p){ return '<option value="'+p+'"'+(p===_filtroProveedor?' selected':'')+'>'+p+'</option>'; }).join('')
+        + '</select>';
+    }
+
+    var _hayFiltrosTransp = _rango.desde || _rango.hasta || _filtroMat || _filtroChofer || _filtroRubro || _filtroProveedor;
 
     _mesFiltroHtml = '<div style="display:flex;align-items:center;gap:8px;padding:0 0 12px;flex-wrap:wrap">'
       + '<span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Desde:</span>'
@@ -6111,6 +6128,8 @@ function renderTranspTabla(data, tipo) {
       + '<input type="date" id="transp-rango-hasta" value="'+_rango.hasta+'" onchange="filtrarTranspPorRango(\''+tipo+'\')" style="'+_inpStyle+'">'
       + _selMatHtml
       + _choferHtml
+      + _rubroHtml
+      + _provHtml
       + (_hayFiltrosTransp ? '<button onclick="limpiarRangoTransp(\''+tipo+'\')" style="'+_inpStyle+';background:#f1f5f9;border-color:#cbd5e1;cursor:pointer">✕ Limpiar filtros</button>' : '')
       + '</div>';
 
@@ -6123,8 +6142,10 @@ function renderTranspTabla(data, tipo) {
         return true;
       });
     }
-    if (_filtroMat)    rows = rows.filter(function(r){ return (r['matricula']||'') === _filtroMat; });
-    if (_filtroChofer) rows = rows.filter(function(r){ return (r['chofer']||'')    === _filtroChofer; });
+    if (_filtroMat)        rows = rows.filter(function(r){ return (r['matricula']||'')  === _filtroMat; });
+    if (_filtroChofer)     rows = rows.filter(function(r){ return (r['chofer']||'')     === _filtroChofer; });
+    if (_filtroRubro)      rows = rows.filter(function(r){ return (r['rubro']||'')      === _filtroRubro; });
+    if (_filtroProveedor)  rows = rows.filter(function(r){ return (r['proveedor']||'')  === _filtroProveedor; });
   }
   // Guardamos también el subconjunto ya filtrado (lo que se ve en
   // pantalla) para que "Exportar a Excel" exporte exactamente eso.
@@ -6955,6 +6976,68 @@ function renderTranspTabla(data, tipo) {
         + '</div>'
         + _combChartHtml
         + _camionesHtml;
+    } else if (tipo === 'costosFijos') {
+      var _totFijosMonto = 0;
+      rows.forEach(function(r){ _totFijosMonto += toUYU(r['monto'], r['moneda']); });
+
+      var _porRubroCF = {};
+      rows.forEach(function(r){
+        var rb = r['rubro'] || 'Sin rubro';
+        if (!_porRubroCF[rb]) _porRubroCF[rb] = {monto:0, n:0};
+        _porRubroCF[rb].monto += toUYU(r['monto'], r['moneda']);
+        _porRubroCF[rb].n++;
+      });
+      var _rubroCFSorted = Object.keys(_porRubroCF).map(function(rb){ return {rubro:rb, monto:_porRubroCF[rb].monto, n:_porRubroCF[rb].n}; })
+                             .sort(function(a,b){ return b.monto - a.monto; });
+
+      var _porProveedorCF = {};
+      rows.forEach(function(r){
+        var pv = r['proveedor'] || 'Sin proveedor';
+        if (!_porProveedorCF[pv]) _porProveedorCF[pv] = {monto:0, n:0};
+        _porProveedorCF[pv].monto += toUYU(r['monto'], r['moneda']);
+        _porProveedorCF[pv].n++;
+      });
+      var _provCFSorted = Object.keys(_porProveedorCF).map(function(pv){ return {proveedor:pv, monto:_porProveedorCF[pv].monto, n:_porProveedorCF[pv].n}; })
+                            .sort(function(a,b){ return b.monto - a.monto; });
+
+      var _rubroCFHtml = '';
+      if (_rubroCFSorted.length > 0) {
+        _rubroCFHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 12px;font-size:13px">📂 Costos Fijos por Rubro</h4>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:12px">'
+          + _rubroCFSorted.map(function(r) {
+              return '<div style="flex:1 1 140px;min-width:140px;background:var(--gray);border-radius:10px;padding:14px;text-align:center">'
+                + '<div style="font-weight:700;font-size:13px">' + r.rubro + '</div>'
+                + '<div style="color:#185fa5;font-weight:800;font-size:16px;margin-top:4px">' + fmt$(r.monto) + '</div>'
+                + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + r.n + ' registro'+(r.n===1?'':'s')+'</div>'
+                + '</div>';
+            }).join('')
+          + '</div></div>';
+      }
+
+      var _provCFHtml = '';
+      if (_provCFSorted.length > 0) {
+        _provCFHtml = '<div class="chart-wrap" style="margin:0 0 16px;padding:16px 18px">'
+          + '<h4 style="margin:0 0 12px;font-size:13px">👤 Costos Fijos por Persona / Proveedor</h4>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:12px">'
+          + _provCFSorted.map(function(p) {
+              return '<div style="flex:1 1 140px;min-width:140px;background:var(--gray);border-radius:10px;padding:14px;text-align:center">'
+                + '<div style="font-weight:700;font-size:13px">' + p.proveedor + '</div>'
+                + '<div style="color:#a32d2d;font-weight:800;font-size:16px;margin-top:4px">' + fmt$(p.monto) + '</div>'
+                + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + p.n + ' registro'+(p.n===1?'':'s')+'</div>'
+                + '</div>';
+            }).join('')
+          + '</div></div>';
+      }
+
+      indicHtml = '<div class="reg-kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">'
+        + kpi('Registros',              rows.length,          'en el período', '#185fa5')
+        + kpi('Monto total',            fmt$(_totFijosMonto), 'convertido a $U', '#a32d2d')
+        + kpi('Rubros',                 _rubroCFSorted.length, 'distintos', '#854f0b')
+        + kpi('Personas / Proveedores', _provCFSorted.length,  'distintos', '#639922')
+        + '</div>'
+        + _rubroCFHtml
+        + _provCFHtml;
     }
   }
   document.getElementById('transp-indicadores').innerHTML = _mesFiltroHtml + indicHtml;
@@ -7576,10 +7659,14 @@ function limpiarRangoDashboard() {
   }, window._transpViajesRaw || []);
 }
 function filtrarTranspPorMatriculaChofer(tipo) {
-  var matSel    = document.getElementById('transp-filtro-matricula');
-  var choferSel = document.getElementById('transp-filtro-chofer');
+  var matSel      = document.getElementById('transp-filtro-matricula');
+  var choferSel   = document.getElementById('transp-filtro-chofer');
+  var rubroSel    = document.getElementById('transp-filtro-rubro');
+  var provSel     = document.getElementById('transp-filtro-proveedor');
   window._transpFiltroMatricula[tipo] = matSel    ? matSel.value    : '';
   window._transpFiltroChofer[tipo]    = choferSel ? choferSel.value : '';
+  window._transpFiltroRubro[tipo]     = rubroSel  ? rubroSel.value  : '';
+  window._transpFiltroProveedor[tipo] = provSel   ? provSel.value   : '';
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
 }
@@ -7587,6 +7674,8 @@ function limpiarRangoTransp(tipo) {
   window._transpFiltroRango[tipo]     = {desde:'', hasta:''};
   window._transpFiltroMatricula[tipo] = '';
   window._transpFiltroChofer[tipo]    = '';
+  window._transpFiltroRubro[tipo]     = '';
+  window._transpFiltroProveedor[tipo] = '';
   var full = (window._transpTablaFull || {})[tipo] || [];
   renderTranspTabla(full, tipo);
 }
