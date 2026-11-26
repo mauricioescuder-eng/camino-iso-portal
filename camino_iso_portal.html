@@ -4688,20 +4688,27 @@ function renderTranspKPIs(data, viajes) {
     diasPeriodo = esMesActual ? hoyD.getDate() : ultimoDiaMes;
     periodoDiasLabel = (MESES_LABEL[pmoD-1]||pmoD) + ' ' + pyD + ' · ' + diasPeriodo + ' día' + (diasPeriodo===1?'':'s');
   } else {
-    var fechasTodas = (window._transpViajesRaw || viajes)
+    // Si hay un filtro Desde/Hasta del Dashboard activo, la base tiene
+    // que ser ESE rango (los viajes ya filtrados, con "hasta" como borde
+    // final) — si no, el % de días activos se seguía calculando contra
+    // el historial completo y hasta HOY aunque se hubiera cerrado el
+    // Dashboard a una fecha pasada, igual que pasaba con "Km recorridos".
+    var fechasTodas = (_dashFiltroActivo ? viajes : (window._transpViajesRaw || viajes))
       .map(function(v){ return v['fecha viaje']||v['timestamp']||''; })
       .filter(Boolean).map(function(f){ return new Date(f); })
       .filter(function(d){ return !isNaN(d.getTime()); });
     if (fechasTodas.length) {
       var minD = new Date(Math.min.apply(null, fechasTodas));
-      // Hasta HOY, no hasta el último viaje cargado — si se usara el
-      // último viaje como borde de la ventana, ese viaje siempre cae
-      // justo en el límite y el % de días activos queda inflado
-      // artificialmente (ej. 2 viajes en una ventana de 5 días = 40%,
-      // cuando en realidad pasaron varias semanas desde el primero).
-      var hoyP = new Date(); hoyP.setHours(0,0,0,0);
+      // Hasta HOY (o hasta el corte del filtro, si hay uno), no hasta el
+      // último viaje cargado — si se usara el último viaje como borde de
+      // la ventana, ese viaje siempre cae justo en el límite y el % de
+      // días activos queda inflado artificialmente (ej. 2 viajes en una
+      // ventana de 5 días = 40%, cuando en realidad pasaron varias
+      // semanas desde el primero).
+      var hoyP = _dashFiltroActivo && _rangoDash.hasta ? new Date(_rangoDash.hasta) : new Date();
+      hoyP.setHours(0,0,0,0);
       diasPeriodo = Math.max(1, Math.round((hoyP - minD) / 86400000) + 1);
-      periodoDiasLabel = 'todo el período registrado · ' + diasPeriodo + ' días';
+      periodoDiasLabel = (_dashFiltroActivo ? 'período filtrado' : 'todo el período registrado') + ' · ' + diasPeriodo + ' días';
     }
   }
 
